@@ -40,7 +40,7 @@ export default function ProblemList() {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">题库</h1>
         <span className="text-sm text-zinc-500">共 {total} 题</span>

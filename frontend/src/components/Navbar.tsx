@@ -17,7 +17,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-white/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
+      <div className="flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
         <Link to="/" className="mr-2 flex items-center gap-2 font-bold">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white">
             <Code2 className="h-4 w-4" />

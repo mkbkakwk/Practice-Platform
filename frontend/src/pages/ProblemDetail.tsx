@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { javascript } from "@codemirror/lang-javascript";
 import { cpp } from "@codemirror/lang-cpp";
 import { java } from "@codemirror/lang-java";
-import { marked } from "marked";
+import { Markdown } from "@/components/Markdown";
 import {
   api,
   type ProblemDetail,
@@ -108,11 +108,6 @@ export default function ProblemDetail() {
     setCode(next);
   };
 
-  const descriptionHtml = useMemo(() => {
-    if (!problem) return "";
-    return marked.parse(problem.description, { async: false }) as string;
-  }, [problem]);
-
   const submit = async () => {
     if (!problem || !user) return;
     setSubmitting(true);
@@ -167,7 +162,7 @@ export default function ProblemDetail() {
   const ac = result?.verdict === "AC";
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8">
       <Link to="/" className="mb-3 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900">
         <ArrowLeft className="h-4 w-4" /> 返回题库
       </Link>
@@ -207,10 +202,7 @@ export default function ProblemDetail() {
               )}
             </CardHeader>
             <CardContent>
-              <div
-                className="prose prose-sm max-w-none whitespace-pre-wrap [&_h1]:mt-0 [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:mt-4 [&_h2]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_code]:rounded [&_code]:bg-zinc-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[13px] [&_code]:font-mono [&_li]:ml-4 [&_li]:list-disc [&_p]:my-1.5"
-                dangerouslySetInnerHTML={{ __html: descriptionHtml }}
-              />
+              <Markdown>{problem.description}</Markdown>
             </CardContent>
           </Card>
 

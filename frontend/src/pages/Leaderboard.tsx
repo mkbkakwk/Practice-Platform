@@ -25,7 +25,8 @@ export default function Leaderboard() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center gap-2">
         <Trophy className="h-6 w-6 text-yellow-500" />
         <h1 className="text-2xl font-bold">排行榜</h1>
@@ -88,6 +89,7 @@ export default function Leaderboard() {
           </tbody>
         </table>
       </Card>
+      </div>
     </div>
   );
 }
