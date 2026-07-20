@@ -1,5 +1,7 @@
 // API client. Base URL resolves to `/api` in production (proxied by nginx to
 // the backend container) and can be overridden via VITE_API_BASE for dev.
+import { log, TAGS } from "./logger";
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || "/api";
 
 const TOKEN_KEY = "oj_token";
@@ -29,18 +31,37 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const method = (options.method as string) || "GET";
+  const url = `${API_BASE}${path}`;
+  log.debug(TAGS.api, `${method} ${path}`);
+
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (networkErr) {
+    log.error(TAGS.api, `网络请求失败 ${method} ${path}`, networkErr);
+    throw new ApiError(0, `网络请求失败：${(networkErr as Error).message}`);
+  }
+
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    log.error(TAGS.api, `响应非 JSON ${method} ${path} -> ${res.status}`, text.slice(0, 200));
+  }
 
   if (!res.ok) {
-    const msg = (data && data.error) || `请求失败 (${res.status})`;
+    const msg = (data && typeof data === "object" && "error" in (data as object)
+      ? (data as { error: string }).error
+      : null) || `请求失败 (${res.status})`;
+    log.error(TAGS.api, `${method} ${path} -> ${res.status}`, msg, data);
     if (res.status === 401) {
-      // token invalid/expired — clear it
       setToken(null);
     }
     throw new ApiError(res.status, msg);
   }
+  log.debug(TAGS.api, `${method} ${path} -> ${res.status} OK`);
   return data as T;
 }
 
@@ -130,7 +151,7 @@ export const api = {
   getLanguages: () =>
     request<{ languages: LanguageDef[] }>("/submissions/meta/languages"),
   submit: (problemId: number, language: string, code: string) =>
-    request<{ submission: Submission; detail?: { failedCase?: number; input?: string; expected?: string; actual?: string } }>(
+    request<{ submissionId: number; status: Verdict; message?: string }>(
       "/submissions",
       { method: "POST", body: JSON.stringify({ problemId, language, code }) },
     ),
@@ -157,4 +178,35 @@ export const api = {
     request<{ leaderboard: (PublicUser & { rank: number; createdAt: string })[] }>(
       `/users/leaderboard?limit=${limit}`,
     ),
+
+  /**
+   * Poll a submission until its verdict is no longer PENDING.
+   * Returns the final submission. Calls onTick(pollCount, latest) each poll.
+   * Resolves with the settled submission.
+   */
+  pollSubmission: async (
+    id: number,
+    opts: { intervalMs?: number; timeoutMs?: number; onTick?: (poll: number, s: Submission | null) => void } = {},
+  ): Promise<Submission> => {
+    const interval = opts.intervalMs ?? 1500;
+    const timeout = opts.timeoutMs ?? 30000;
+    const deadline = Date.now() + timeout;
+    let poll = 0;
+    log.info(TAGS.poll, `开始轮询提交 #${id}，间隔 ${interval}ms，超时 ${timeout}ms`);
+    while (Date.now() < deadline) {
+      poll++;
+      const { submission } = await api.getSubmission(id);
+      log.debug(TAGS.poll, `#${id} 第 ${poll} 次轮询 verdict=${submission.verdict}`);
+      opts.onTick?.(poll, submission);
+      if (submission.verdict !== "PENDING") {
+        log.info(TAGS.poll, `#${id} 评测完成 verdict=${submission.verdict} passed=${submission.passed}/${submission.total} timeMs=${submission.timeMs}`);
+        return submission;
+      }
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    log.warn(TAGS.poll, `#${id} 轮询超时（${timeout}ms），仍为 PENDING`);
+    const { submission } = await api.getSubmission(id);
+    return submission;
+  },
 };
+

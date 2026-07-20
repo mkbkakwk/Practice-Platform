@@ -1,7 +1,10 @@
+name: oj
+
 services:
   db:
     image: postgres:16-alpine
     container_name: oj-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-oj}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oj}
@@ -13,32 +16,95 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - oj-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: oj-rabbitmq
     restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-oj}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-oj}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    ports:
+      # Management UI (optional, for debugging the queue). Remove if not needed.
+      - "15672:15672"
+    networks:
+      - oj-net
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend-spring
     container_name: oj-backend
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-oj}:${POSTGRES_PASSWORD:-oj}@db:5432/${POSTGRES_DB:-oj}?schema=public
-      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      PORT: "4000"
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
-      JUDGE_WORKSPACE: /tmp/oj-judge
-      PROMOTE_FIRST_ADMIN: ${PROMOTE_FIRST_ADMIN:-1}
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-oj}
+      POSTGRES_USER: ${POSTGRES_USER:-oj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oj}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-oj}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-oj}
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production-must-be-at-least-32-chars}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      PROMOTE_FIRST_ADMIN: ${PROMOTE_FIRST_ADMIN:-true}
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    networks:
+      - oj-net
+
+  worker:
+    build:
+      context: ./worker
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-oj}
+      POSTGRES_USER: ${POSTGRES_USER:-oj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oj}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-oj}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-oj}
+      JUDGE_WORKSPACE: /tmp/oj-judge
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      WORKER_MAX_CONCURRENCY: ${WORKER_MAX_CONCURRENCY:-2}
+    # Horizontal scale: `docker compose up -d --scale worker=3`
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+    networks:
+      - oj-net
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
     container_name: oj-frontend
-    ports:
-      - "${PORT:-8080}:80"
+    restart: unless-stopped
     depends_on:
       - backend
-    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:80"
+    networks:
+      - oj-net
+
+networks:
+  oj-net:
+    driver: bridge
 
 volumes:
   oj-pgdata:

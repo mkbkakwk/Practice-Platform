@@ -1,0 +1,44 @@
+server:
+  port: 0   # worker does not serve HTTP
+
+spring:
+  application:
+    name: oj-worker
+  main:
+    web-application-type: none
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/oj}
+    username: ${POSTGRES_USER:oj}
+    password: ${POSTGRES_PASSWORD:oj}
+    driver-class-name: org.postgresql.Driver
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:oj}
+    password: ${RABBITMQ_PASSWORD:oj}
+    # Concurrency: how many messages processed in parallel per worker instance.
+    listener:
+      simple:
+        concurrency: ${WORKER_CONCURRENCY:1}
+        max-concurrency: ${WORKER_MAX_CONCURRENCY:1}
+        prefetch: 1
+        # Manual ack so we only ack after the result is written; on crash the
+        # message is requeued.
+        acknowledge-mode: manual
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+oj:
+  judge:
+    workspace: ${JUDGE_WORKSPACE:/tmp/oj-judge}
+  rabbitmq:
+    exchange: oj.judge
+    routing-key: oj.judge.submit
+    queue: oj.judge.queue
+
+logging:
+  level:
+    com.oj: INFO

@@ -111,7 +111,7 @@ export default function ProblemList() {
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     <div className="flex flex-wrap gap-1">
-                      {p.tags.slice(0, 3).map((t) => (
+                      {(p.tags || []).slice(0, 3).map((t) => (
                         <span
                           key={t}
                           className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"

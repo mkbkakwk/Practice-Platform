@@ -76,6 +76,8 @@ export default function ProblemDetail() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [pollCount, setPollCount] = useState(0);
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [error, setError] = useState("");
   const codeByLang = useRef<Record<string, string>>({});
@@ -114,23 +116,34 @@ export default function ProblemDetail() {
   const submit = async () => {
     if (!problem || !user) return;
     setSubmitting(true);
+    setPolling(false);
+    setPollCount(0);
     setError("");
     setResult(null);
     try {
-      const data = await api.submit(problem.id, langId, code);
+      // 1) enqueue
+      const res = await api.submit(problem.id, langId, code);
+      // 2) poll for the verdict
+      setSubmitting(false);
+      setPolling(true);
+      const settled = await api.pollSubmission(res.submissionId, {
+        intervalMs: 1200,
+        timeoutMs: 60000,
+        onTick: (n) => setPollCount(n),
+      });
       setResult({
-        verdict: data.submission.verdict,
-        message: data.submission.message,
-        timeMs: data.submission.timeMs,
-        memoryKb: data.submission.memoryKb,
-        passed: data.submission.passed,
-        total: data.submission.total,
-        detail: data.detail,
+        verdict: settled.verdict,
+        message: settled.message,
+        timeMs: settled.timeMs,
+        memoryKb: settled.memoryKb,
+        passed: settled.passed,
+        total: settled.total,
       });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "提交失败");
     } finally {
       setSubmitting(false);
+      setPolling(false);
     }
   };
 
@@ -183,9 +196,9 @@ export default function ProblemDetail() {
                   </span>
                 </span>
               </div>
-              {problem.tags.length > 0 && (
+              {(problem.tags || []).length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {problem.tags.map((t) => (
+                  {(problem.tags || []).map((t) => (
                     <span key={t} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">
                       {t}
                     </span>
@@ -201,7 +214,7 @@ export default function ProblemDetail() {
             </CardContent>
           </Card>
 
-          {problem.samples.length > 0 && (
+          {Array.isArray(problem.samples) && problem.samples.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">样例</CardTitle>
@@ -277,13 +290,13 @@ export default function ProblemDetail() {
               )}
 
               <div className="mt-3 flex items-center gap-2">
-                <Button onClick={submit} disabled={submitting || !user} className="gap-1.5">
-                  {submitting ? (
+                <Button onClick={submit} disabled={submitting || polling || !user} className="gap-1.5">
+                  {(submitting || polling) ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="h-4 w-4" />
                   )}
-                  提交评测
+                  {submitting ? "提交中..." : polling ? `评测中${pollCount > 0 ? ` (${pollCount})` : ""}` : "提交评测"}
                 </Button>
                 <Button
                   variant="outline"
