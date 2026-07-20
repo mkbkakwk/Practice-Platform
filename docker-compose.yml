@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: oj-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oj}
+      POSTGRES_DB: ${POSTGRES_DB:-oj}
+    volumes:
+      - oj-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oj} -d ${POSTGRES_DB:-oj}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: oj-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oj}:${POSTGRES_PASSWORD:-oj}@db:5432/${POSTGRES_DB:-oj}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      PORT: "4000"
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      JUDGE_WORKSPACE: /tmp/oj-judge
+      PROMOTE_FIRST_ADMIN: ${PROMOTE_FIRST_ADMIN:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: oj-frontend
+    ports:
+      - "${PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  oj-pgdata:

@@ -1,0 +1,85 @@
+generator client {
+  provider      = "prisma-client-js"
+  // Bundle engines for the Linux platforms the backend may run on, so the
+  // generated client works regardless of the host OpenSSL version.
+  binaryTargets = ["native", "debian-openssl-3.0.x", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Verdict {
+  PENDING
+  AC
+  WA
+  TLE
+  RE
+  CE
+  SE
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  username     String     @unique
+  password     String
+  role         Role       @default(USER)
+  solvedCount  Int        @default(0)
+  createdAt    DateTime   @default(now())
+  submissions  Submission[]
+
+  @@index([solvedCount])
+}
+
+model Problem {
+  id          Int        @id @default(autoincrement())
+  slug        String     @unique
+  title       String
+  description String
+  inputFmt    String?
+  outputFmt   String?
+  difficulty  Difficulty @default(EASY)
+  timeLimit   Int        @default(1000)
+  memoryLimit Int        @default(256)
+  tags        String[]
+  samples     Json
+  testCases   Json
+  visible     Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  submissions Submission[]
+
+  @@index([difficulty])
+}
+
+model Submission {
+  id         Int       @id @default(autoincrement())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int
+  problem    Problem   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  problemId  Int
+  language   String
+  code       String
+  verdict    Verdict   @default(PENDING)
+  timeMs     Int       @default(0)
+  memoryKb   Int       @default(0)
+  message    String?
+  passed     Int       @default(0)
+  total      Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([problemId])
+  @@index([verdict])
+}

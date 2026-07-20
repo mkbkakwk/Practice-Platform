@@ -1,0 +1,43 @@
+# ── Dependencies ─────────────────────────────────────────
+node_modules/
+**/node_modules/
+
+# ── Build output ─────────────────────────────────────────
+dist/
+**/dist/
+build/
+*.tsbuildinfo
+
+# ── Environment & secrets ─────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ── Editor / IDE ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS junk ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ─────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── WorkBuddy workspace data (local only) ───────────────
+.workbuddy/
+
+# ── Prisma generated migrations (keep schema, ignore lock) ──
+/backend/prisma/migrations/dev.db*
+
+# ── Test / coverage ──────────────────────────────────────
+coverage/
+*.lcov
