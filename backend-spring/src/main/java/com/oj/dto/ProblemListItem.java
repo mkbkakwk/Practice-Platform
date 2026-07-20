@@ -10,10 +10,11 @@ public class ProblemListItem {
     private String[] tags;
     private Integer timeLimit;
     private Integer memoryLimit;
+    private Boolean visible;
     public ProblemListItem() {}
-    public ProblemListItem(Integer id, String slug, String title, String difficulty, String[] tags, Integer timeLimit, Integer memoryLimit) {
+    public ProblemListItem(Integer id, String slug, String title, String difficulty, String[] tags, Integer timeLimit, Integer memoryLimit, Boolean visible) {
         this.id = id; this.slug = slug; this.title = title; this.difficulty = difficulty;
-        this.tags = tags; this.timeLimit = timeLimit; this.memoryLimit = memoryLimit;
+        this.tags = tags; this.timeLimit = timeLimit; this.memoryLimit = memoryLimit; this.visible = visible;
     }
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -29,4 +30,6 @@ public class ProblemListItem {
     public void setTimeLimit(Integer timeLimit) { this.timeLimit = timeLimit; }
     public Integer getMemoryLimit() { return memoryLimit; }
     public void setMemoryLimit(Integer memoryLimit) { this.memoryLimit = memoryLimit; }
+    public Boolean getVisible() { return visible; }
+    public void setVisible(Boolean visible) { this.visible = visible; }
 }

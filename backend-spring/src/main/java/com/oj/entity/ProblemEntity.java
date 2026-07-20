@@ -1,12 +1,15 @@
 package com.oj.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.oj.common.JsonbTypeHandler;
+import com.oj.common.StringArrayTypeHandler;
 
 import java.time.LocalDateTime;
 
-@TableName("\"Problem\"")
+@TableName(value = "\"Problem\"", autoResultMap = true)
 public class ProblemEntity {
     @TableId(type = IdType.AUTO)
     private Integer id;
@@ -18,6 +21,7 @@ public class ProblemEntity {
     private String difficulty;
     private Integer timeLimit;
     private Integer memoryLimit;
+    @TableField(typeHandler = StringArrayTypeHandler.class)
     private String[] tags;
     private String samples;   // JSON text
     private String testCases; // JSON text

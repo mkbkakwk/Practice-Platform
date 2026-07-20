@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2 } from "lucide-react";
+import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Navbar() {
@@ -14,6 +14,11 @@ export function Navbar() {
     { to: "/submissions", label: "提交记录", icon: FileCode2, match: (p: string) => p.startsWith("/submissions") },
     { to: "/leaderboard", label: "排行榜", icon: Trophy, match: (p: string) => p.startsWith("/leaderboard") },
   ];
+
+  // Admin-only entry, appended after the public links.
+  if (user?.role === "ADMIN") {
+    links.push({ to: "/admin/problems", label: "管理", icon: Settings, match: (p: string) => p.startsWith("/admin") });
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-white/80 backdrop-blur">

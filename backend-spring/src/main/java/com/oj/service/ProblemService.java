@@ -36,7 +36,10 @@ public class ProblemService {
 
     public List<ProblemListItem> list(int page, int pageSize, String difficulty) {
         QueryWrapper<ProblemEntity> qw = new QueryWrapper<>();
-        qw.eq("visible", true);
+        // Admin sees all problems (including hidden); regular users see only visible ones.
+        if (!com.oj.common.CurrentUser.isAdmin()) {
+            qw.eq("visible", true);
+        }
         if (difficulty != null && !difficulty.isBlank()
                 && Arrays.asList("EASY", "MEDIUM", "HARD").contains(difficulty)) {
             qw.eq("difficulty", difficulty);
@@ -46,13 +49,15 @@ public class ProblemService {
         return p.getRecords().stream().map(e -> new ProblemListItem(
                 e.getId(), e.getSlug(), e.getTitle(), e.getDifficulty(),
                 e.getTags() != null ? e.getTags() : new String[0],
-                e.getTimeLimit(), e.getMemoryLimit()
+                e.getTimeLimit(), e.getMemoryLimit(), e.getVisible()
         )).toList();
     }
 
     public long count(String difficulty) {
         QueryWrapper<ProblemEntity> qw = new QueryWrapper<>();
-        qw.eq("visible", true);
+        if (!com.oj.common.CurrentUser.isAdmin()) {
+            qw.eq("visible", true);
+        }
         if (difficulty != null && !difficulty.isBlank()
                 && Arrays.asList("EASY", "MEDIUM", "HARD").contains(difficulty)) {
             qw.eq("difficulty", difficulty);
@@ -62,7 +67,8 @@ public class ProblemService {
 
     public ProblemDetail getBySlug(String slug) {
         ProblemEntity e = problemMapper.selectOne(new QueryWrapper<ProblemEntity>().eq("slug", slug));
-        if (e == null || !Boolean.TRUE.equals(e.getVisible())) {
+        // Admin can access hidden problems; regular users cannot.
+        if (e == null || (!Boolean.TRUE.equals(e.getVisible()) && !com.oj.common.CurrentUser.isAdmin())) {
             throw ApiException.notFound("题目不存在");
         }
         ProblemDetail d = new ProblemDetail();
@@ -77,6 +83,10 @@ public class ProblemService {
         d.setTimeLimit(e.getTimeLimit());
         d.setMemoryLimit(e.getMemoryLimit());
         d.setSamples(parseJsonArray(e.getSamples()));
+        // Only admin gets the hidden test cases (for editing).
+        if (com.oj.common.CurrentUser.isAdmin()) {
+            d.setTestCases(parseJsonArray(e.getTestCases()));
+        }
         return d;
     }
 
@@ -113,8 +123,19 @@ public class ProblemService {
         e.setTimeLimit(req.getTimeLimit());
         e.setMemoryLimit(req.getMemoryLimit());
         e.setTags(req.getTags() == null ? new String[0] : req.getTags());
-        e.setSamples(req.getSamples() == null ? "[]" : req.getSamples());
-        e.setTestCases(req.getTestCases() == null ? "[]" : req.getTestCases());
+        e.setSamples(serialize(req.getSamples()));
+        e.setTestCases(serialize(req.getTestCases()));
         e.setVisible(req.getVisible() == null || req.getVisible());
+    }
+
+    /** Serialize a JSON array/object received as Object into a JSON string for DB storage. */
+    private String serialize(Object obj) {
+        if (obj == null) return "[]";
+        if (obj instanceof String s) return s;
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            return "[]";
+        }
     }
 }

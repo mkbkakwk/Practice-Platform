@@ -11,7 +11,8 @@ public class ProblemDetail {
     private String[] tags;
     private Integer timeLimit;
     private Integer memoryLimit;
-    private Object samples; // parsed array of {input,output}
+    private Object samples;      // parsed array of {input,output}
+    private Object testCases;    // parsed array of {input,output}; only filled for admin
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -35,4 +36,6 @@ public class ProblemDetail {
     public void setMemoryLimit(Integer memoryLimit) { this.memoryLimit = memoryLimit; }
     public Object getSamples() { return samples; }
     public void setSamples(Object samples) { this.samples = samples; }
+    public Object getTestCases() { return testCases; }
+    public void setTestCases(Object testCases) { this.testCases = testCases; }
 }

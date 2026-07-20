@@ -20,8 +20,8 @@ public class ProblemUpsertRequest {
     @Min(32) @Max(1024)
     private Integer memoryLimit = 256;
     private String[] tags = {};
-    private String samples = "[]";   // JSON string
-    private String testCases = "[]"; // JSON string
+    private Object samples;   // JSON array of {input,output}
+    private Object testCases; // JSON array of {input,output}
     private Boolean visible = true;
 
     public String getSlug() { return slug; }
@@ -42,10 +42,10 @@ public class ProblemUpsertRequest {
     public void setMemoryLimit(Integer memoryLimit) { this.memoryLimit = memoryLimit; }
     public String[] getTags() { return tags; }
     public void setTags(String[] tags) { this.tags = tags; }
-    public String getSamples() { return samples; }
-    public void setSamples(String samples) { this.samples = samples; }
-    public String getTestCases() { return testCases; }
-    public void setTestCases(String testCases) { this.testCases = testCases; }
+    public Object getSamples() { return samples; }
+    public void setSamples(Object samples) { this.samples = samples; }
+    public Object getTestCases() { return testCases; }
+    public void setTestCases(Object testCases) { this.testCases = testCases; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
 }

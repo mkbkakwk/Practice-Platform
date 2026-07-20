@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS "Problem" (
     time_limit   INT NOT NULL DEFAULT 1000,
     memory_limit INT NOT NULL DEFAULT 256,
     tags         TEXT[] NOT NULL DEFAULT '{}',
-    samples      JSONB NOT NULL DEFAULT '[]',
-    test_cases   JSONB NOT NULL DEFAULT '[]',
+    samples      TEXT NOT NULL DEFAULT '[]',
+    test_cases   TEXT NOT NULL DEFAULT '[]',
     visible      BOOLEAN NOT NULL DEFAULT TRUE,
     created_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );

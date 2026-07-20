@@ -80,6 +80,7 @@ export interface ProblemListItem {
   tags: string[];
   timeLimit: number;
   memoryLimit: number;
+  visible?: boolean;
 }
 
 export interface Sample {
@@ -99,6 +100,24 @@ export interface ProblemDetail {
   timeLimit: number;
   memoryLimit: number;
   samples: Sample[];
+  /** Only present when fetched by an admin (for editing). */
+  testCases?: Sample[];
+}
+
+/** Payload for creating/updating a problem (admin only). */
+export interface ProblemUpsert {
+  slug: string;
+  title: string;
+  description: string;
+  inputFmt?: string;
+  outputFmt?: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  timeLimit: number;
+  memoryLimit: number;
+  tags: string[];
+  samples: Sample[];
+  testCases: Sample[];
+  visible: boolean;
 }
 
 export interface LanguageDef {
@@ -148,6 +167,16 @@ export const api = {
   },
   getProblem: (slug: string) =>
     request<{ problem: ProblemDetail }>(`/problems/${slug}`),
+  createProblem: (payload: ProblemUpsert) =>
+    request<{ problem: ProblemDetail }>("/problems", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateProblem: (slug: string, payload: ProblemUpsert) =>
+    request<{ problem: ProblemDetail }>(`/problems/${slug}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   getLanguages: () =>
     request<{ languages: LanguageDef[] }>("/submissions/meta/languages"),
   submit: (problemId: number, language: string, code: string) =>
