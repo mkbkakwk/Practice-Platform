@@ -11,6 +11,7 @@ public class AppProperties {
     private Cors cors = new Cors();
     private boolean promoteFirstAdmin = true;
     private RabbitMq rabbitmq = new RabbitMq();
+    private String docStorage = "/tmp/oj-docs";
 
     public Jwt getJwt() { return jwt; }
     public void setJwt(Jwt jwt) { this.jwt = jwt; }
@@ -20,6 +21,8 @@ public class AppProperties {
     public void setPromoteFirstAdmin(boolean promoteFirstAdmin) { this.promoteFirstAdmin = promoteFirstAdmin; }
     public RabbitMq getRabbitmq() { return rabbitmq; }
     public void setRabbitmq(RabbitMq rabbitmq) { this.rabbitmq = rabbitmq; }
+    public String getDocStorage() { return docStorage; }
+    public void setDocStorage(String docStorage) { this.docStorage = docStorage; }
 
     public static class Jwt {
         private String secret;

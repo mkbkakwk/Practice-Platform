@@ -13,6 +13,7 @@ export default function Register() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"USER" | "TEACHER">("USER");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +22,7 @@ export default function Register() {
     setErr("");
     setLoading(true);
     try {
-      await register(username.trim(), password);
+      await register(username.trim(), password, role);
       navigate("/");
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "注册失败");
@@ -61,6 +62,31 @@ export default function Register() {
                 autoComplete="new-password"
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label>注册身份</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRole("USER")}
+                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                    role === "USER" ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:bg-zinc-50"
+                  }`}
+                >
+                  <div className="font-medium">学生</div>
+                  <div className="text-xs text-zinc-500">做题 + 上传文档练习</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("TEACHER")}
+                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
+                    role === "TEACHER" ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:bg-zinc-50"
+                  }`}
+                >
+                  <div className="font-medium">老师</div>
+                  <div className="text-xs text-zinc-500">出题 + 复核学生提交</div>
+                </button>
+              </div>
             </div>
             {err && <p className="text-sm text-red-600">{err}</p>}
             <Button type="submit" className="w-full" disabled={loading}>

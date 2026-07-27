@@ -2,7 +2,7 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AdminGuard } from "@/components/AdminGuard";
+import { AdminGuard, TeacherGuard } from "@/components/AdminGuard";
 import ProblemList from "@/pages/ProblemList";
 import ProblemDetail from "@/pages/ProblemDetail";
 import Login from "@/pages/Login";
@@ -12,6 +12,16 @@ import Leaderboard from "@/pages/Leaderboard";
 import AdminProblemList from "@/pages/AdminProblemList";
 import ProblemForm from "@/pages/ProblemForm";
 import ProblemEditPage from "@/pages/ProblemEditPage";
+import OfficeList from "@/pages/OfficeList";
+import OfficePractice from "@/pages/OfficePractice";
+import OfficeAdminList from "@/pages/OfficeAdminList";
+import OfficeQuestionForm from "@/pages/OfficeQuestionForm";
+import OfficeDocList from "@/pages/OfficeDocList";
+import OfficeDocExerciseDetail from "@/pages/OfficeDocExerciseDetail";
+import OfficeDocForm from "@/pages/OfficeDocForm";
+import OfficeDocReview from "@/pages/OfficeDocReview";
+import OfficeDocReviewList from "@/pages/OfficeDocReviewList";
+import AdminUserList from "@/pages/AdminUserList";
 
 function Layout({ label, children }: { label?: string; children: React.ReactNode }) {
   return (
@@ -35,10 +45,23 @@ export default function App() {
             <Route path="/submissions" element={<Layout label="提交记录"><Submissions /></Layout>} />
             <Route path="/leaderboard" element={<Layout label="排行榜"><Leaderboard /></Layout>} />
 
+            {/* Office practice */}
+            <Route path="/office" element={<Layout label="Office 练习"><OfficeList /></Layout>} />
+            <Route path="/office/:id" element={<Layout label="Office 练习"><OfficePractice /></Layout>} />
+            <Route path="/office/docs" element={<Layout label="排版练习"><OfficeDocList /></Layout>} />
+            <Route path="/office/docs/:id" element={<Layout label="排版练习"><OfficeDocExerciseDetail /></Layout>} />
+
             {/* Admin-only routes */}
             <Route path="/admin/problems" element={<Layout label="题目管理"><AdminGuard><AdminProblemList /></AdminGuard></Layout>} />
             <Route path="/admin/problems/new" element={<Layout label="新建题目"><AdminGuard><ProblemForm mode="create" /></AdminGuard></Layout>} />
             <Route path="/admin/problems/:slug/edit" element={<Layout label="编辑题目"><AdminGuard><ProblemEditPage /></AdminGuard></Layout>} />
+            <Route path="/admin/office" element={<Layout label="Office 题库管理"><AdminGuard><OfficeAdminList /></AdminGuard></Layout>} />
+            <Route path="/admin/office/new" element={<Layout label="新建 Office 题目"><AdminGuard><OfficeQuestionForm mode="create" /></AdminGuard></Layout>} />
+            <Route path="/admin/office/:id/edit" element={<Layout label="编辑 Office 题目"><AdminGuard><OfficeQuestionForm mode="edit" /></AdminGuard></Layout>} />
+            <Route path="/admin/office-doc/new" element={<Layout label="新建排版练习"><TeacherGuard><OfficeDocForm /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc/review-list" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReviewList /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc/review/:id" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReview /></TeacherGuard></Layout>} />
+            <Route path="/admin/users" element={<Layout label="用户管理"><AdminGuard><AdminUserList /></AdminGuard></Layout>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

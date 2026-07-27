@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings } from "lucide-react";
+import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Navbar() {
@@ -11,13 +11,19 @@ export function Navbar() {
 
   const links = [
     { to: "/", label: "题库", icon: ListOrdered, match: (p: string) => p === "/" || p.startsWith("/problem") },
+    { to: "/office", label: "Office", icon: Briefcase, match: (p: string) => p.startsWith("/office") },
     { to: "/submissions", label: "提交记录", icon: FileCode2, match: (p: string) => p.startsWith("/submissions") },
     { to: "/leaderboard", label: "排行榜", icon: Trophy, match: (p: string) => p.startsWith("/leaderboard") },
   ];
 
-  // Admin-only entry, appended after the public links.
+  // Teachers see their review queue entry.
+  if (user?.role === "TEACHER" || user?.role === "ADMIN") {
+    links.push({ to: "/admin/office-doc/review-list", label: "复核", icon: ClipboardCheck, match: (p: string) => p.startsWith("/admin/office-doc/review") });
+  }
+  // Admin-only: problem management + user management.
   if (user?.role === "ADMIN") {
-    links.push({ to: "/admin/problems", label: "管理", icon: Settings, match: (p: string) => p.startsWith("/admin") });
+    links.push({ to: "/admin/problems", label: "管理", icon: Settings, match: (p: string) => p.startsWith("/admin/problems") || p.startsWith("/admin/office") });
+    links.push({ to: "/admin/users", label: "用户", icon: Users, match: (p: string) => p.startsWith("/admin/users") });
   }
 
   return (
@@ -59,6 +65,11 @@ export function Navbar() {
                 {user.role === "ADMIN" && (
                   <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                     管理员
+                  </span>
+                )}
+                {user.role === "TEACHER" && (
+                  <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    老师
                   </span>
                 )}
               </span>

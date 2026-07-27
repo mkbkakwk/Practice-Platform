@@ -1,6 +1,7 @@
 package com.oj.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
 import com.oj.dto.SubmissionView;
@@ -9,8 +10,10 @@ import com.oj.mapper.UserMapper;
 import com.oj.service.SubmissionService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
@@ -54,5 +57,58 @@ public class UserController {
         List<SubmissionView> subs = submissionService.mySubmissions(userId, page, pageSize);
         long total = submissionService.countMine(userId);
         return Map.of("total", total, "page", page, "pageSize", pageSize, "submissions", subs);
+    }
+
+    // ---- admin user management ----
+
+    private static final Set<String> VALID_ROLES = Set.of("USER", "TEACHER", "ADMIN");
+
+    /** List all users (admin only). */
+    @GetMapping
+    public Map<String, Object> listUsers(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int pageSize) {
+        assertAdmin();
+        page = Math.max(1, page);
+        pageSize = Math.min(100, Math.max(1, pageSize));
+        Page<UserEntity> p = userMapper.selectPage(new Page<>(page, pageSize),
+                new QueryWrapper<UserEntity>().orderByDesc("id"));
+        List<Map<String, Object>> items = p.getRecords().stream().map(u -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", u.getId());
+            m.put("username", u.getUsername());
+            m.put("role", u.getRole());
+            m.put("solvedCount", u.getSolvedCount());
+            m.put("createdAt", u.getCreatedAt());
+            return m;
+        }).toList();
+        return Map.of("total", p.getTotal(), "page", page, "pageSize", pageSize, "users", items);
+    }
+
+    /** Update a user's role (admin only). */
+    @PutMapping("/{id}/role")
+    public Map<String, Object> updateRole(@PathVariable int id, @RequestBody Map<String, String> body) {
+        assertAdmin();
+        String newRole = body.get("role");
+        if (newRole == null || !VALID_ROLES.contains(newRole.toUpperCase())) {
+            throw ApiException.badRequest("角色必须是 USER / TEACHER / ADMIN");
+        }
+        UserEntity u = userMapper.selectById(id);
+        if (u == null) throw ApiException.notFound("用户不存在");
+        u.setRole(newRole.toUpperCase());
+        userMapper.updateById(u);
+        return Map.of("user", Map.of(
+                "id", u.getId(),
+                "username", u.getUsername(),
+                "role", u.getRole(),
+                "solvedCount", u.getSolvedCount(),
+                "createdAt", u.getCreatedAt()
+        ));
+    }
+
+    private void assertAdmin() {
+        if (!CurrentUser.isAdmin()) {
+            throw ApiException.forbidden("需要管理员权限");
+        }
     }
 }

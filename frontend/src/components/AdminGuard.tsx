@@ -24,3 +24,24 @@ export function AdminGuard({ children }: { children: ReactNode }) {
 
   return <>{children}</>;
 }
+
+/**
+ * 路由守卫：TEACHER 或 ADMIN 可访问（出题、复核等）。
+ */
+export function TeacherGuard({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
+  if (!user || (user.role !== "TEACHER" && user.role !== "ADMIN")) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}

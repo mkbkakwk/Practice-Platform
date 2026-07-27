@@ -59,8 +59,12 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       PROMOTE_FIRST_ADMIN: ${PROMOTE_FIRST_ADMIN:-true}
-    ports:
-      - "${BACKEND_PORT:-4000}:4000"
+      DOC_STORAGE: /app/oj-docs
+    # Backend is accessed via the Docker network by the frontend nginx proxy;
+    # no host port mapping needed (avoids Windows reserved-port conflicts).
+    # To debug directly, run: docker compose exec backend ...
+    volumes:
+      - oj-docs:/app/oj-docs
     networks:
       - oj-net
 
@@ -108,3 +112,4 @@ networks:
 
 volumes:
   oj-pgdata:
+  oj-docs:

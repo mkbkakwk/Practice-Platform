@@ -32,10 +32,25 @@ public class AuthService {
             throw ApiException.conflict("用户名已被占用");
         }
 
+        // First registered user becomes ADMIN (auto-promote). Otherwise, the
+        // requester may self-register as TEACHER or USER (student, default).
+        // ADMIN can never be self-assigned.
         String role = "USER";
         if (props.isPromoteFirstAdmin()) {
             Long count = userMapper.selectCount(null);
-            if (count == 0) role = "ADMIN";
+            if (count == 0) {
+                role = "ADMIN";
+            } else if (req.getRole() != null) {
+                String requested = req.getRole().trim().toUpperCase();
+                if ("TEACHER".equals(requested) || "USER".equals(requested)) {
+                    role = requested;
+                }
+            }
+        } else if (req.getRole() != null) {
+            String requested = req.getRole().trim().toUpperCase();
+            if ("TEACHER".equals(requested) || "USER".equals(requested)) {
+                role = requested;
+            }
         }
 
         String hashed = BCrypt.withDefaults().hashToString(12, req.getPassword().toCharArray());

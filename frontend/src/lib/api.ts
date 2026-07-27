@@ -25,8 +25,12 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
+  // For FormData (file uploads) we must NOT set Content-Type — the browser sets
+  // the correct multipart/form-data; charset boundary automatically. Setting it
+  // manually to application/json breaks multipart parsing on the server.
+  const isFormData = options.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string> | undefined),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -68,7 +72,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export interface PublicUser {
   id: number;
   username: string;
-  role: "USER" | "ADMIN";
+  role: "USER" | "TEACHER" | "ADMIN";
   solvedCount?: number;
 }
 
@@ -144,11 +148,152 @@ export interface Submission {
   user?: { id: number; username: string };
 }
 
+// ---- Office operation practice ----
+export type OfficeAppType = "WORD" | "EXCEL" | "PPT";
+export type OfficeQuestionType = "SINGLE_CHOICE" | "MULTI_CHOICE" | "TRUE_FALSE";
+
+export interface OfficeQuestionListItem {
+  id: number;
+  appType: OfficeAppType;
+  category: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  questionType: OfficeQuestionType;
+  content: string;
+  visible?: boolean;
+}
+
+export interface OfficeQuestionDetail {
+  id: number;
+  appType: OfficeAppType;
+  category: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  questionType: OfficeQuestionType;
+  content: string;
+  options: string[];
+  /** Only present when fetched by an admin (for editing). */
+  answer?: string;
+  explanation?: string;
+  visible?: boolean;
+}
+
+export interface OfficeQuestionUpsert {
+  appType: OfficeAppType;
+  category: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  questionType: OfficeQuestionType;
+  content: string;
+  options: string[];
+  answer: string;
+  explanation?: string;
+  visible: boolean;
+}
+
+export interface OfficeSubmitResult {
+  correct: boolean;
+  correctAnswer: string;
+  explanation: string;
+}
+
+export interface OfficeStats {
+  totalAnswered: number;
+  correctCount: number;
+  accuracy: number;
+  wordAnswered: number;
+  wordCorrect: number;
+  excelAnswered: number;
+  excelCorrect: number;
+  pptAnswered: number;
+  pptCorrect: number;
+}
+
+// ---- Office document exercises (排版练习) ----
+export interface DocExerciseListItem {
+  id: number;
+  title: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  visible: boolean;
+  hasTeacherDoc: boolean;
+  createdAt: string;
+}
+
+export interface DocExerciseDetail {
+  id: number;
+  title: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  description: string;
+  teacherDocPath: string | null;
+  teacherDocName: string | null;
+  visible: boolean;
+  createdAt: string;
+}
+
+export interface DocParaInfo {
+  index: number;
+  text: string;
+  fontFamily: string;
+  fontSizePt: number;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  align: string;
+  firstLineIndentChars: number;
+  lineSpacing: number;
+  color: string;
+}
+
+export interface DocCompareDiff {
+  prop: string;
+  label: string;
+  student: unknown;
+  teacher: unknown;
+  match: boolean;
+}
+
+export interface DocCompareRow {
+  index: number;
+  studentText: string;
+  teacherText: string;
+  diffs: DocCompareDiff[];
+  match: boolean;
+}
+
+export interface DocSubmission {
+  id: number;
+  userId: number;
+  exerciseId: number;
+  studentDocName: string;
+  studentDocPath: string;
+  autoResult: string;   // JSON string of DocParaInfo[]
+  compareResult: string; // JSON string of DocCompareRow[]
+  status: "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
+  score: number | null;
+  teacherComment: string | null;
+  createdAt: string;
+}
+
+export interface DocSubmissionListItem {
+  id: number;
+  exerciseId: number;
+  userId: number;
+  studentDocName: string;
+  status: "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
+  score: number | null;
+  createdAt: string;
+}
+
+export interface UserListItem {
+  id: number;
+  username: string;
+  role: "USER" | "TEACHER" | "ADMIN";
+  solvedCount: number;
+  createdAt: string;
+}
+
 export const api = {
-  register: (username: string, password: string) =>
+  register: (username: string, password: string, role?: "USER" | "TEACHER") =>
     request<{ token: string; user: PublicUser }>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, role }),
     }),
   login: (username: string, password: string) =>
     request<{ token: string; user: PublicUser }>("/auth/login", {
@@ -207,6 +352,104 @@ export const api = {
     request<{ leaderboard: (PublicUser & { rank: number; createdAt: string })[] }>(
       `/users/leaderboard?limit=${limit}`,
     ),
+
+  // ---- Office practice ----
+  listOfficeQuestions: (params: { page?: number; pageSize?: number; appType?: string; difficulty?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    if (params.appType) q.set("appType", params.appType);
+    if (params.difficulty) q.set("difficulty", params.difficulty);
+    return request<{ total: number; page: number; pageSize: number; questions: OfficeQuestionListItem[] }>(
+      `/office/questions?${q.toString()}`,
+    );
+  },
+  getOfficeQuestion: (id: number) =>
+    request<{ question: OfficeQuestionDetail }>(`/office/questions/${id}`),
+  createOfficeQuestion: (payload: OfficeQuestionUpsert) =>
+    request<{ question: OfficeQuestionDetail }>(`/office/questions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateOfficeQuestion: (id: number, payload: OfficeQuestionUpsert) =>
+    request<{ question: OfficeQuestionDetail }>(`/office/questions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  submitOfficeAnswer: (questionId: number, selected: string[]) =>
+    request<{ result: OfficeSubmitResult }>(`/office/submit`, {
+      method: "POST",
+      body: JSON.stringify({ questionId, selected }),
+    }),
+  officeStats: () =>
+    request<{ stats: OfficeStats }>(`/office/stats`),
+
+  // ---- Office document exercises (排版练习: upload .docx, auto-compare) ----
+  listDocExercises: (params: { page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; exercises: DocExerciseListItem[] }>(
+      `/office/docs/exercises?${q.toString()}`,
+    );
+  },
+  getDocExercise: (id: number) =>
+    request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises/${id}`),
+  createDocExercise: (payload: { title: string; difficulty: string; description: string; visible?: boolean }) =>
+    request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  uploadTeacherDoc: (exerciseId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ teacherDocName: string }>(`/office/docs/exercises/${exerciseId}/teacher-doc`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  teacherDocUrl: (exerciseId: number) => `${API_BASE}/office/docs/exercises/${exerciseId}/teacher-doc`,
+  submitDocExercise: (exerciseId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ submission: DocSubmission }>(`/office/docs/exercises/${exerciseId}/submit`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  getDocSubmission: (id: number) =>
+    request<{ submission: DocSubmission }>(`/office/docs/submissions/${id}`),
+  listDocSubmissions: (params: { exerciseId?: number; page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.exerciseId) q.set("exerciseId", String(params.exerciseId));
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; submissions: DocSubmissionListItem[] }>(
+      `/office/docs/submissions?${q.toString()}`,
+    );
+  },
+  studentDocUrl: (submissionId: number) => `${API_BASE}/office/docs/submissions/${submissionId}/download`,
+  reviewDocSubmission: (id: number, score: number, comment: string) =>
+    request<{ submission: DocSubmission }>(`/office/docs/submissions/${id}/review`, {
+      method: "PUT",
+      body: JSON.stringify({ score, comment }),
+    }),
+
+  // ---- admin user management ----
+  listUsers: (params: { page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; users: UserListItem[] }>(
+      `/users?${q.toString()}`,
+    );
+  },
+  updateUserRole: (id: number, role: "USER" | "TEACHER" | "ADMIN") =>
+    request<{ user: UserListItem }>(`/users/${id}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    }),
+
 
   /**
    * Poll a submission until its verdict is no longer PENDING.

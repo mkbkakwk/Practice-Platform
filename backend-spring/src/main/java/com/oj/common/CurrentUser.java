@@ -31,4 +31,14 @@ public class CurrentUser {
     public static boolean isAdmin() {
         return "ADMIN".equals(getRole());
     }
+
+    public static boolean isTeacher() {
+        return "TEACHER".equals(getRole());
+    }
+
+    /** Teachers and admins can both manage exercises and review submissions. */
+    public static boolean isTeacherOrAdmin() {
+        String r = getRole();
+        return "ADMIN".equals(r) || "TEACHER".equals(r);
+    }
 }

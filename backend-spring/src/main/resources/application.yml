@@ -22,6 +22,10 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
 
 mybatis-plus:
   configuration:
@@ -43,6 +47,7 @@ oj:
     exchange: oj.judge
     routing-key: oj.judge.submit
     queue: oj.judge.queue
+  doc-storage: ${DOC_STORAGE:/tmp/oj-docs}
 
 logging:
   level:

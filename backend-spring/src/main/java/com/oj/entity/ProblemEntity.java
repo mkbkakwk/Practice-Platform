@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.oj.common.JsonbTypeHandler;
 import com.oj.common.StringArrayTypeHandler;
 
 import java.time.LocalDateTime;
