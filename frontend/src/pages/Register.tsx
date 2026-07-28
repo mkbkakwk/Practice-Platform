@@ -13,7 +13,6 @@ export default function Register() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"USER" | "TEACHER">("USER");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +21,7 @@ export default function Register() {
     setErr("");
     setLoading(true);
     try {
-      await register(username.trim(), password, role);
+      await register(username.trim(), password);
       navigate("/");
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "注册失败");
@@ -36,7 +35,7 @@ export default function Register() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>注册</CardTitle>
-          <CardDescription>创建账号开始练习算法题</CardDescription>
+          <CardDescription>创建账号开始练习</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
@@ -63,31 +62,6 @@ export default function Register() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label>注册身份</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole("USER")}
-                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
-                    role === "USER" ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:bg-zinc-50"
-                  }`}
-                >
-                  <div className="font-medium">学生</div>
-                  <div className="text-xs text-zinc-500">做题 + 上传文档练习</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole("TEACHER")}
-                  className={`rounded-md border p-3 text-left text-sm transition-colors ${
-                    role === "TEACHER" ? "border-zinc-900 bg-zinc-50" : "border-zinc-200 hover:bg-zinc-50"
-                  }`}
-                >
-                  <div className="font-medium">老师</div>
-                  <div className="text-xs text-zinc-500">出题 + 复核学生提交</div>
-                </button>
-              </div>
-            </div>
             {err && <p className="text-sm text-red-600">{err}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -100,7 +74,7 @@ export default function Register() {
               </Link>
             </p>
             <p className="text-center text-xs text-zinc-400">
-              首位注册的用户将自动成为管理员
+              教师账号由管理员在用户管理页面设置
             </p>
           </form>
         </CardContent>

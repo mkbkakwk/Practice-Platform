@@ -290,10 +290,10 @@ export interface UserListItem {
 }
 
 export const api = {
-  register: (username: string, password: string, role?: "USER" | "TEACHER") =>
+  register: (username: string, password: string) =>
     request<{ token: string; user: PublicUser }>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password, role }),
+      body: JSON.stringify({ username, password }),
     }),
   login: (username: string, password: string) =>
     request<{ token: string; user: PublicUser }>("/auth/login", {

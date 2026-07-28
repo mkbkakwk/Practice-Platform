@@ -5,7 +5,7 @@ interface AuthState {
   user: PublicUser | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, role?: "USER" | "TEACHER") => Promise<void>;
+  register: (username: string, password: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -44,8 +44,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(user);
   };
 
-  const register = async (username: string, password: string, role?: "USER" | "TEACHER") => {
-    const { token, user } = await api.register(username, password, role);
+  const register = async (username: string, password: string) => {
+    const { token, user } = await api.register(username, password);
     setToken(token);
     setUser(user);
   };
