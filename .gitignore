@@ -37,9 +37,6 @@ yarn-error.log*
 # ── WorkBuddy workspace data (local only) ───────────────
 .workbuddy/
 
-# ── Prisma generated migrations (keep schema, ignore lock) ──
-/backend/prisma/migrations/dev.db*
-
 # ── Test / coverage ──────────────────────────────────────
 coverage/
 *.lcov
