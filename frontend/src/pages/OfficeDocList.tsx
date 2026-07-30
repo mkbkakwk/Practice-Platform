@@ -69,7 +69,7 @@ export default function OfficeDocList() {
                 <Link to={`/office/docs/${ex.id}`} className="font-medium text-zinc-900 hover:underline">
                   {ex.title}
                 </Link>
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className={cn("inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap", DIFFICULTY_CLASS[ex.difficulty])}>
                     {DIFFICULTY_LABEL[ex.difficulty]}
                   </span>
@@ -79,6 +79,8 @@ export default function OfficeDocList() {
                     <span className="text-xs text-zinc-400">未上传参考文档</span>
                   )}
                   {!ex.visible && <span className="text-xs text-zinc-400">（隐藏）</span>}
+                  <span className="text-xs text-zinc-500">创建者：{ex.createdBy == null ? "系统预置" : (ex.creatorUsername ?? "未知")}</span>
+                  <span className="text-xs text-zinc-400">{new Date(ex.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
                 </div>
               </div>
               <Button size="sm" asChild>

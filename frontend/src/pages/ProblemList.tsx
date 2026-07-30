@@ -70,20 +70,21 @@ export default function ProblemList() {
               <th className="w-16 px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium">题目</th>
               <th className="w-24 px-4 py-3 font-medium">难度</th>
+              <th className="hidden w-28 px-4 py-3 font-medium lg:table-cell">创建者</th>
               <th className="hidden w-40 px-4 py-3 font-medium sm:table-cell">标签</th>
-              <th className="hidden w-32 px-4 py-3 font-medium md:table-cell">时间/内存</th>
+              <th className="hidden w-32 px-4 py-3 font-medium md:table-cell whitespace-nowrap">时间/内存</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-zinc-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             ) : problems.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-zinc-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
                   暂无题目
                 </td>
               </tr>
@@ -108,6 +109,9 @@ export default function ProblemList() {
                     >
                       {DIFFICULTY_LABEL[p.difficulty]}
                     </span>
+                  </td>
+                  <td className="hidden px-4 py-3 text-xs text-zinc-600 lg:table-cell">
+                    {p.createdBy == null ? "系统预置" : (p.creatorUsername ?? "未知")}
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     <div className="flex flex-wrap gap-1">

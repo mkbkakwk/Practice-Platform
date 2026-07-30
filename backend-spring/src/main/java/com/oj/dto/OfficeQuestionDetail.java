@@ -1,8 +1,9 @@
 package com.oj.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
-/** Detail view for practicing. Includes options but NOT the answer. */
+/** Practice detail. Answer/explanation are exposed only to an authorized manager. */
 public class OfficeQuestionDetail {
     private Integer id;
     private String appType;
@@ -11,10 +12,13 @@ public class OfficeQuestionDetail {
     private String questionType;
     private String content;
     private List<String> options;
-    // adminEdit: when true, answer/explanation are filled (for admin editing only).
     private String answer;
     private String explanation;
     private Boolean visible;
+    private Integer createdBy;
+    private String creatorUsername;
+    private LocalDateTime createdAt;
+
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
     public String getAppType() { return appType; }
@@ -35,4 +39,10 @@ public class OfficeQuestionDetail {
     public void setExplanation(String explanation) { this.explanation = explanation; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public Integer getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
+    public String getCreatorUsername() { return creatorUsername; }
+    public void setCreatorUsername(String creatorUsername) { this.creatorUsername = creatorUsername; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

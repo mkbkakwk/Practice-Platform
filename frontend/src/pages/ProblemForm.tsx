@@ -20,7 +20,7 @@ import { log, TAGS } from "@/lib/logger";
 
 interface Props {
   mode: "create" | "edit";
-  /** When editing, the problem fetched from the API (includes testCases for admin). */
+  /** When editing, the problem fetched from the API (includes testCases for an authorized manager). */
   initial?: ProblemDetail;
 }
 
@@ -61,7 +61,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         tags: initial.tags ?? [],
         samples: initial.samples?.length ? initial.samples : [{ input: "", output: "" }],
         testCases: initial.testCases?.length ? initial.testCases : [{ input: "", output: "" }],
-        visible: true,
+        visible: initial.visible ?? true,
       });
       setTagsStr((initial.tags ?? []).join(", "));
     }

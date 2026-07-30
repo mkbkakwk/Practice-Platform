@@ -18,12 +18,17 @@ const LANG_LABEL: Record<string, string> = {
 
 export default function Submissions() {
   const { user } = useAuth();
-  const [mine, setMine] = useState(false);
+  const [mine, setMine] = useState(true);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setMine(user?.role !== "ADMIN");
+    setPage(1);
+  }, [user?.role]);
 
   useEffect(() => {
     setPage(1);
@@ -52,19 +57,13 @@ export default function Submissions() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">提交记录</h1>
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant={!mine ? "default" : "outline"}
-            onClick={() => setMine(false)}
-          >
-            全站
-          </Button>
+          {user?.role === "ADMIN" && (
+            <Button size="sm" variant={!mine ? "default" : "outline"} onClick={() => setMine(false)}>
+              全站
+            </Button>
+          )}
           {user && (
-            <Button
-              size="sm"
-              variant={mine ? "default" : "outline"}
-              onClick={() => setMine(true)}
-            >
+            <Button size="sm" variant={mine ? "default" : "outline"} onClick={() => setMine(true)}>
               我的
             </Button>
           )}

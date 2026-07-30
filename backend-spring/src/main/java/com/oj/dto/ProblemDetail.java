@@ -1,5 +1,7 @@
 package com.oj.dto;
 
+import java.time.LocalDateTime;
+
 public class ProblemDetail {
     private Integer id;
     private String slug;
@@ -11,8 +13,12 @@ public class ProblemDetail {
     private String[] tags;
     private Integer timeLimit;
     private Integer memoryLimit;
-    private Object samples;      // parsed array of {input,output}
-    private Object testCases;    // parsed array of {input,output}; only filled for admin
+    private Object samples;
+    private Object testCases;
+    private Boolean visible;
+    private Integer createdBy;
+    private String creatorUsername;
+    private LocalDateTime createdAt;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -38,4 +44,12 @@ public class ProblemDetail {
     public void setSamples(Object samples) { this.samples = samples; }
     public Object getTestCases() { return testCases; }
     public void setTestCases(Object testCases) { this.testCases = testCases; }
+    public Boolean getVisible() { return visible; }
+    public void setVisible(Boolean visible) { this.visible = visible; }
+    public Integer getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
+    public String getCreatorUsername() { return creatorUsername; }
+    public void setCreatorUsername(String creatorUsername) { this.creatorUsername = creatorUsername; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

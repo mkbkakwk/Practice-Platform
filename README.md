@@ -38,8 +38,8 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 - ⚡ **异步评测 + 高并发** —— 提交经 RabbitMQ 入队，Worker 池水平扩展，轻松扛 300+ 并发
 - 📦 **预置题库** —— 自带 6 道算法题 + 11 道 Office 选择题，部署后立即可用
 - 📄 **文档排版自动比对** —— Apache POI 解析 .docx 格式，逐段比对字体/字号/加粗/对齐/缩进/行距
-- 👨‍🏫 **三角色权限** —— 管理员管理用户、老师出题+复核、学生做题+上传文档
-- 🔐 **注册选身份** —— 注册时选择学生或老师，首位注册用户自动成为管理员
+- 👨‍🏫 **三角色权限** —— 教师管理自建内容并复核自己的排版练习，管理员管理全部内容
+- 🔐 **统一学生注册** —— 公开注册统一为学生，管理员可在用户管理中调整角色，首位注册用户自动成为管理员
 - 🐛 **错误可观测** —— 前端 ErrorBoundary 错误页 + 统一日志
 
 ---
@@ -48,11 +48,11 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 
 | 模块 | 功能 |
 | :--- | :--- |
-| 👤 用户 | 注册（选身份：学生/老师）/ 登录（JWT）/ 首位用户自动管理员 |
+| 👤 用户 | 统一学生注册 / 登录（JWT）/ 管理员调整角色 / 首位用户自动管理员 |
 | 📚 算法题库 | 题目列表（分页、难度筛选）、Markdown 题面（支持 LaTeX）、样例 |
 | 💻 算法评测 | 多语言代码编辑器、一键提交、异步评测、轮询结果 |
 | 🏷️ 判定 | AC / WA / TLE / RE / CE / SE |
-| 📊 记录 | 全站提交动态、个人提交历史 |
+| 📊 记录 | 用户查看个人提交历史；管理员可查看全站提交 |
 | 🏆 排行榜 | 按通过题数排名 |
 | 📝 Office 选择题 | Word/Excel/PPT 分类、单选/多选/判断、即时判分+解析、答题统计 |
 | 📄 文档排版练习 | 学生上传 .docx → POI 解析格式 → 和老师文档逐段比对 → 老师复核打分 |
@@ -63,14 +63,18 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 
 | 功能 | 学生 | 老师 | 管理员 |
 | :--- | :---: | :---: | :---: |
-| 做算法题 / Office 选择题 | ✅ | ✅ | ✅ |
-| 上传排版文档 | ✅ | ✅ | ✅ |
-| 查看自己的提交记录 | ✅ | ✅ | ✅ |
-| 创建排版练习 + 上传参考文档 | ❌ | ✅ | ✅ |
-| 复核学生提交（打分+评语） | ❌ | ✅ | ✅ |
-| 算法题管理（增删改） | ❌ | ❌ | ✅ |
-| Office 选择题管理 | ❌ | ❌ | ✅ |
+| 查看已启用内容、做算法题 / Office 选择题 | ✅ | ✅ | ✅ |
+| 下载排版素材、上传排版作业 | ✅ | ✅ | ✅ |
+| 查看自己的提交与成绩 | ✅ | ✅ | ✅ |
+| 创建三类内容 | ❌ | ✅ | ✅ |
+| 编辑、启用、停用自建内容 | ❌ | ✅ | ✅ |
+| 复核自建排版练习的学生提交 | ❌ | ✅ | ✅ |
+| 管理其他教师或系统预置内容 | ❌ | ❌ | ✅ |
+| 彻底删除无学生提交的自建内容 | ❌ | ✅ | ✅ |
+| 彻底删除任意内容并清理关联数据 | ❌ | ❌ | ✅ |
 | 用户角色管理 | ❌ | ❌ | ✅ |
+
+系统预置内容的 `created_by` 为 `NULL`，仅管理员可以管理。三个内容模块复用 `visible` 作为启用状态：停用后学生无法继续查看或提交，但历史提交、答案、代码、文档、成绩和统计会保留，并可重新启用。彻底删除会清理该内容的真实关联提交与统计；教师只能彻底删除没有任何学生提交的自建内容。
 
 ---
 
@@ -152,7 +156,7 @@ docker compose up -d --build
 
 启动完成后访问 👉 **http://localhost:3000**
 
-> 💡 **第一个注册的账号会自动成为管理员**。注册时可选「学生」或「老师」身份。
+> 💡 **第一个注册的账号会自动成为管理员**。其余公开注册账号统一为学生，教师角色由管理员授予。
 
 > ⚠️ **Windows 端口说明**：Windows 会动态保留部分 TCP 端口（含 8080/4000），项目 `.env` 已默认设 `PORT=3000`。如遇端口冲突，修改 `.env` 中的 `PORT` 即可。
 
@@ -193,23 +197,24 @@ docker compose up -d --scale worker=3
 
 ### 学生
 
-1. 打开 http://localhost:3000，注册时选择「学生」身份
-2. **算法练习**：在「题库」选题 → 编辑器写代码 → 提交评测 → 查看结果
-3. **Office 选择题**：点「Office」→ 选 Word/Excel/PPT → 答题 → 即时判分+解析
-4. **文档排版练习**：点「Office」→「排版练习（文档上传）」→ 下载老师参考文档 → 按要求在 Word 中排版 → 上传 .docx → 查看自动比对结果
+1. 打开 http://localhost:3000 注册并登录（公开注册统一为学生）
+2. **算法练习**：在「题库」选择已启用题目 → 编写代码 → 提交评测 → 查看自己的结果
+3. **Office 选择题**：点「Office」→ 选择已启用题目 → 答题 → 查看即时判分与个人统计
+4. **文档排版练习**：下载已启用练习的参考文档 → 在 Word 中排版 → 上传 .docx → 查看自己的自动比对与复核成绩
 
 ### 老师
 
-1. 注册时选择「老师」身份（或由管理员在「用户」管理页提升角色）
-2. 导航栏出现「复核」入口
-3. **创建排版练习**：排版练习列表 →「新建练习」→ 填标题+Markdown要求 → 上传老师参考 .docx
-4. **复核学生提交**：点「复核」→ 查看比对详情（逐段格式差异）→ 下载学生文档 → 打分+评语
+1. 由管理员在「用户」管理页授予教师角色
+2. 导航栏「内容管理」可以创建并管理自己创建的算法题、Office 选择题和排版练习
+3. 可编辑、启用、停用自建内容；系统预置内容和其他教师内容没有管理按钮，后端也会拒绝请求
+4. 可在「复核」中查看和批改自己创建的排版练习下的学生提交
+5. 自建内容没有学生提交时可彻底删除；已有提交时只能停用
 
 ### 管理员
 
-- 老师的全部功能 +
-- **算法题管理**：导航栏「管理」→ 可视化表单创建题目（Markdown+LaTeX 实时预览、样例/测试点动态增删）
-- **Office 选择题管理**：管理 Office 题库（创建/编辑单选/多选/判断题）
+- 可以管理三类全部内容，包括系统预置内容和其他教师创建的内容
+- 可以停用或重新启用任意内容；停用保留历史数据
+- 可以彻底删除任意内容；有关联提交时会事务清理提交、文件和实际存在的统计字段
 - **用户角色管理**：导航栏「用户」→ 修改任意用户的角色（学生/老师/管理员）
 
 ---
@@ -280,27 +285,37 @@ practice-platform/
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | :--- | :--- | :--- | :--- |
-| POST | `/api/auth/register` | - | 注册（可选 role: USER/TEACHER） |
+| POST | `/api/auth/register` | - | 注册（统一创建 USER） |
 | POST | `/api/auth/login` | - | 登录 |
 | GET | `/api/auth/me` | ✅ | 当前用户信息 |
 | GET | `/api/problems` | - | 算法题列表 |
 | GET | `/api/problems/:slug` | - | 算法题详情 |
-| POST | `/api/problems` | 🔒 管理员 | 创建算法题 |
-| PUT | `/api/problems/:slug` | 🔒 管理员 | 更新算法题 |
-| POST | `/api/submissions` | ✅ | 提交评测（异步） |
+| GET | `/api/problems/manage` | 🔒 教师/管理员 | 可管理算法题列表（教师仅自建） |
+| POST | `/api/problems` | 🔒 教师/管理员 | 创建算法题并记录 `created_by` |
+| PUT | `/api/problems/:slug` | 🔒 所有者/管理员 | 更新算法题 |
+| PUT | `/api/problems/:slug/visibility` | 🔒 所有者/管理员 | 启用或停用算法题 |
+| DELETE | `/api/problems/:slug` | 🔒 所有者/管理员 | 彻底删除算法题 |
+| POST | `/api/submissions` | ✅ | 提交评测（停用题禁止提交） |
 | GET | `/api/submissions/:id` | ✅ | 查询评测结果 |
 | GET | `/api/office/questions` | - | Office 选择题列表 |
 | GET | `/api/office/questions/:id` | - | Office 选择题详情 |
 | POST | `/api/office/submit` | ✅ | 提交选择题答案 |
 | GET | `/api/office/stats` | ✅ | 答题统计 |
-| POST | `/api/office/questions` | 🔒 管理员 | 创建选择题 |
+| GET | `/api/office/questions/manage` | 🔒 教师/管理员 | 可管理选择题列表 |
+| POST | `/api/office/questions` | 🔒 教师/管理员 | 创建选择题 |
+| PUT | `/api/office/questions/:id/visibility` | 🔒 所有者/管理员 | 启用或停用选择题 |
+| DELETE | `/api/office/questions/:id` | 🔒 所有者/管理员 | 彻底删除选择题 |
 | GET | `/api/office/docs/exercises` | - | 排版练习列表 |
 | GET | `/api/office/docs/exercises/:id` | - | 排版练习详情 |
-| POST | `/api/office/docs/exercises` | 🔒 老师/管理员 | 创建排版练习 |
+| GET | `/api/office/docs/exercises/manage` | 🔒 教师/管理员 | 可管理排版练习列表 |
+| POST | `/api/office/docs/exercises` | 🔒 教师/管理员 | 创建排版练习 |
+| PUT | `/api/office/docs/exercises/:id` | 🔒 所有者/管理员 | 编辑排版练习 |
+| PUT | `/api/office/docs/exercises/:id/visibility` | 🔒 所有者/管理员 | 启用或停用排版练习 |
+| DELETE | `/api/office/docs/exercises/:id` | 🔒 所有者/管理员 | 彻底删除排版练习 |
 | POST | `/api/office/docs/exercises/:id/teacher-doc` | 🔒 老师/管理员 | 上传老师参考文档 |
 | POST | `/api/office/docs/exercises/:id/submit` | ✅ | 学生上传 .docx |
-| GET | `/api/office/docs/submissions` | ✅ | 提交列表（老师/管理员看全部） |
-| PUT | `/api/office/docs/submissions/:id/review` | 🔒 老师/管理员 | 复核打分 |
+| GET | `/api/office/docs/submissions` | ✅ | 学生看自己；教师看自建练习；管理员看全部 |
+| PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
 | GET | `/api/users` | 🔒 管理员 | 用户列表 |
 | PUT | `/api/users/:id/role` | 🔒 管理员 | 修改用户角色 |
 | GET | `/api/users/leaderboard` | - | 排行榜 |

@@ -1,8 +1,8 @@
 package com.oj.dto;
 
-import java.util.List;
+import java.time.LocalDateTime;
 
-/** Lightweight view for the question list. Does NOT include options/answer. */
+/** Lightweight view for list and management screens. Does not expose the answer. */
 public class OfficeQuestionListItem {
     private Integer id;
     private String appType;
@@ -11,12 +11,30 @@ public class OfficeQuestionListItem {
     private String questionType;
     private String content;
     private Boolean visible;
+    private Integer createdBy;
+    private String creatorUsername;
+    private Long submissionCount;
+    private LocalDateTime createdAt;
+
     public OfficeQuestionListItem() {}
+
     public OfficeQuestionListItem(Integer id, String appType, String category, String difficulty,
-                                  String questionType, String content, Boolean visible) {
-        this.id = id; this.appType = appType; this.category = category; this.difficulty = difficulty;
-        this.questionType = questionType; this.content = content; this.visible = visible;
+                                  String questionType, String content, Boolean visible,
+                                  Integer createdBy, String creatorUsername, Long submissionCount,
+                                  LocalDateTime createdAt) {
+        this.id = id;
+        this.appType = appType;
+        this.category = category;
+        this.difficulty = difficulty;
+        this.questionType = questionType;
+        this.content = content;
+        this.visible = visible;
+        this.createdBy = createdBy;
+        this.creatorUsername = creatorUsername;
+        this.submissionCount = submissionCount;
+        this.createdAt = createdAt;
     }
+
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
     public String getAppType() { return appType; }
@@ -31,4 +49,12 @@ public class OfficeQuestionListItem {
     public void setContent(String content) { this.content = content; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public Integer getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
+    public String getCreatorUsername() { return creatorUsername; }
+    public void setCreatorUsername(String creatorUsername) { this.creatorUsername = creatorUsername; }
+    public Long getSubmissionCount() { return submissionCount; }
+    public void setSubmissionCount(Long submissionCount) { this.submissionCount = submissionCount; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

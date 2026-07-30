@@ -22,9 +22,12 @@ public class ProblemEntity {
     private Integer memoryLimit;
     @TableField(typeHandler = StringArrayTypeHandler.class)
     private String[] tags;
-    private String samples;   // JSON text
-    private String testCases; // JSON text
+    private String samples;
+    private String testCases;
     private Boolean visible;
+    private Integer createdBy;
+    @TableField(exist = false)
+    private String creatorUsername;
     private LocalDateTime createdAt;
 
     public Integer getId() { return id; }
@@ -53,6 +56,10 @@ public class ProblemEntity {
     public void setTestCases(String testCases) { this.testCases = testCases; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public Integer getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
+    public String getCreatorUsername() { return creatorUsername; }
+    public void setCreatorUsername(String creatorUsername) { this.creatorUsername = creatorUsername; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

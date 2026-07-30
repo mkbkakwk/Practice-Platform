@@ -13,33 +13,27 @@ import com.oj.entity.SubmissionEntity;
 import com.oj.entity.UserEntity;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageBuilder;
-import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class SubmissionService {
 
+    private static final Duration RATE_LIMIT = Duration.ofSeconds(5);
+
     private final SubmissionMapper submissionMapper;
     private final UserMapper userMapper;
     private final ProblemService problemService;
     private final RabbitTemplate rabbitTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    // Simple per-user rate limit: 1 submission per 5 seconds.
     private final Map<Integer, LocalDateTime> lastSubmit = new ConcurrentHashMap<>();
-    private static final Duration RATE_LIMIT = Duration.ofSeconds(5);
 
     public SubmissionService(SubmissionMapper submissionMapper, UserMapper userMapper,
                              ProblemService problemService, RabbitTemplate rabbitTemplate) {
@@ -49,119 +43,117 @@ public class SubmissionService {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    /**
-     * Persist a PENDING submission then enqueue it for async judging.
-     * Returns the submission id so the frontend can poll for the result.
-     */
-    public int submit(SubmitRequest req) {
-        int userId = CurrentUser.getId();
+    public int submit(SubmitRequest request) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
 
-        // Rate limit
         LocalDateTime last = lastSubmit.get(userId);
         if (last != null && Duration.between(last, LocalDateTime.now()).compareTo(RATE_LIMIT) < 0) {
             throw ApiException.tooMany("提交过于频繁，请 5 秒后再试");
         }
 
-        // Validate problem
-        ProblemEntity problem = problemService.getEntityById(req.getProblemId());
+        ProblemEntity problem = problemService.getEntityById(request.getProblemId());
+        if (!Boolean.TRUE.equals(problem.getVisible())) {
+            throw ApiException.conflict("该题目已停用，无法继续提交");
+        }
 
-        SubmissionEntity s = new SubmissionEntity();
-        s.setUserId(userId);
-        s.setProblemId(problem.getId());
-        s.setLanguage(req.getLanguage());
-        s.setCode(req.getCode());
-        s.setVerdict("PENDING");
-        s.setTimeMs(0);
-        s.setMemoryKb(0);
-        s.setPassed(0);
-        s.setTotal(0);
-        s.setMessage("排队中");
-        submissionMapper.insert(s);
+        SubmissionEntity submission = new SubmissionEntity();
+        submission.setUserId(userId);
+        submission.setProblemId(problem.getId());
+        submission.setLanguage(request.getLanguage());
+        submission.setCode(request.getCode());
+        submission.setVerdict("PENDING");
+        submission.setTimeMs(0);
+        submission.setMemoryKb(0);
+        submission.setPassed(0);
+        submission.setTotal(0);
+        submission.setMessage("排队中");
+        submissionMapper.insert(submission);
 
-        // Enqueue to RabbitMQ
         try {
             Map<String, Object> payload = new HashMap<>();
-            payload.put("submissionId", s.getId());
-            payload.put("language", s.getLanguage());
-            payload.put("code", s.getCode());
+            payload.put("submissionId", submission.getId());
+            payload.put("language", submission.getLanguage());
+            payload.put("code", submission.getCode());
             payload.put("timeLimitMs", problem.getTimeLimit());
             payload.put("memoryLimitKb", problem.getMemoryLimit() * 1024);
             payload.put("testCasesJson", problem.getTestCases());
-            // convertAndSend uses the Jackson2JsonMessageConverter to serialize
-            // the Map as a JSON object that the worker can deserialize back to Map.
             rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, RabbitConfig.ROUTING_KEY, payload);
-        } catch (Exception e) {
-            // If MQ fails, mark as SE so the frontend doesn't poll forever.
-            s.setVerdict("SE");
-            s.setMessage("评测服务暂不可用: " + e.getMessage());
-            submissionMapper.updateById(s);
+        } catch (Exception exception) {
+            submission.setVerdict("SE");
+            submission.setMessage("评测服务暂不可用: " + exception.getMessage());
+            submissionMapper.updateById(submission);
         }
 
         lastSubmit.put(userId, LocalDateTime.now());
-        return s.getId();
+        return submission.getId();
     }
 
     public SubmissionView getById(int id) {
-        SubmissionEntity s = submissionMapper.selectById(id);
-        if (s == null) throw ApiException.notFound("提交不存在");
-        Integer me = CurrentUser.getId();
-        if (s.getUserId() != me && !CurrentUser.isAdmin()) {
+        SubmissionEntity submission = submissionMapper.selectById(id);
+        if (submission == null) throw ApiException.notFound("提交不存在");
+        if (!CurrentUser.isAdmin() && !Objects.equals(submission.getUserId(), CurrentUser.getId())) {
             throw ApiException.forbidden("无权查看该提交");
         }
-        return toView(s, true);
+        return toView(submission, true);
     }
 
     public List<SubmissionView> listFeed(int page, int pageSize, Integer problemId) {
-        QueryWrapper<SubmissionEntity> qw = new QueryWrapper<>();
-        if (problemId != null) qw.eq("problem_id", problemId);
-        qw.orderByDesc("created_at");
-        Page<SubmissionEntity> p = submissionMapper.selectPage(new Page<>(page, pageSize), qw);
-        return p.getRecords().stream().map(s -> toView(s, false)).toList();
-    }
-
-    public List<SubmissionView> mySubmissions(int userId, int page, int pageSize) {
-        QueryWrapper<SubmissionEntity> qw = new QueryWrapper<>();
-        qw.eq("user_id", userId);
-        qw.orderByDesc("created_at");
-        Page<SubmissionEntity> p = submissionMapper.selectPage(new Page<>(page, pageSize), qw);
-        return p.getRecords().stream().map(s -> toView(s, false)).toList();
+        QueryWrapper<SubmissionEntity> query = visibleSubmissionQuery(problemId);
+        query.orderByDesc("created_at");
+        Page<SubmissionEntity> result = submissionMapper.selectPage(new Page<>(page, pageSize), query);
+        return result.getRecords().stream().map(submission -> toView(submission, false)).toList();
     }
 
     public long countFeed(Integer problemId) {
-        QueryWrapper<SubmissionEntity> qw = new QueryWrapper<>();
-        if (problemId != null) qw.eq("problem_id", problemId);
-        return submissionMapper.selectCount(qw);
+        return submissionMapper.selectCount(visibleSubmissionQuery(problemId));
+    }
+
+    public List<SubmissionView> mySubmissions(int userId, int page, int pageSize) {
+        QueryWrapper<SubmissionEntity> query = new QueryWrapper<>();
+        query.eq("user_id", userId).orderByDesc("created_at");
+        Page<SubmissionEntity> result = submissionMapper.selectPage(new Page<>(page, pageSize), query);
+        return result.getRecords().stream().map(submission -> toView(submission, false)).toList();
     }
 
     public long countMine(int userId) {
         return submissionMapper.selectCount(new QueryWrapper<SubmissionEntity>().eq("user_id", userId));
     }
 
-    private SubmissionView toView(SubmissionEntity s, boolean includeCode) {
-        SubmissionView v = new SubmissionView();
-        v.setId(s.getId());
-        v.setUserId(s.getUserId());
-        v.setProblemId(s.getProblemId());
-        v.setLanguage(s.getLanguage());
-        if (includeCode) v.setCode(s.getCode());
-        v.setVerdict(s.getVerdict());
-        v.setTimeMs(s.getTimeMs());
-        v.setMemoryKb(s.getMemoryKb());
-        v.setMessage(s.getMessage());
-        v.setPassed(s.getPassed());
-        v.setTotal(s.getTotal());
-        v.setCreatedAt(s.getCreatedAt());
+    private QueryWrapper<SubmissionEntity> visibleSubmissionQuery(Integer problemId) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
+        QueryWrapper<SubmissionEntity> query = new QueryWrapper<>();
+        if (!CurrentUser.isAdmin()) query.eq("user_id", userId);
+        if (problemId != null) query.eq("problem_id", problemId);
+        return query;
+    }
 
-        // Attach problem brief
+    private SubmissionView toView(SubmissionEntity submission, boolean includeCode) {
+        SubmissionView view = new SubmissionView();
+        view.setId(submission.getId());
+        view.setUserId(submission.getUserId());
+        view.setProblemId(submission.getProblemId());
+        view.setLanguage(submission.getLanguage());
+        if (includeCode) view.setCode(submission.getCode());
+        view.setVerdict(submission.getVerdict());
+        view.setTimeMs(submission.getTimeMs());
+        view.setMemoryKb(submission.getMemoryKb());
+        view.setMessage(submission.getMessage());
+        view.setPassed(submission.getPassed());
+        view.setTotal(submission.getTotal());
+        view.setCreatedAt(submission.getCreatedAt());
+
         try {
-            ProblemEntity p = problemService.getEntityById(s.getProblemId());
-            v.setProblem(new SubmissionView.ProblemBrief(p.getId(), p.getSlug(), p.getTitle(), p.getDifficulty()));
-        } catch (Exception ignored) {}
+            ProblemEntity problem = problemService.getEntityById(submission.getProblemId());
+            view.setProblem(new SubmissionView.ProblemBrief(
+                    problem.getId(), problem.getSlug(), problem.getTitle(), problem.getDifficulty()));
+        } catch (ApiException ignored) {
+            // Historical view remains safe if content was removed concurrently.
+        }
 
-        // Attach user brief
-        UserEntity u = userMapper.selectById(s.getUserId());
-        if (u != null) v.setUser(new SubmissionView.UserBrief(u.getId(), u.getUsername()));
-
-        return v;
+        UserEntity user = userMapper.selectById(submission.getUserId());
+        if (user != null) view.setUser(new SubmissionView.UserBrief(user.getId(), user.getUsername()));
+        return view;
     }
 }

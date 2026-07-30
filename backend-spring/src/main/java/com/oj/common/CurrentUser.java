@@ -2,6 +2,8 @@ package com.oj.common;
 
 import io.jsonwebtoken.Claims;
 
+import java.util.Objects;
+
 /**
  * Holds the authenticated user for the duration of a request.
  * Set by JwtInterceptor, read by controllers/services.
@@ -36,9 +38,27 @@ public class CurrentUser {
         return "TEACHER".equals(getRole());
     }
 
-    /** Teachers and admins can both manage exercises and review submissions. */
     public static boolean isTeacherOrAdmin() {
-        String r = getRole();
-        return "ADMIN".equals(r) || "TEACHER".equals(r);
+        String role = getRole();
+        return "ADMIN".equals(role) || "TEACHER".equals(role);
+    }
+
+    /** Admin manages any content; a teacher manages only non-system content they created. */
+    public static boolean canManage(Integer createdBy) {
+        if (isAdmin()) return true;
+        return isTeacher() && createdBy != null && Objects.equals(createdBy, getId());
+    }
+
+    public static void requireContentManager() {
+        if (!isTeacherOrAdmin()) {
+            throw ApiException.forbidden("需要教师或管理员权限");
+        }
+    }
+
+    public static void requireCanManage(Integer createdBy) {
+        requireContentManager();
+        if (!canManage(createdBy)) {
+            throw ApiException.forbidden("无权管理该内容");
+        }
     }
 }

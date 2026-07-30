@@ -1,13 +1,6 @@
 package com.oj.controller;
 
-import com.oj.common.ApiException;
-import com.oj.common.CurrentUser;
-import com.oj.dto.OfficeQuestionDetail;
-import com.oj.dto.OfficeQuestionListItem;
-import com.oj.dto.OfficeQuestionUpsertRequest;
-import com.oj.dto.OfficeStats;
-import com.oj.dto.OfficeSubmitRequest;
-import com.oj.dto.OfficeSubmitResult;
+import com.oj.dto.*;
 import com.oj.entity.OfficeQuestionEntity;
 import com.oj.service.OfficeService;
 import jakarta.validation.Valid;
@@ -37,45 +30,56 @@ public class OfficeController {
         page = Math.max(1, page);
         pageSize = Math.min(50, Math.max(1, pageSize));
         List<OfficeQuestionListItem> items = officeService.list(page, pageSize, appType, difficulty);
-        long total = officeService.count(appType, difficulty);
-        return Map.of("total", total, "page", page, "pageSize", pageSize, "questions", items);
+        return Map.of("total", officeService.count(appType, difficulty), "page", page,
+                "pageSize", pageSize, "questions", items);
+    }
+
+    @GetMapping("/questions/manage")
+    public Map<String, Object> listManage(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String appType,
+            @RequestParam(required = false) String difficulty) {
+        page = Math.max(1, page);
+        pageSize = Math.min(50, Math.max(1, pageSize));
+        List<OfficeQuestionListItem> items = officeService.listManage(page, pageSize, appType, difficulty);
+        return Map.of("total", officeService.countManage(appType, difficulty), "page", page,
+                "pageSize", pageSize, "questions", items);
     }
 
     @GetMapping("/questions/{id}")
     public Map<String, Object> getById(@PathVariable int id) {
-        OfficeQuestionDetail q = officeService.getById(id);
-        return Map.of("question", q);
+        return Map.of("question", officeService.getById(id));
     }
 
     @PostMapping("/questions")
-    public ResponseEntity<Map<String, Object>> create(@Valid @RequestBody OfficeQuestionUpsertRequest req) {
-        assertAdmin();
-        OfficeQuestionEntity e = officeService.create(req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("question", e));
+    public ResponseEntity<Map<String, Object>> create(@Valid @RequestBody OfficeQuestionUpsertRequest request) {
+        OfficeQuestionEntity entity = officeService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("question", entity));
     }
 
     @PutMapping("/questions/{id}")
-    public Map<String, Object> update(@PathVariable int id, @Valid @RequestBody OfficeQuestionUpsertRequest req) {
-        assertAdmin();
-        OfficeQuestionEntity e = officeService.update(id, req);
-        return Map.of("question", e);
+    public Map<String, Object> update(@PathVariable int id, @Valid @RequestBody OfficeQuestionUpsertRequest request) {
+        return Map.of("question", officeService.update(id, request));
+    }
+
+    @PutMapping("/questions/{id}/visibility")
+    public Map<String, Object> setVisibility(@PathVariable int id, @Valid @RequestBody VisibilityRequest request) {
+        return Map.of("question", officeService.setVisible(id, request.getVisible()));
+    }
+
+    @DeleteMapping("/questions/{id}")
+    public Map<String, Object> hardDelete(@PathVariable int id) {
+        return officeService.hardDelete(id);
     }
 
     @PostMapping("/submit")
-    public Map<String, Object> submit(@Valid @RequestBody OfficeSubmitRequest req) {
-        OfficeSubmitResult result = officeService.submit(req);
-        return Map.of("result", result);
+    public Map<String, Object> submit(@Valid @RequestBody OfficeSubmitRequest request) {
+        return Map.of("result", officeService.submit(request));
     }
 
     @GetMapping("/stats")
     public Map<String, Object> stats() {
-        OfficeStats stats = officeService.stats();
-        return Map.of("stats", stats);
-    }
-
-    private void assertAdmin() {
-        if (!CurrentUser.isAdmin()) {
-            throw ApiException.forbidden("需要管理员权限");
-        }
+        return Map.of("stats", officeService.stats());
     }
 }

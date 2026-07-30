@@ -6,6 +6,14 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
 public interface UserMapper extends BaseMapper<UserEntity> {
-    @Update("UPDATE \"User\" SET solved_count = solved_count + 1 WHERE id = #{userId}")
-    int incrementSolved(@Param("userId") int userId);
+    @Update("""
+            UPDATE "User" u
+            SET solved_count = (
+                SELECT COUNT(DISTINCT s.problem_id)
+                FROM "Submission" s
+                WHERE s.user_id = u.id AND s.verdict = 'AC'
+            )
+            WHERE u.id = #{userId}
+            """)
+    int recalculateSolved(@Param("userId") int userId);
 }

@@ -27,8 +27,16 @@ CREATE TABLE IF NOT EXISTS "Problem" (
     samples      TEXT NOT NULL DEFAULT '[]',
     test_cases   TEXT NOT NULL DEFAULT '[]',
     visible      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by   INT REFERENCES "User"(id) ON DELETE SET NULL,
     created_at   TIMESTAMP NOT NULL DEFAULT NOW()
 );
+ALTER TABLE "Problem" ADD COLUMN IF NOT EXISTS visible BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE "Problem" ADD COLUMN IF NOT EXISTS created_by INT REFERENCES "User"(id) ON DELETE SET NULL;
+UPDATE "Problem"
+SET created_by = NULLIF(to_jsonb("Problem") ->> 'creator_id', '')::INT
+WHERE created_by IS NULL AND to_jsonb("Problem") ? 'creator_id';
+ALTER TABLE "Problem" DROP COLUMN IF EXISTS creator_id;
+CREATE INDEX IF NOT EXISTS "Problem_created_by_idx" ON "Problem" (created_by);
 
 CREATE TABLE IF NOT EXISTS "Submission" (
     id         SERIAL PRIMARY KEY,
@@ -62,9 +70,13 @@ CREATE TABLE IF NOT EXISTS "OfficeQuestion" (
     answer        VARCHAR(60) NOT NULL,
     explanation   TEXT,
     visible       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by    INT REFERENCES "User"(id) ON DELETE SET NULL,
     created_at    TIMESTAMP NOT NULL DEFAULT NOW()
 );
+ALTER TABLE "OfficeQuestion" ADD COLUMN IF NOT EXISTS visible BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE "OfficeQuestion" ADD COLUMN IF NOT EXISTS created_by INT REFERENCES "User"(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS "OfficeQuestion_app_type_idx" ON "OfficeQuestion" (app_type);
+CREATE INDEX IF NOT EXISTS "OfficeQuestion_created_by_idx" ON "OfficeQuestion" (created_by);
 
 CREATE TABLE IF NOT EXISTS "OfficeRecord" (
     id          SERIAL PRIMARY KEY,
@@ -89,8 +101,16 @@ CREATE TABLE IF NOT EXISTS "OfficeExercise" (
     teacher_doc_path VARCHAR(255),               -- server path to the teacher's reference .docx
     teacher_doc_name VARCHAR(255),               -- original filename of the teacher's doc
     visible          BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by       INT REFERENCES "User"(id) ON DELETE SET NULL,
     created_at       TIMESTAMP NOT NULL DEFAULT NOW()
 );
+ALTER TABLE "OfficeExercise" ADD COLUMN IF NOT EXISTS visible BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE "OfficeExercise" ADD COLUMN IF NOT EXISTS created_by INT REFERENCES "User"(id) ON DELETE SET NULL;
+UPDATE "OfficeExercise"
+SET created_by = NULLIF(to_jsonb("OfficeExercise") ->> 'creator_id', '')::INT
+WHERE created_by IS NULL AND to_jsonb("OfficeExercise") ? 'creator_id';
+ALTER TABLE "OfficeExercise" DROP COLUMN IF EXISTS creator_id;
+CREATE INDEX IF NOT EXISTS "OfficeExercise_created_by_idx" ON "OfficeExercise" (created_by);
 
 CREATE TABLE IF NOT EXISTS "OfficeDocSubmission" (
     id               SERIAL PRIMARY KEY,

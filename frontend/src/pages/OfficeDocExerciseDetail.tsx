@@ -81,8 +81,10 @@ export default function OfficeDocExerciseDetail() {
       </Link>
 
       <h1 className="mb-2 text-2xl font-bold">{exercise.title}</h1>
-      <div className="mb-4 flex items-center gap-2 text-sm text-zinc-500">
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-zinc-500">
         <span>{exercise.teacherDocName ? "参考文档已上传" : "暂无参考文档"}</span>
+        <span>创建者：{exercise.createdBy == null ? "系统预置" : (exercise.creatorUsername ?? "未知")}</span>
+        <span>创建于 {new Date(exercise.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
       </div>
 
       {/* Requirements */}

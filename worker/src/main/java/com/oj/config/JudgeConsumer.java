@@ -1,9 +1,6 @@
 package com.oj.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.entity.SubmissionEntity;
-import com.oj.entity.UserEntity;
 import com.oj.judge.JudgeService;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
@@ -11,7 +8,6 @@ import com.rabbitmq.client.Channel;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,10 +15,9 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Map;
 
 @Component
 public class JudgeConsumer {
@@ -31,7 +26,6 @@ public class JudgeConsumer {
 
     private final SubmissionMapper submissionMapper;
     private final UserMapper userMapper;
-    private final ObjectMapper mapper = new ObjectMapper();
     private JudgeService judgeService;
 
     @Value("${oj.judge.workspace:/tmp/oj-judge}")
@@ -49,61 +43,71 @@ public class JudgeConsumer {
     }
 
     @RabbitListener(queues = "${oj.rabbitmq.queue:oj.judge.queue}")
-    public void onMessage(@Payload java.util.Map<String, Object> payload, @Header(AmqpHeaders.DELIVERY_TAG) long tag, Channel channel)
-            throws IOException {
-        int submissionId = ((Number) payload.get("submissionId")).intValue();
-        String language = (String) payload.get("language");
-        String code = (String) payload.get("code");
-        long timeLimitMs = ((Number) payload.get("timeLimitMs")).longValue();
-        long memoryLimitKb = ((Number) payload.get("memoryLimitKb")).longValue();
-        String testCasesJson = (String) payload.get("testCasesJson");
-
-        log.info("[worker] judging submission #{} lang={} timeLimit={}ms", submissionId, language, timeLimitMs);
-
+    public void onMessage(@Payload Map<String, Object> payload,
+                          @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag,
+                          Channel channel) throws IOException {
+        Integer submissionId = null;
         try {
-            JudgeService.JudgeResult result = judgeService.judge(language, code, timeLimitMs, memoryLimitKb, testCasesJson);
+            submissionId = ((Number) payload.get("submissionId")).intValue();
+            SubmissionEntity queuedSubmission = submissionMapper.selectById(submissionId);
+            if (queuedSubmission == null) {
+                log.info("[worker] submission #{} was deleted before judging; ignoring message", submissionId);
+                return;
+            }
 
-            SubmissionEntity s = new SubmissionEntity();
-            s.setId(submissionId);
-            s.setVerdict(result.verdict);
-            s.setPassed(result.passed);
-            s.setTotal(result.total);
-            s.setTimeMs((int) Math.min(result.timeMs, Integer.MAX_VALUE));
-            s.setMemoryKb((int) Math.min(result.memoryKb, Integer.MAX_VALUE));
-            s.setMessage(result.message);
-            submissionMapper.updateById(s);
+            String language = (String) payload.get("language");
+            String code = (String) payload.get("code");
+            long timeLimitMs = ((Number) payload.get("timeLimitMs")).longValue();
+            long memoryLimitKb = ((Number) payload.get("memoryLimitKb")).longValue();
+            String testCasesJson = (String) payload.get("testCasesJson");
+            log.info("[worker] judging submission #{} lang={} timeLimit={}ms", submissionId, language, timeLimitMs);
 
-            // On first AC for this user/problem, bump solvedCount.
+            JudgeService.JudgeResult result = judgeService.judge(
+                    language, code, timeLimitMs, memoryLimitKb, testCasesJson);
+
+            SubmissionEntity update = new SubmissionEntity();
+            update.setId(submissionId);
+            update.setVerdict(result.verdict);
+            update.setPassed(result.passed);
+            update.setTotal(result.total);
+            update.setTimeMs((int) Math.min(result.timeMs, Integer.MAX_VALUE));
+            update.setMemoryKb((int) Math.min(result.memoryKb, Integer.MAX_VALUE));
+            update.setMessage(result.message);
+            int updatedRows = submissionMapper.updateById(update);
+            if (updatedRows == 0) {
+                log.info("[worker] submission #{} was deleted during judging; result ignored", submissionId);
+                return;
+            }
+
             if ("AC".equals(result.verdict)) {
-                SubmissionEntity cur = submissionMapper.selectById(submissionId);
-                if (cur != null) {
-                    Long priorAc = submissionMapper.selectCount(new QueryWrapper<SubmissionEntity>()
-                            .eq("user_id", cur.getUserId())
-                            .eq("problem_id", cur.getProblemId())
-                            .eq("verdict", "AC")
-                            .ne("id", submissionId));
-                    if (priorAc == null || priorAc == 0) {
-                        userMapper.incrementSolved(cur.getUserId());
-                    }
+                SubmissionEntity current = submissionMapper.selectById(submissionId);
+                if (current != null) {
+                    userMapper.recalculateSolved(current.getUserId());
                 }
             }
 
             log.info("[worker] submission #{} verdict={} passed={}/{} timeMs={}",
                     submissionId, result.verdict, result.passed, result.total, result.timeMs);
-
-            // ack on success
-            channel.basicAck(tag, false);
-        } catch (Exception e) {
-            log.error("[worker] submission #{} judge error", submissionId, e);
-            try {
-                SubmissionEntity s = new SubmissionEntity();
-                s.setId(submissionId);
-                s.setVerdict("SE");
-                s.setMessage("评测器异常: " + e.getMessage());
-                submissionMapper.updateById(s);
-            } catch (Exception ignored) {}
-            // ack even on error to avoid poison-message loop (could add DLQ later)
-            channel.basicAck(tag, false);
+        } catch (Exception exception) {
+            log.error("[worker] submission #{} judge error", submissionId, exception);
+            if (submissionId != null) {
+                try {
+                    SubmissionEntity existing = submissionMapper.selectById(submissionId);
+                    if (existing != null) {
+                        SubmissionEntity update = new SubmissionEntity();
+                        update.setId(submissionId);
+                        update.setVerdict("SE");
+                        update.setMessage("评测器异常: " + exception.getMessage());
+                        submissionMapper.updateById(update);
+                    }
+                } catch (Exception updateException) {
+                    log.warn("[worker] failed to persist SE for submission #{}: {}",
+                            submissionId, updateException.getMessage());
+                }
+            }
+        } finally {
+            // Always acknowledge. Deleted or malformed submissions must not cause poison-message retries.
+            channel.basicAck(deliveryTag, false);
         }
     }
 }

@@ -191,6 +191,10 @@ export default function ProblemDetail() {
                   </span>
                 </span>
               </div>
+              <div className="text-xs text-zinc-500">
+                创建者：{problem.createdBy == null ? "系统预置" : (problem.creatorUsername ?? "未知")}
+                <span className="ml-3">创建于 {new Date(problem.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
+              </div>
               {(problem.tags || []).length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {(problem.tags || []).map((t) => (

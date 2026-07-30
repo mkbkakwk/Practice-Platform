@@ -1,10 +1,9 @@
 package com.oj.controller;
 
-import com.oj.common.ApiException;
-import com.oj.common.CurrentUser;
 import com.oj.dto.ProblemDetail;
 import com.oj.dto.ProblemListItem;
 import com.oj.dto.ProblemUpsertRequest;
+import com.oj.dto.VisibilityRequest;
 import com.oj.entity.ProblemEntity;
 import com.oj.service.ProblemService;
 import jakarta.validation.Valid;
@@ -33,8 +32,18 @@ public class ProblemController {
         page = Math.max(1, page);
         pageSize = Math.min(50, Math.max(1, pageSize));
         List<ProblemListItem> problems = problemService.list(page, pageSize, difficulty);
-        long total = problemService.count(difficulty);
-        return Map.of("total", total, "page", page, "pageSize", pageSize, "problems", problems);
+        return Map.of("total", problemService.count(difficulty), "page", page, "pageSize", pageSize, "problems", problems);
+    }
+
+    @GetMapping("/manage")
+    public Map<String, Object> listManage(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize,
+            @RequestParam(required = false) String difficulty) {
+        page = Math.max(1, page);
+        pageSize = Math.min(50, Math.max(1, pageSize));
+        List<ProblemListItem> problems = problemService.listManage(page, pageSize, difficulty);
+        return Map.of("total", problemService.countManage(difficulty), "page", page, "pageSize", pageSize, "problems", problems);
     }
 
     @GetMapping("/{slug}")
@@ -44,22 +53,23 @@ public class ProblemController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> create(@Valid @RequestBody ProblemUpsertRequest req) {
-        assertAdmin();
-        ProblemEntity e = problemService.create(req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("problem", e));
+    public ResponseEntity<Map<String, Object>> create(@Valid @RequestBody ProblemUpsertRequest request) {
+        ProblemEntity entity = problemService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("problem", entity));
     }
 
     @PutMapping("/{slug}")
-    public Map<String, Object> update(@PathVariable String slug, @Valid @RequestBody ProblemUpsertRequest req) {
-        assertAdmin();
-        ProblemEntity e = problemService.update(slug, req);
-        return Map.of("problem", e);
+    public Map<String, Object> update(@PathVariable String slug, @Valid @RequestBody ProblemUpsertRequest request) {
+        return Map.of("problem", problemService.update(slug, request));
     }
 
-    private void assertAdmin() {
-        if (!CurrentUser.isAdmin()) {
-            throw ApiException.forbidden("需要管理员权限");
-        }
+    @PutMapping("/{slug}/visibility")
+    public Map<String, Object> setVisibility(@PathVariable String slug, @Valid @RequestBody VisibilityRequest request) {
+        return Map.of("problem", problemService.setVisible(slug, request.getVisible()));
+    }
+
+    @DeleteMapping("/{slug}")
+    public Map<String, Object> hardDelete(@PathVariable String slug) {
+        return problemService.hardDelete(slug);
     }
 }

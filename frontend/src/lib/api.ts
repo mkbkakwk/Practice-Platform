@@ -85,6 +85,10 @@ export interface ProblemListItem {
   timeLimit: number;
   memoryLimit: number;
   visible?: boolean;
+  createdBy: number | null;
+  creatorUsername: string | null;
+  submissionCount: number;
+  createdAt: string;
 }
 
 export interface Sample {
@@ -104,8 +108,12 @@ export interface ProblemDetail {
   timeLimit: number;
   memoryLimit: number;
   samples: Sample[];
-  /** Only present when fetched by an admin (for editing). */
+  /** Only present for an authorized content manager (for editing). */
   testCases?: Sample[];
+  visible: boolean;
+  createdBy: number | null;
+  creatorUsername: string | null;
+  createdAt: string;
 }
 
 /** Payload for creating/updating a problem (admin only). */
@@ -160,6 +168,10 @@ export interface OfficeQuestionListItem {
   questionType: OfficeQuestionType;
   content: string;
   visible?: boolean;
+  createdBy: number | null;
+  creatorUsername: string | null;
+  submissionCount: number;
+  createdAt: string;
 }
 
 export interface OfficeQuestionDetail {
@@ -174,6 +186,9 @@ export interface OfficeQuestionDetail {
   answer?: string;
   explanation?: string;
   visible?: boolean;
+  createdBy: number | null;
+  creatorUsername: string | null;
+  createdAt: string;
 }
 
 export interface OfficeQuestionUpsert {
@@ -213,6 +228,9 @@ export interface DocExerciseListItem {
   difficulty: "EASY" | "MEDIUM" | "HARD";
   visible: boolean;
   hasTeacherDoc: boolean;
+  createdBy: number | null;
+  creatorUsername: string | null;
+  submissionCount: number;
   createdAt: string;
 }
 
@@ -224,6 +242,8 @@ export interface DocExerciseDetail {
   teacherDocPath: string | null;
   teacherDocName: string | null;
   visible: boolean;
+  createdBy: number | null;
+  creatorUsername: string | null;
   createdAt: string;
 }
 
@@ -310,6 +330,15 @@ export const api = {
       `/problems?${q.toString()}`,
     );
   },
+  listManageProblems: (params: { page?: number; pageSize?: number; difficulty?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    if (params.difficulty) q.set("difficulty", params.difficulty);
+    return request<{ total: number; page: number; pageSize: number; problems: ProblemListItem[] }>(
+      `/problems/manage?${q.toString()}`,
+    );
+  },
   getProblem: (slug: string) =>
     request<{ problem: ProblemDetail }>(`/problems/${slug}`),
   createProblem: (payload: ProblemUpsert) =>
@@ -322,6 +351,15 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  setProblemVisibility: (slug: string, visible: boolean) =>
+    request<{ problem: ProblemDetail }>(`/problems/${slug}/visibility`, {
+      method: "PUT",
+      body: JSON.stringify({ visible }),
+    }),
+  deleteProblem: (slug: string) => request<{ deleted: boolean; deletedSubmissions: number; affectedUsers: number }>(
+    `/problems/${slug}`,
+    { method: "DELETE" },
+  ),
   getLanguages: () =>
     request<{ languages: LanguageDef[] }>("/submissions/meta/languages"),
   submit: (problemId: number, language: string, code: string) =>
@@ -364,6 +402,16 @@ export const api = {
       `/office/questions?${q.toString()}`,
     );
   },
+  listManageOfficeQuestions: (params: { page?: number; pageSize?: number; appType?: string; difficulty?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    if (params.appType) q.set("appType", params.appType);
+    if (params.difficulty) q.set("difficulty", params.difficulty);
+    return request<{ total: number; page: number; pageSize: number; questions: OfficeQuestionListItem[] }>(
+      `/office/questions/manage?${q.toString()}`,
+    );
+  },
   getOfficeQuestion: (id: number) =>
     request<{ question: OfficeQuestionDetail }>(`/office/questions/${id}`),
   createOfficeQuestion: (payload: OfficeQuestionUpsert) =>
@@ -376,6 +424,15 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  setOfficeQuestionVisibility: (id: number, visible: boolean) =>
+    request<{ question: OfficeQuestionDetail }>(`/office/questions/${id}/visibility`, {
+      method: "PUT",
+      body: JSON.stringify({ visible }),
+    }),
+  deleteOfficeQuestion: (id: number) => request<{ deleted: boolean; deletedRecords: number; affectedUsers: number }>(
+    `/office/questions/${id}`,
+    { method: "DELETE" },
+  ),
   submitOfficeAnswer: (questionId: number, selected: string[]) =>
     request<{ result: OfficeSubmitResult }>(`/office/submit`, {
       method: "POST",
@@ -393,6 +450,14 @@ export const api = {
       `/office/docs/exercises?${q.toString()}`,
     );
   },
+  listManageDocExercises: (params: { page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; exercises: DocExerciseListItem[] }>(
+      `/office/docs/exercises/manage?${q.toString()}`,
+    );
+  },
   getDocExercise: (id: number) =>
     request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises/${id}`),
   createDocExercise: (payload: { title: string; difficulty: string; description: string; visible?: boolean }) =>
@@ -400,6 +465,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updateDocExercise: (id: number, payload: { title: string; difficulty: string; description: string; visible?: boolean }) =>
+    request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  setDocExerciseVisibility: (id: number, visible: boolean) =>
+    request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises/${id}/visibility`, {
+      method: "PUT",
+      body: JSON.stringify({ visible }),
+    }),
+  deleteDocExercise: (id: number) => request<{ deleted: boolean; deletedSubmissions: number; deletedFiles: number; affectedUsers: number }>(
+    `/office/docs/exercises/${id}`,
+    { method: "DELETE" },
+  ),
   uploadTeacherDoc: (exerciseId: number, file: File) => {
     const fd = new FormData();
     fd.append("file", file);
