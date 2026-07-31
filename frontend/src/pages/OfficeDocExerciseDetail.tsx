@@ -55,8 +55,8 @@ export default function OfficeDocExerciseDetail() {
     try {
       const { submission: sub } = await api.submitDocExercise(exerciseId, file);
       setSubmission(sub);
-    } catch (e: any) {
-      setError(e?.message || "上传失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "上传失败");
     } finally {
       setUploading(false);
     }

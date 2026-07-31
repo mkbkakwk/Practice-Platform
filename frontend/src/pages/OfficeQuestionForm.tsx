@@ -159,8 +159,8 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
         await api.updateOfficeQuestion(Number(id), payload);
       }
       navigate("/admin/office");
-    } catch (err: any) {
-      setError(err?.message || "保存失败");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "保存失败");
     } finally {
       setSaving(false);
     }
