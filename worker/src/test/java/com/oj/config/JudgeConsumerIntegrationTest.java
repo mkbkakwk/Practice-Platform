@@ -51,10 +51,10 @@ class JudgeConsumerIntegrationTest {
     }
 
     @Test
-    void deletedSubmissionIsAcknowledgedAndNotRecreated() throws Exception {
+    void deletedSubmissionWithEmptyTestCasesIsAcknowledgedAndNotRecreated() throws Exception {
         Channel channel = mock(Channel.class);
 
-        judgeConsumer.onMessage(payload(9999), 41L, channel);
+        judgeConsumer.onMessage(payload(9999, "[]"), 41L, channel);
 
         verify(channel).basicAck(41L, false);
         assertThat(countSubmissions()).isZero();
@@ -85,6 +85,27 @@ class JudgeConsumerIntegrationTest {
 
         verify(channel).basicAck(42L, false);
         assertThat(countSubmissions()).isZero();
+        assertThat(solvedCount(userId)).isZero();
+    }
+
+    @Test
+    void emptyTestCasesArePersistedAsSeAcknowledgedAndDoNotIncreaseSolvedCount() throws Exception {
+        int userId = insertUser("empty_cases");
+        int submissionId = insertSubmission(userId, 10, "PENDING");
+        Channel channel = mock(Channel.class);
+
+        judgeConsumer.onMessage(payload(submissionId, "[]"), 46L, channel);
+
+        verify(channel).basicAck(46L, false);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT verdict FROM \"Submission\" WHERE id=?",
+                String.class, submissionId)).isEqualTo("SE");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT message FROM \"Submission\" WHERE id=?",
+                String.class, submissionId)).isEqualTo("No test cases configured");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT total FROM \"Submission\" WHERE id=?",
+                Integer.class, submissionId)).isZero();
         assertThat(solvedCount(userId)).isZero();
     }
 
@@ -144,13 +165,17 @@ class JudgeConsumerIntegrationTest {
     }
 
     private Map<String, Object> payload(int submissionId) {
+        return payload(submissionId, testCases());
+    }
+
+    private Map<String, Object> payload(int submissionId, String testCasesJson) {
         return Map.of(
                 "submissionId", submissionId,
                 "language", "python",
                 "code", "print(1)",
                 "timeLimitMs", 1000,
                 "memoryLimitKb", 262144,
-                "testCasesJson", testCases()
+                "testCasesJson", testCasesJson
         );
     }
 

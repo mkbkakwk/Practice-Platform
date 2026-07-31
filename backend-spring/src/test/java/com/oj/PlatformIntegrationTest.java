@@ -2,6 +2,7 @@ package com.oj;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -98,6 +99,108 @@ class PlatformIntegrationTest {
         mockMvc.perform(get("/api/office/questions/manage").header("Authorization", bearer(user)))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/office/docs/exercises/manage").header("Authorization", bearer(user)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void problemCreationRejectsNullEmptyAndMalformedTestCases() throws Exception {
+        TestUser teacher = createUser("test_case_teacher", "TEACHER");
+
+        ObjectNode nullPayload = problemPayloadNode("null-test-cases");
+        nullPayload.putNull("testCases");
+        mockMvc.perform(post("/api/problems")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(nullPayload.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("测试点不能为空，至少需要 1 个测试点"));
+
+        ObjectNode emptyPayload = problemPayloadNode("empty-test-cases");
+        emptyPayload.putArray("testCases");
+        mockMvc.perform(post("/api/problems")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(emptyPayload.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("测试点不能为空，至少需要 1 个测试点"));
+
+        ObjectNode objectPayload = problemPayloadNode("object-test-cases");
+        objectPayload.putObject("testCases");
+        mockMvc.perform(post("/api/problems")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectPayload.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("测试点必须是 JSON 数组"));
+
+        ObjectNode malformedPayload = problemPayloadNode("malformed-test-cases");
+        malformedPayload.putArray("testCases").addObject().put("input", "");
+        mockMvc.perform(post("/api/problems")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(malformedPayload.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error")
+                        .value("第 1 个测试点必须只包含字符串 input 和 output"));
+
+        assertThat(count("SELECT COUNT(*) FROM \"Problem\"")).isZero();
+    }
+
+    @Test
+    void problemCreateAndUpdateAcceptNonEmptyCasesButUpdateRejectsEmptyCases() throws Exception {
+        TestUser teacher = createUser("valid_case_teacher", "TEACHER");
+        int problemId = createProblem(teacher, "valid-test-cases");
+
+        ObjectNode validUpdate = problemPayloadNode("valid-test-cases");
+        validUpdate.putArray("testCases")
+                .addObject()
+                .put("input", "2 3")
+                .put("output", "5");
+        mockMvc.perform(put("/api/problems/valid-test-cases")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validUpdate.toString()))
+                .andExpect(status().isOk());
+
+        String storedCases = jdbcTemplate.queryForObject(
+                "SELECT test_cases FROM \"Problem\" WHERE id=?", String.class, problemId);
+        assertThat(objectMapper.readTree(storedCases).path(0).path("output").asText()).isEqualTo("5");
+
+        ObjectNode emptyUpdate = problemPayloadNode("valid-test-cases");
+        emptyUpdate.putArray("testCases");
+        mockMvc.perform(put("/api/problems/valid-test-cases")
+                        .header("Authorization", bearer(teacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(emptyUpdate.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("测试点不能为空，至少需要 1 个测试点"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT test_cases FROM \"Problem\" WHERE id=?", String.class, problemId))
+                .isEqualTo(storedCases);
+    }
+
+    @Test
+    void problemTestCaseValidationDoesNotBypassManagementPermissions() throws Exception {
+        TestUser owner = createUser("case_owner", "TEACHER");
+        TestUser otherTeacher = createUser("case_other", "TEACHER");
+        TestUser user = createUser("case_user", "USER");
+        createProblem(owner, "permission-test-cases");
+
+        ObjectNode emptyCreate = problemPayloadNode("user-empty-test-cases");
+        emptyCreate.putArray("testCases");
+        mockMvc.perform(post("/api/problems")
+                        .header("Authorization", bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(emptyCreate.toString()))
+                .andExpect(status().isForbidden());
+
+        ObjectNode emptyUpdate = problemPayloadNode("permission-test-cases");
+        emptyUpdate.putArray("testCases");
+        mockMvc.perform(put("/api/problems/permission-test-cases")
+                        .header("Authorization", bearer(otherTeacher))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(emptyUpdate.toString()))
                 .andExpect(status().isForbidden());
     }
 
@@ -408,6 +511,10 @@ class PlatformIntegrationTest {
                   "visible":true
                 }
                 """.formatted(slug, slug);
+    }
+
+    private ObjectNode problemPayloadNode(String slug) throws Exception {
+        return (ObjectNode) objectMapper.readTree(problemPayload(slug));
     }
 
     private int createQuestion(TestUser user, String content) throws Exception {

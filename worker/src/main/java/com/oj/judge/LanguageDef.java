@@ -3,31 +3,36 @@ package com.oj.judge;
 import java.util.List;
 
 /**
- * Supported languages. Mirrors the backend's list. Each entry knows how to
- * produce the compile and run shell commands (run inside bash so ulimit works).
+ * Supported languages. Mirrors the backend's list. Commands are argument lists
+ * so paths and source code metadata are never interpreted as shell syntax.
  */
-public record LanguageDef(String id, String ext, String compileCmd, String runCmd, String template) {
+public record LanguageDef(
+        String id,
+        String ext,
+        List<String> compileCommand,
+        List<String> runCommand,
+        String template) {
 
     public static final List<LanguageDef> ALL = List.of(
         new LanguageDef("python", "py",
             null,
-            "python3 {src}",
+            List.of("python3", "{src}"),
             ""),
         new LanguageDef("javascript", "js",
             null,
-            "node {src}",
+            List.of("node", "{src}"),
             ""),
         new LanguageDef("cpp", "cpp",
-            "g++ -std=c++17 -O2 -o {out} {src}",
-            "{out}",
+            List.of("g++", "-std=c++17", "-O2", "-o", "{out}", "{src}"),
+            List.of("{out}"),
             ""),
         new LanguageDef("c", "c",
-            "gcc -std=c11 -O2 -o {out} {src} -lm",
-            "{out}",
+            List.of("gcc", "-std=c11", "-O2", "-o", "{out}", "{src}", "-lm"),
+            List.of("{out}"),
             ""),
         new LanguageDef("java", "java",
-            "javac {src}",
-            "cd {dir} && java Main",
+            List.of("javac", "{src}"),
+            List.of("java", "Main"),
             "")
     );
 
