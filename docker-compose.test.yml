@@ -1,0 +1,90 @@
+services:
+  test-db:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      POSTGRES_DB: oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oj_test -d oj_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  test-rabbitmq:
+    image: rabbitmq:3.13-alpine
+    restart: "no"
+    environment:
+      RABBITMQ_DEFAULT_USER: oj_test
+      RABBITMQ_DEFAULT_PASS: oj_test_password
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 30
+
+  backend-test:
+    build:
+      context: ./backend-spring
+      target: test
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+      RABBITMQ_HOST: test-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oj_test
+      RABBITMQ_PASSWORD: oj_test_password
+      OJ_RABBITMQ_EXCHANGE: oj.test.judge
+      OJ_RABBITMQ_ROUTING_KEY: oj.test.judge.submit
+      OJ_RABBITMQ_QUEUE: oj.test.judge.queue
+      JWT_SECRET: test-only-secret-not-for-production-0123456789
+      DOC_STORAGE: /tmp/practice-platform-test-docs
+    tmpfs:
+      - /tmp/practice-platform-test-docs
+    command: ["mvn", "-B", "test"]
+
+  worker-test:
+    build:
+      context: ./worker
+      target: test
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+      RABBITMQ_HOST: test-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oj_test
+      RABBITMQ_PASSWORD: oj_test_password
+      OJ_RABBITMQ_EXCHANGE: oj.test.judge
+      OJ_RABBITMQ_ROUTING_KEY: oj.test.judge.submit
+      OJ_RABBITMQ_QUEUE: oj.test.judge.queue
+      JUDGE_WORKSPACE: /tmp/practice-platform-test-judge
+      SPRING_RABBITMQ_LISTENER_SIMPLE_AUTO_STARTUP: "false"
+    tmpfs:
+      - /tmp/practice-platform-test-judge
+    command: ["mvn", "-B", "test"]
+
+  frontend-test:
+    build:
+      context: ./frontend
+      target: test
+    restart: "no"
+    command: ["sh", "-c", "npm run lint && npm run build"]

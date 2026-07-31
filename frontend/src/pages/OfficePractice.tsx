@@ -89,8 +89,8 @@ export default function OfficePractice() {
     try {
       const { result: r } = await api.submitOfficeAnswer(question.id, Array.from(selected));
       setResult(r);
-    } catch (e: any) {
-      setError(e?.message || "提交失败");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "提交失败");
     } finally {
       setSubmitting(false);
     }
