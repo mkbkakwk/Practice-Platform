@@ -32,7 +32,7 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 ### 为什么选择它
 
 - 🚀 **一键部署** —— 一条 `docker compose up -d --build` 启动数据库、消息队列、后端、评测 Worker、前端
-- 🛡️ **安全的评测沙箱** —— Java `ProcessBuilder` 起子进程 + ulimit 资源限制，超时强制清理进程组
+- 🛡️ **受限评测进程** —— Java `ProcessBuilder` 起子进程 + ulimit 资源限制，`exec` 对准真实程序并在超时后强制终止
 - 🌐 **多语言支持** —— Python 3、JavaScript (Node)、C、C++17、Java 开箱即用
 - 📝 **现代化编辑器** —— 内置 CodeMirror，语法高亮、多语言模板切换
 - ⚡ **异步评测 + 高并发** —— 提交经 RabbitMQ 入队，Worker 池水平扩展，轻松扛 300+ 并发
@@ -243,7 +243,7 @@ practice-platform/
 │       └── controller/         # REST 控制器
 │
 ├── worker/                     # Java 评测 Worker（独立服务）
-│   ├── Dockerfile              # 含 python3/g++/jdk 运行时
+│   ├── Dockerfile              # 含 Python/Node.js/GCC/G++/Temurin JDK 运行时
 │   └── src/main/java/com/oj/   # Runner(ProcessBuilder沙箱) / JudgeService
 │
 └── frontend/                   # React 前端
@@ -379,10 +379,25 @@ docker compose build
 
 该命令只构建镜像；不要用测试流程启动、替换或停止现有网站。
 
+### 判题语言与运行时
+
+前端语言下拉由后端元数据提供，后端允许列表与 Worker `LanguageDef` 保持以下五种语言一致：
+
+| 语言 | 提交 ID | Worker 命令 |
+| :--- | :--- | :--- |
+| Python 3 | `python` | `python3` |
+| JavaScript (Node.js 22 LTS) | `javascript` | `node` |
+| C | `c` | `gcc` |
+| C++17 | `cpp` | `g++ -std=c++17` |
+| Java 21 | `java` | `javac` / `java` |
+
+测试与正式 Worker 镜像共用固定的 Node.js `22.22.3` 运行时。编译和运行命令使用参数列表传递，工作目录由 `ProcessBuilder.directory(...)` 设置，bash 包装层只负责 ulimit 并通过 `exec "$@"` 切换到真实编译器或运行时。
+
+算法题创建和更新都会在后端拒绝缺失、空或结构错误的测试点；Worker 对历史空测试点返回 `SE`（`No test cases configured`），不会判为 AC 或增加 `solved_count`。
+
+
 ### 已知测试基线边界
 
-- Java 判题当前会把 `cd ... && java Main` 组合成 `exec cd ...`，退出码为 127；对应测试保留并明确禁用，等待后续判题阶段修复。
-- Worker 正式镜像当前未安装 Node.js，JavaScript 语言声明与运行时不一致；本阶段仅记录。
 - DOCX 比较当前只读取第一个非空 Run，表格支持边界按现状记录；本阶段不重写 Word 评分算法。
 - 前端构建仍提示主包体积较大和 Browserslist 数据陈旧，但不影响 lint 与构建成功。
 
