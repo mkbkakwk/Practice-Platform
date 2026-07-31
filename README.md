@@ -36,7 +36,7 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 - 🌐 **多语言支持** —— Python 3、JavaScript (Node)、C、C++17、Java 开箱即用
 - 📝 **现代化编辑器** —— 内置 CodeMirror，语法高亮、多语言模板切换
 - ⚡ **异步评测 + 高并发** —— 提交经 RabbitMQ 入队，Worker 池水平扩展，轻松扛 300+ 并发
-- 📦 **预置题库** —— 自带 6 道算法题 + 11 道 Office 选择题，部署后立即可用
+- 📦 **可选演示题库** —— 提供 6 道算法题 + 11 道 Office 选择题的手动开发 seed
 - 📄 **文档排版自动比对** —— Apache POI 解析 .docx 格式，逐段比对字体/字号/加粗/对齐/缩进/行距
 - 👨‍🏫 **三角色权限** —— 教师管理自建内容并复核自己的排版练习，管理员管理全部内容
 - 🔐 **统一学生注册** —— 公开注册统一为学生，管理员可在用户管理中调整角色，首位注册用户自动成为管理员
@@ -153,6 +153,8 @@ docker compose up -d --build
 ```
 
 首次构建约 5–10 分钟（需拉取镜像、编译 Java 应用、安装语言运行时）。之后启动只需几秒。
+Backend 启动时由 Flyway 创建或升级数据库结构；Worker 会等待 Backend
+健康检查通过后才开始消费判题消息。全新数据库默认不插入演示题目或账号。
 
 启动完成后访问 👉 **http://localhost:3000**
 
@@ -169,6 +171,41 @@ cp .env.example .env
 # 编辑 .env（端口、数据库密码、JWT 密钥、Worker 数量等）
 docker compose up -d --build
 ```
+
+### 数据库迁移与演示数据
+
+Flyway 是唯一的数据库结构来源，迁移文件位于
+`backend-spring/src/main/resources/db/migration`：
+
+1. `V1__baseline_schema.sql` 创建完整空库结构；
+2. `V2__data_integrity_constraints.sql` 检查孤立数据并增加外键和 `CHECK`；
+3. `V3__supporting_indexes.sql` 增加查询所需索引。
+
+全新空库执行 V1–V3。由旧 `schema.sql` 创建的非空数据库会在版本 1
+建立 baseline，然后仅执行 V2–V3；不会重复建表或自动插入演示数据。
+Backend 是唯一迁移执行方，Worker 明确禁用 SQL 初始化。
+
+可选演示题位于 `scripts/dev-seed.sql`，只允许在明确的开发数据库中
+手动加载：
+
+```bash
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/dev-seed.sql
+```
+
+不要在生产环境自动运行该脚本。测试数据由测试代码创建，不依赖演示 seed。
+
+正式升级已有数据库前必须：
+
+1. 进入维护模式或停止写入；
+2. 完整备份 PostgreSQL；
+3. 备份 Office 文档存储；
+4. 在数据库副本上完整演练 migration；
+5. 核对 9 类孤立数据预检查；
+6. 记录升级前 schema 和 Flyway 状态；
+7. 验证备份恢复流程后再安排正式迁移。
+
+迁移发现孤立记录或非法既有值时会失败并保留数据，不会静默删除。
+Flyway 不保证任意 PostgreSQL DDL 都能自动回滚，恢复仍依赖经过验证的备份。
 
 ### 常用命令
 
@@ -228,11 +265,12 @@ practice-platform/
 │
 ├── backend-spring/             # Spring Boot 后端
 │   ├── Dockerfile              # 多阶段构建（Maven 编译 + JRE 运行）
-│   ├── pom.xml                 # 含 Apache POI 依赖
+│   ├── pom.xml                 # 含 Apache POI 与 Flyway PostgreSQL 支持
 │   ├── src/main/resources/
 │   │   ├── application.yml     # 配置（含 multipart 文件上传）
-│   │   ├── schema.sql          # 建表（含 Office 题库/练习/提交表）
-│   │   └── data.sql            # 种子数据（6 算法题 + 11 Office 选择题）
+│   │   └── db/migration/       # 唯一权威数据库结构：V1 / V2 / V3
+│   ├── src/test/resources/
+│   │   └── legacy-schema.sql   # 仅用于验证旧 schema 无损升级
 │   └── src/main/java/com/oj/
 │       ├── config/             # WebConfig / RabbitConfig / AppProperties
 │       ├── common/             # JwtUtil / CurrentUser(三角色) / DocxParser / DocComparator
@@ -241,6 +279,8 @@ practice-platform/
 │       ├── dto/                # 请求/响应 DTO
 │       ├── service/            # Auth / Problem / Submission / Office / OfficeDoc
 │       └── controller/         # REST 控制器
+│
+├── scripts/dev-seed.sql        # 可选演示题；仅手动加载到开发数据库
 │
 ├── worker/                     # Java 评测 Worker（独立服务）
 │   ├── Dockerfile              # 含 Python/Node.js/GCC/G++/Temurin JDK 运行时
@@ -257,7 +297,10 @@ practice-platform/
 
 ---
 
-## 📦 预置题库
+## 📦 可选演示题库
+
+以下内容位于 `scripts/dev-seed.sql`，不会随生产或测试启动自动插入。
+全新数据库默认为空，由管理员或教师创建内容。
 
 ### 算法题（6 道）
 
@@ -357,7 +400,7 @@ practice-platform/
 | :--- | :--- |
 | `test-db` | PostgreSQL 16 测试库，数据目录使用 `tmpfs` |
 | `test-rabbitmq` | RabbitMQ 3.13 测试实例，不映射宿主机端口 |
-| `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL 回归测试 |
+| `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL/Flyway 回归测试 |
 | `worker-test` | 容器内执行判题核心与消息消费回归测试 |
 | `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run build` |
 
@@ -368,6 +411,9 @@ practice-platform/
 - 测试消息使用 `oj.test.*` 队列、交换机和路由键；
 - DOCX 固定资源位于 `backend-spring/src/test/resources/docx`，上传临时目录使用容器 `tmpfs`；
 - 测试服务不发布端口、不启动长期运行的后端/Worker/前端。
+- Flyway 测试在临时 PostgreSQL schema 中覆盖空库、重复迁移、旧结构升级、
+  历史数据保留、孤立数据阻断以及外键/`CHECK` 执行；
+- Worker 测试不维护独立核心 schema，使用 Backend 已迁移完成的同一隔离测试库。
 
 GitHub Actions 在推送到 `chore/ci-baseline`、`codex/feature-foresight`，以及目标为 `codex/feature-foresight` 或 `main` 的 Pull Request 上运行同一 Docker 测试入口。工作流只验证，不部署。
 
