@@ -2,6 +2,7 @@ package com.oj.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
@@ -233,7 +234,7 @@ public class ProblemService {
         entity.setMemoryLimit(request.getMemoryLimit());
         entity.setTags(request.getTags() == null ? new String[0] : request.getTags());
         entity.setSamples(serialize(request.getSamples()));
-        entity.setTestCases(serialize(request.getTestCases()));
+        entity.setTestCases(serializeTestCases(request.getTestCases()));
         entity.setVisible(request.getVisible() == null || request.getVisible());
     }
 
@@ -244,6 +245,40 @@ public class ProblemService {
         } catch (Exception ignored) {
             return List.of();
         }
+    }
+
+    private String serializeTestCases(Object value) {
+        if (value == null) {
+            throw ApiException.badRequest("测试点不能为空，至少需要 1 个测试点");
+        }
+
+        JsonNode node;
+        try {
+            node = objectMapper.valueToTree(value);
+        } catch (IllegalArgumentException exception) {
+            throw ApiException.badRequest("测试点格式无效");
+        }
+        if (!node.isArray()) {
+            throw ApiException.badRequest("测试点必须是 JSON 数组");
+        }
+        if (node.isEmpty()) {
+            throw ApiException.badRequest("测试点不能为空，至少需要 1 个测试点");
+        }
+        for (int index = 0; index < node.size(); index++) {
+            JsonNode testCase = node.get(index);
+            JsonNode input = testCase == null ? null : testCase.get("input");
+            JsonNode output = testCase == null ? null : testCase.get("output");
+            if (testCase == null || !testCase.isObject() || testCase.size() != 2
+                    || !isTextOrNull(input) || !isTextOrNull(output)) {
+                throw ApiException.badRequest(
+                        "第 " + (index + 1) + " 个测试点必须只包含字符串 input 和 output");
+            }
+        }
+        return node.toString();
+    }
+
+    private boolean isTextOrNull(JsonNode value) {
+        return value != null && (value.isTextual() || value.isNull());
     }
 
     private String serialize(Object value) {
