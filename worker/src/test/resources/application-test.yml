@@ -1,9 +1,7 @@
 spring:
   sql:
     init:
-      mode: always
-      schema-locations: classpath:worker-schema.sql
-      data-locations: classpath:worker-data.sql
+      mode: never
   rabbitmq:
     listener:
       simple:

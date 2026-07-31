@@ -1,3 +1,7 @@
+-- Optional development/demo content. This file is never run automatically.
+-- Load it explicitly only into a development database after Flyway migration.
+-- Production startup and automated tests do not depend on these rows.
+
 -- Seed 6 classic algorithm problems. Only inserts when the table is empty.
 -- Each statement is a single INSERT...SELECT guarded by NOT EXISTS so the
 -- whole batch is idempotent and safe to re-run.

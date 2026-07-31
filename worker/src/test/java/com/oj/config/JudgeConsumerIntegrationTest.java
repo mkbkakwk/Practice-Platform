@@ -42,7 +42,15 @@ class JudgeConsumerIntegrationTest {
         originalJudgeService = (JudgeService) ReflectionTestUtils.getField(
                 judgeConsumer, "judgeService");
         jdbcTemplate.update("DELETE FROM \"Submission\"");
+        jdbcTemplate.update("DELETE FROM \"Problem\"");
         jdbcTemplate.update("DELETE FROM \"User\"");
+        jdbcTemplate.update("""
+                INSERT INTO "Problem" (id, slug, title, description, test_cases)
+                VALUES (10, 'worker-problem-10', 'Worker problem 10', 'test',
+                        '[{"input":"","output":"1"}]'),
+                       (20, 'worker-problem-20', 'Worker problem 20', 'test',
+                        '[{"input":"","output":"1"}]')
+                """);
     }
 
     @AfterEach

@@ -1,4 +1,7 @@
--- Schema for Practice Platform. Idempotent — safe to run on every startup.
+-- Legacy pre-Flyway schema fixture.
+-- Used only by migration upgrade tests; it is not packaged as a production
+-- initialization script and must not be edited as the authoritative schema.
+-- Flyway migrations under src/main/resources/db/migration are authoritative.
 -- Table names keep the quoted CamelCase form so the entity @TableName values
 -- stay unchanged. Column names use snake_case so MyBatis-Plus'
 -- map-underscore-to-camel-case maps them to Java camelCase fields.
