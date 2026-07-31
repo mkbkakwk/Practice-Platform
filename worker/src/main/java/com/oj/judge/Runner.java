@@ -3,12 +3,14 @@ package com.oj.judge;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Executes a shell command in a sandboxed subprocess:
+ * Executes a command in a sandboxed subprocess:
  *  - runs via bash so we can apply ulimit (CPU time, virtual memory, file size)
- *  - separate process group so we can kill the whole tree on timeout
+ *  - exec replaces the bash wrapper with the target process before execution
  *  - captures stdout/stderr up to a cap, feeds stdin
  *
  * Mirrors the Node runner semantics. Designed to run inside the worker
@@ -18,8 +20,14 @@ public class Runner {
 
     private static final int STDOUT_CAP = 16 * 1024 * 1024;
 
-    public RunResult run(String command, String stdin, long timeLimitMs, long memoryLimitKb, Path cwd) {
-        // Build a bash wrapper that applies ulimits then execs the command.
+    public RunResult run(List<String> command, String stdin, long timeLimitMs, long memoryLimitKb, Path cwd) {
+        if (command == null || command.isEmpty()) {
+            return new RunResult(false, "", "No command configured", -1, false, false, 0);
+        }
+
+        // Pass the command as positional parameters instead of interpolating a shell string.
+        // This keeps exec attached to the real compiler/runtime and avoids treating shell
+        // built-ins (such as cd) or user-controlled paths as command text.
         StringBuilder prelude = new StringBuilder();
         if (memoryLimitKb > 0) {
             prelude.append("ulimit -v ").append(memoryLimitKb).append(" 2>/dev/null; ");
@@ -27,9 +35,16 @@ public class Runner {
         long cpuSec = timeLimitMs / 1000 + 1;
         prelude.append("ulimit -t ").append(cpuSec).append(" 2>/dev/null; ");
         prelude.append("ulimit -f 262144 2>/dev/null; "); // 256MB output cap
-        String wrapped = prelude + "exec " + command;
+        String wrapped = prelude + "exec \"$@\"";
 
-        ProcessBuilder pb = new ProcessBuilder("bash", "-c", wrapped);
+        List<String> processCommand = new ArrayList<>();
+        processCommand.add("bash");
+        processCommand.add("-c");
+        processCommand.add(wrapped);
+        processCommand.add("judge-runner"); // bash $0; the actual command starts at $1 / $@.
+        processCommand.addAll(command);
+
+        ProcessBuilder pb = new ProcessBuilder(processCommand);
         pb.directory(cwd.toFile());
         pb.redirectErrorStream(false);
 
