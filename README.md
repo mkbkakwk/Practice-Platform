@@ -179,7 +179,6 @@ docker compose logs -f worker         # 查看 Worker 评测日志
 docker compose ps                     # 查看容器状态
 docker compose up -d --scale worker=3 # 水平扩展到 3 个 Worker（扛并发）
 docker compose down                   # 停止并移除容器
-docker compose down -v                # 停止并清空数据（含数据库）
 ```
 
 ### 水平扩展（扛高并发）
@@ -342,33 +341,62 @@ practice-platform/
 
 ---
 
+## ✅ Docker 化测试与持续集成
+
+宿主机只需要 Git、Docker 和 Docker Compose；不要在宿主机直接运行 Maven、Java、Node.js、npm、PostgreSQL 或 RabbitMQ。
+
+统一测试入口：
+
+```bash
+./scripts/test-docker.sh
+```
+
+脚本默认使用独立 Compose 项目 `practice-platform-test`（CI 覆盖为 `practice-platform-ci`），依次构建测试镜像、启动临时 PostgreSQL/RabbitMQ、运行三个测试服务并汇总退出码；无论成功或失败都会执行 `down --remove-orphans` 清理测试容器和网络。
+
+| 服务 | 作用 |
+| :--- | :--- |
+| `test-db` | PostgreSQL 16 测试库，数据目录使用 `tmpfs` |
+| `test-rabbitmq` | RabbitMQ 3.13 测试实例，不映射宿主机端口 |
+| `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL 回归测试 |
+| `worker-test` | 容器内执行判题核心与消息消费回归测试 |
+| `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run build` |
+
+隔离保证：
+
+- 不读取真实 `.env`，测试账号、数据库名和 JWT 仅用于临时测试环境；
+- 不复用 `oj-db`、`oj-rabbitmq`、`oj-pgdata`、`oj-docs` 或当前部署网络；
+- 测试消息使用 `oj.test.*` 队列、交换机和路由键；
+- DOCX 固定资源位于 `backend-spring/src/test/resources/docx`，上传临时目录使用容器 `tmpfs`；
+- 测试服务不发布端口、不启动长期运行的后端/Worker/前端。
+
+GitHub Actions 在推送到 `chore/ci-baseline`、`codex/feature-foresight`，以及目标为 `codex/feature-foresight` 或 `main` 的 Pull Request 上运行同一 Docker 测试入口。工作流只验证，不部署。
+
+测试全部通过后可只构建正式镜像进行验证：
+
+```bash
+docker compose build
+```
+
+该命令只构建镜像；不要用测试流程启动、替换或停止现有网站。
+
+### 已知测试基线边界
+
+- Java 判题当前会把 `cd ... && java Main` 组合成 `exec cd ...`，退出码为 127；对应测试保留并明确禁用，等待后续判题阶段修复。
+- Worker 正式镜像当前未安装 Node.js，JavaScript 语言声明与运行时不一致；本阶段仅记录。
+- DOCX 比较当前只读取第一个非空 Run，表格支持边界按现状记录；本阶段不重写 Word 评分算法。
+- 前端构建仍提示主包体积较大和 Browserslist 数据陈旧，但不影响 lint 与构建成功。
+
+---
+
 ## 🛠️ 本地开发
 
-### 后端（Spring Boot）
+为保持开发、CI 与部署环境一致，本项目不要求在宿主机安装 Maven、Java、Node.js 或 npm。代码变更应先通过上述 Docker 测试入口；需要验证正式多阶段 Dockerfile 时只执行：
 
 ```bash
-# 仅起 db 和 rabbitmq
-docker compose up -d db rabbitmq
-
-# 后端本地运行
-cd backend-spring
-./mvnw spring-boot:run     # http://localhost:4000
+docker compose build
 ```
 
-### Worker
-
-```bash
-cd worker
-./mvnw spring-boot:run      # 消费 RabbitMQ 队列
-```
-
-### 前端
-
-```bash
-cd frontend
-npm install
-VITE_API_BASE=http://localhost:4000/api npm run dev   # http://localhost:5173
-```
+需要启动完整开发部署时参照“快速开始”中的 Compose 命令，并使用独立的开发配置；测试脚本不会操作该部署。
 
 ---
 
