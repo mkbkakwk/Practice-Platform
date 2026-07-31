@@ -1,8 +1,26 @@
-# ---------- build stage ----------
-FROM maven:3.9-eclipse-temurin-21 AS build
+# ---------- dependency cache ----------
+FROM maven:3.9-eclipse-temurin-21 AS dependencies
 WORKDIR /app
 COPY pom.xml ./
 RUN mvn -B -q dependency:go-offline
+
+# ---------- test stage ----------
+FROM dependencies AS test
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 \
+        gcc \
+        g++ \
+        bash \
+        coreutils \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /opt/java/openjdk/bin/java /usr/local/bin/java \
+    && ln -sf /opt/java/openjdk/bin/javac /usr/local/bin/javac
+COPY src ./src
+CMD ["mvn", "-B", "test"]
+
+# ---------- build stage ----------
+FROM dependencies AS build
 COPY src ./src
 RUN mvn -B -q package -DskipTests
 

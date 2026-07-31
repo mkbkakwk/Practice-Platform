@@ -1,8 +1,16 @@
-# ---------- build stage ----------
-FROM maven:3.9-eclipse-temurin-21 AS build
+# ---------- dependency cache ----------
+FROM maven:3.9-eclipse-temurin-21 AS dependencies
 WORKDIR /app
 COPY pom.xml ./
 RUN mvn -B -q dependency:go-offline
+
+# ---------- test stage ----------
+FROM dependencies AS test
+COPY src ./src
+CMD ["mvn", "-B", "test"]
+
+# ---------- build stage ----------
+FROM dependencies AS build
 COPY src ./src
 RUN mvn -B -q package -DskipTests
 
