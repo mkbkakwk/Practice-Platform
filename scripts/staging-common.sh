@@ -59,7 +59,7 @@ validate_staging_env() {
 port_is_available() {
   local port="$1"
   if command -v powershell.exe >/dev/null 2>&1; then
-    powershell.exe -NoProfile -NonInteractive -Command "\$listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue; if (\$listener) { exit 1 }" >/dev/null
+    powershell.exe -NoProfile -NonInteractive -Command "\$listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue; if (\$listener) { exit 1 }; exit 0" >/dev/null
     return $?
   fi
   if command -v ss >/dev/null 2>&1; then
