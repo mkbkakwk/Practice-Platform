@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const deployEnvironment = import.meta.env.VITE_DEPLOY_ENV as string | undefined;
+const buildSha = import.meta.env.VITE_BUILD_SHA as string | undefined;
+const showStagingBadge = deployEnvironment === "staging";
+
 export function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -31,6 +35,11 @@ export function Navbar() {
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white"><Code2 className="h-4 w-4" /></span>
           <span className="hidden sm:inline">Algorithm OJ</span>
         </Link>
+        {showStagingBadge && (
+          <span data-testid="staging-build" className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+            STAGING · {buildSha || "unknown"}
+          </span>
+        )}
         <nav className="flex items-center gap-1">
           {links.map((link) => {
             const Icon = link.icon;

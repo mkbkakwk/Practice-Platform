@@ -12,6 +12,10 @@ CMD ["sh", "-c", "npm run lint && npm run test && npm run build"]
 
 # ---------- build stage ----------
 FROM dependencies AS build
+ARG VITE_DEPLOY_ENV
+ARG VITE_BUILD_SHA
+ENV VITE_DEPLOY_ENV=$VITE_DEPLOY_ENV
+ENV VITE_BUILD_SHA=$VITE_BUILD_SHA
 COPY . .
 RUN npm run build
 
