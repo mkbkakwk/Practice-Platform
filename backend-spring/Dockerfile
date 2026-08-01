@@ -17,6 +17,9 @@ RUN mvn -B -q package -DskipTests
 # ---------- runtime stage ----------
 FROM eclipse-temurin:21-jre-jammy AS runtime
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/target/oj-backend.jar /app/app.jar
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 ENV SERVER_PORT=4000

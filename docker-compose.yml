@@ -65,6 +65,12 @@ services:
     # To debug directly, run: docker compose exec backend ...
     volumes:
       - oj-docs:/app/oj-docs
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:4000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
     networks:
       - oj-net
 
@@ -76,6 +82,8 @@ services:
       db:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      backend:
         condition: service_healthy
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-oj}
