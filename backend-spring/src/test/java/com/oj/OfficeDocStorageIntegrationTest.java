@@ -123,7 +123,8 @@ class OfficeDocStorageIntegrationTest {
 
         int outsideExercise = insertExercise(
                 "Outside path", teacher.id(), "/tmp/outside-practice-platform.docx", true);
-        mockMvc.perform(get("/api/office/docs/exercises/{id}/teacher-doc", outsideExercise))
+        mockMvc.perform(get("/api/office/docs/exercises/{id}/teacher-doc", outsideExercise)
+                        .header("Authorization", bearer(teacher)))
                 .andExpect(status().isNotFound());
 
         Path target = copyFixture("normal.docx", "symlink-target.docx");
@@ -131,7 +132,8 @@ class OfficeDocStorageIntegrationTest {
         Files.createSymbolicLink(link, target);
         int symlinkExercise = insertExercise(
                 "Symlink path", teacher.id(), link.toString(), true);
-        mockMvc.perform(get("/api/office/docs/exercises/{id}/teacher-doc", symlinkExercise))
+        mockMvc.perform(get("/api/office/docs/exercises/{id}/teacher-doc", symlinkExercise)
+                        .header("Authorization", bearer(teacher)))
                 .andExpect(status().isNotFound());
     }
 

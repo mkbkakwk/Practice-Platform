@@ -14,6 +14,11 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [sessionNotice] = useState(() => {
+    const notice = sessionStorage.getItem("oj_auth_notice") || "";
+    sessionStorage.removeItem("oj_auth_notice");
+    return notice;
+  });
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -62,6 +67,7 @@ export default function Login() {
                 required
               />
             </div>
+            {sessionNotice && <p className="text-sm text-amber-700">{sessionNotice}</p>}
             {err && <p className="text-sm text-red-600">{err}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

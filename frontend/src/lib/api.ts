@@ -5,6 +5,7 @@ import { log, TAGS } from "./logger";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || "/api";
 
 const TOKEN_KEY = "oj_token";
+export const AUTH_EXPIRED_EVENT = "oj:auth-expired";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -60,8 +61,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ? (data as { error: string }).error
       : null) || `请求失败 (${res.status})`;
     log.error(TAGS.api, `${method} ${path} -> ${res.status}`, msg, data);
-    if (res.status === 401) {
+    if (res.status === 401 && token) {
       setToken(null);
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail: { message: msg } }));
     }
     throw new ApiError(res.status, msg);
   }
@@ -69,6 +71,36 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+async function downloadFile(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  if (!res.ok) {
+    let message = `下载失败 (${res.status})`;
+    try {
+      const data = await res.json() as { error?: string };
+      if (data.error) message = data.error;
+    } catch {
+      // Keep the controlled fallback message for non-JSON responses.
+    }
+    if (res.status === 401 && token) {
+      setToken(null);
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail: { message } }));
+    }
+    throw new ApiError(res.status, message);
+  }
+
+  const objectUrl = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
 export interface PublicUser {
   id: number;
   username: string;
@@ -321,6 +353,11 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   me: () => request<{ user: PublicUser }>("/auth/me"),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ message: string }>("/auth/password", {
+      method: "PUT",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   listProblems: (params: { page?: number; pageSize?: number; difficulty?: string } = {}) => {
     const q = new URLSearchParams();
     if (params.page) q.set("page", String(params.page));
@@ -487,7 +524,8 @@ export const api = {
       body: fd,
     });
   },
-  teacherDocUrl: (exerciseId: number) => `${API_BASE}/office/docs/exercises/${exerciseId}/teacher-doc`,
+  downloadTeacherDoc: (exerciseId: number, filename: string) =>
+    downloadFile(`/office/docs/exercises/${exerciseId}/teacher-doc`, filename),
   submitDocExercise: (exerciseId: number, file: File) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -507,7 +545,8 @@ export const api = {
       `/office/docs/submissions?${q.toString()}`,
     );
   },
-  studentDocUrl: (submissionId: number) => `${API_BASE}/office/docs/submissions/${submissionId}/download`,
+  downloadStudentDoc: (submissionId: number, filename: string) =>
+    downloadFile(`/office/docs/submissions/${submissionId}/download`, filename),
   reviewDocSubmission: (id: number, score: number, comment: string) =>
     request<{ submission: DocSubmission }>(`/office/docs/submissions/${id}/review`, {
       method: "PUT",

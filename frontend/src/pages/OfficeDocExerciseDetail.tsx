@@ -95,11 +95,11 @@ export default function OfficeDocExerciseDetail() {
         </div>
         {exercise.teacherDocName && (
           <div className="mt-4 border-t pt-3">
-            <a href={api.teacherDocUrl(exerciseId)} target="_blank" rel="noreferrer">
+            <span onClick={() => void api.downloadTeacherDoc(exerciseId, exercise.teacherDocName!)}>
               <Button variant="outline" size="sm">
                 <Download className="mr-1 h-4 w-4" /> 下载老师参考文档
               </Button>
-            </a>
+            </span>
           </div>
         )}
       </Card>
@@ -200,11 +200,11 @@ export default function OfficeDocExerciseDetail() {
 
           {/* Download student doc */}
           <div className="mt-4 border-t pt-3">
-            <a href={api.studentDocUrl(submission.id)} target="_blank" rel="noreferrer">
+            <span onClick={() => void api.downloadStudentDoc(submission.id, submission.studentDocName)}>
               <Button variant="outline" size="sm">
                 <Download className="mr-1 h-4 w-4" /> 下载我上传的文档
               </Button>
-            </a>
+            </span>
           </div>
         </Card>
       )}
