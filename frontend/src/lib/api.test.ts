@@ -17,6 +17,16 @@ function observeExpired() {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -73,6 +83,31 @@ describe("authenticated API requests", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(expired.listener).toHaveBeenCalledTimes(1);
     expect(getToken()).toBeNull();
+    expired.stop();
+  });
+
+  it("does not clear a newly issued token when an older request returns 401", async () => {
+    setToken("token-old");
+    const expired = observeExpired();
+    const deferred = createDeferred<Response>();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockReturnValueOnce(deferred.promise);
+
+    const pendingRequest = api.listUsers();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const options = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(options.headers).toMatchObject({
+      Authorization: "Bearer token-old",
+    });
+
+    setToken("token-new");
+    deferred.resolve(jsonResponse(401, { error: "Session expired" }));
+
+    await expect(pendingRequest).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getToken()).toBe("token-new");
+    expect(expired.listener).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe("");
+    expect(sessionStorage.getItem("oj_auth_notice")).toBeNull();
     expired.stop();
   });
 
