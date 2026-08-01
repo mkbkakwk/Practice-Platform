@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleExpired = (event: Event) => {
       const message = (event as CustomEvent<{ message?: string }>).detail?.message
         || "登录状态已失效，请重新登录";
+      setToken(null);
       setUser(null);
       setLoading(false);
       sessionStorage.setItem("oj_auth_notice", message);

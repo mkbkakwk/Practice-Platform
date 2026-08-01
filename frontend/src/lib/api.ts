@@ -16,6 +16,12 @@ export function setToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+function invalidateSession(requestToken: string | null, message: string) {
+  if (!requestToken || getToken() !== requestToken) return;
+  setToken(null);
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail: { message } }));
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -24,8 +30,12 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  withAuthentication = true,
+): Promise<T> {
+  const token = withAuthentication ? getToken() : null;
   // For FormData (file uploads) we must NOT set Content-Type — the browser sets
   // the correct multipart/form-data; charset boundary automatically. Setting it
   // manually to application/json breaks multipart parsing on the server.
@@ -61,10 +71,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ? (data as { error: string }).error
       : null) || `请求失败 (${res.status})`;
     log.error(TAGS.api, `${method} ${path} -> ${res.status}`, msg, data);
-    if (res.status === 401 && token) {
-      setToken(null);
-      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail: { message: msg } }));
-    }
+    if (res.status === 401) invalidateSession(token, msg);
     throw new ApiError(res.status, msg);
   }
   log.debug(TAGS.api, `${method} ${path} -> ${res.status} OK`);
@@ -85,10 +92,7 @@ async function downloadFile(path: string, filename: string): Promise<void> {
     } catch {
       // Keep the controlled fallback message for non-JSON responses.
     }
-    if (res.status === 401 && token) {
-      setToken(null);
-      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT, { detail: { message } }));
-    }
+    if (res.status === 401) invalidateSession(token, message);
     throw new ApiError(res.status, message);
   }
 
@@ -346,12 +350,12 @@ export const api = {
     request<{ token: string; user: PublicUser }>("/auth/register", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    }),
+    }, false),
   login: (username: string, password: string) =>
     request<{ token: string; user: PublicUser }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    }),
+    }, false),
   me: () => request<{ user: PublicUser }>("/auth/me"),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ message: string }>("/auth/password", {

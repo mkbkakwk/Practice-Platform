@@ -410,7 +410,7 @@ practice-platform/
 | `test-rabbitmq` | RabbitMQ 3.13 测试实例，不映射宿主机端口 |
 | `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL/Flyway 回归测试 |
 | `worker-test` | 容器内执行判题核心与消息消费回归测试 |
-| `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run build` |
+| `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run test`、`npm run build` |
 
 隔离保证：
 
@@ -424,6 +424,8 @@ practice-platform/
 - Worker 测试不维护独立核心 schema，使用 Backend 已迁移完成的同一隔离测试库。
 
 GitHub Actions 在推送到 `chore/ci-baseline`、`codex/feature-foresight`，以及目标为 `codex/feature-foresight` 或 `main` 的 Pull Request 上运行同一 Docker 测试入口。工作流只验证，不部署。
+
+前端认证回归测试使用 Vitest、React Testing Library 和 jsdom，在容器内模拟 API、路由、`localStorage` 和文件下载。当前覆盖登录状态恢复、登录成功、受保护请求 401、登录接口 401、并发 401 去重、403 保持登录、携带 Authorization 的文档下载，以及 Token/`tokenVersion` 不进入可见 DOM。该范围不依赖真实浏览器或当前部署，因此没有引入 Playwright。
 
 测试全部通过后可只构建正式镜像进行验证：
 

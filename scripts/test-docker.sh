@@ -51,7 +51,7 @@ if [[ $build_rc -eq 0 && $startup_rc -eq 0 ]]; then
   worker_rc=0
   "${compose[@]}" run --rm worker-test || worker_rc=$?
 
-  echo "==> Running frontend lint and build"
+  echo "==> Running frontend lint, authentication tests, and build"
   frontend_rc=0
   "${compose[@]}" run --rm frontend-test || frontend_rc=$?
 fi

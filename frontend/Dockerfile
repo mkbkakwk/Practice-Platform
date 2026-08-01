@@ -8,7 +8,7 @@ RUN npm ci
 # ---------- test stage ----------
 FROM dependencies AS test
 COPY . .
-CMD ["sh", "-c", "npm run lint && npm run build"]
+CMD ["sh", "-c", "npm run lint && npm run test && npm run build"]
 
 # ---------- build stage ----------
 FROM dependencies AS build

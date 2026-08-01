@@ -87,4 +87,4 @@ services:
       context: ./frontend
       target: test
     restart: "no"
-    command: ["sh", "-c", "npm run lint && npm run build"]
+    command: ["sh", "-c", "npm run lint && npm run test && npm run build"]
