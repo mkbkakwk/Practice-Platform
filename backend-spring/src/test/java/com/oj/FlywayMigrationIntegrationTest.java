@@ -69,7 +69,11 @@ class FlywayMigrationIntegrationTest {
                 """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(7);
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(3);
+                Integer.class)).isEqualTo(4);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT column_default FROM information_schema.columns
+                WHERE table_schema=? AND table_name='User' AND column_name='token_version'
+                """, String.class, database.schema())).isEqualTo("0");
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM \"Problem\"", Integer.class)).isZero();
         assertThat(database.jdbc().queryForObject(
@@ -148,10 +152,13 @@ class FlywayMigrationIntegrationTest {
                 """, String.class)).isEqualTo("BASELINE");
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(3);
+                Integer.class)).isEqualTo(4);
         assertThat(jdbc.queryForObject(
                 "SELECT solved_count FROM \"User\" WHERE id=?",
                 Integer.class, userId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT token_version FROM \"User\" WHERE id=?",
+                Integer.class, userId)).isZero();
         assertThat(jdbc.queryForObject(
                 "SELECT created_by FROM \"Problem\" WHERE id=?",
                 Integer.class, problemId)).isEqualTo(userId);
@@ -262,6 +269,8 @@ class FlywayMigrationIntegrationTest {
                 "UPDATE \"User\" SET role='SUPERUSER' WHERE id=?", userId);
         assertDatabaseRejects(jdbc,
                 "UPDATE \"User\" SET solved_count=-1 WHERE id=?", userId);
+        assertDatabaseRejects(jdbc,
+                "UPDATE \"User\" SET token_version=-1 WHERE id=?", userId);
         assertDatabaseRejects(jdbc,
                 "UPDATE \"Problem\" SET time_limit=0 WHERE id=?", problemId);
         assertDatabaseRejects(jdbc,
