@@ -3,12 +3,12 @@ package com.oj.controller;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
 import com.oj.dto.AuthResponse;
+import com.oj.dto.ChangePasswordRequest;
 import com.oj.dto.LoginRequest;
 import com.oj.dto.RegisterRequest;
 import com.oj.dto.UserDto;
 import com.oj.service.AuthService;
 import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -39,5 +39,13 @@ public class AuthController {
         if (id == null) throw ApiException.unauthorized("未登录");
         UserDto user = authService.getCurrentUser(id);
         return Map.of("user", user);
+    }
+
+    @PutMapping("/password")
+    public Map<String, String> changePassword(@Valid @RequestBody ChangePasswordRequest req) {
+        Integer id = CurrentUser.getId();
+        if (id == null) throw ApiException.unauthorized("未登录");
+        authService.changePassword(id, req);
+        return Map.of("message", "密码已修改，请重新登录");
     }
 }
