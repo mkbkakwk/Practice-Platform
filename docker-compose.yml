@@ -58,7 +58,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production-must-be-at-least-32-chars}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
-      PROMOTE_FIRST_ADMIN: ${PROMOTE_FIRST_ADMIN:-true}
+      PROMOTE_FIRST_ADMIN: ${PROMOTE_FIRST_ADMIN:-false}
       DOC_STORAGE: /app/oj-docs
     # Backend is accessed via the Docker network by the frontend nginx proxy;
     # no host port mapping needed (avoids Windows reserved-port conflicts).

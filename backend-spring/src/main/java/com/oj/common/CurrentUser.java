@@ -1,33 +1,34 @@
 package com.oj.common;
 
-import io.jsonwebtoken.Claims;
-
 import java.util.Objects;
 
 /**
  * Holds the authenticated user for the duration of a request.
- * Set by JwtInterceptor, read by controllers/services.
+ * Set by JwtInterceptor from the current database row, then read by
+ * controllers/services. JWT claims are never the permission source.
  */
 public class CurrentUser {
-    private static final ThreadLocal<Claims> HOLDER = new ThreadLocal<>();
+    private static final ThreadLocal<AuthenticatedUser> HOLDER = new ThreadLocal<>();
 
-    public static void set(Claims claims) { HOLDER.set(claims); }
-    public static Claims get() { return HOLDER.get(); }
+    public static void set(Integer id, String username, String role) {
+        HOLDER.set(new AuthenticatedUser(id, username, role));
+    }
+    public static AuthenticatedUser get() { return HOLDER.get(); }
     public static void clear() { HOLDER.remove(); }
 
     public static Integer getId() {
-        Claims c = HOLDER.get();
-        return c == null ? null : Integer.valueOf(c.getSubject());
+        AuthenticatedUser user = HOLDER.get();
+        return user == null ? null : user.id();
     }
 
     public static String getUsername() {
-        Claims c = HOLDER.get();
-        return c == null ? null : c.get("username", String.class);
+        AuthenticatedUser user = HOLDER.get();
+        return user == null ? null : user.username();
     }
 
     public static String getRole() {
-        Claims c = HOLDER.get();
-        return c == null ? null : c.get("role", String.class);
+        AuthenticatedUser user = HOLDER.get();
+        return user == null ? null : user.role();
     }
 
     public static boolean isAdmin() {
@@ -61,4 +62,6 @@ public class CurrentUser {
             throw ApiException.forbidden("无权管理该内容");
         }
     }
+
+    public record AuthenticatedUser(Integer id, String username, String role) {}
 }

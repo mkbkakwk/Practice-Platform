@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, getToken, setToken, type PublicUser } from "./api";
+import { api, AUTH_EXPIRED_EVENT, getToken, setToken, type PublicUser } from "./api";
 
 interface AuthState {
   user: PublicUser | null;
@@ -35,7 +35,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    const handleExpired = (event: Event) => {
+      const message = (event as CustomEvent<{ message?: string }>).detail?.message
+        || "登录状态已失效，请重新登录";
+      setUser(null);
+      setLoading(false);
+      sessionStorage.setItem("oj_auth_notice", message);
+      if (window.location.hash !== "#/login") {
+        window.location.hash = "#/login";
+      }
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired);
     refresh();
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired);
   }, []);
 
   const login = async (username: string, password: string) => {

@@ -46,7 +46,7 @@ oj:
     expires-in: ${JWT_EXPIRES_IN:7d}
   cors:
     origin: ${CORS_ORIGIN:*}
-  promote-first-admin: ${PROMOTE_FIRST_ADMIN:true}
+  promote-first-admin: ${PROMOTE_FIRST_ADMIN:false}
   rabbitmq:
     exchange: oj.judge
     routing-key: oj.judge.submit

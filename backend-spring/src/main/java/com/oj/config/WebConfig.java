@@ -19,15 +19,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // All /api/** require auth EXCEPT the public ones listed.
         registry.addInterceptor(jwtInterceptor)
-                .addPathPatterns("/api/**")
-                .excludePathPatterns(
-                        "/api/auth/login",
-                        "/api/auth/register",
-                        "/api/submissions/meta/languages",
-                        "/api/health"
-                );
+                .addPathPatterns("/api/**");
     }
 
     @Override

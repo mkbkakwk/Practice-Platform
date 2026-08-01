@@ -85,13 +85,13 @@ export default function OfficeDocReview() {
         <div className="mt-3 flex items-center gap-3">
           <span className="text-sm text-zinc-500">自动匹配率：</span>
           <span className={cn("font-bold", matchPercent === 100 ? "text-green-600" : "text-orange-600")}>{matchPercent}%</span>
-          <a href={api.studentDocUrl(submission.id)} target="_blank" rel="noreferrer">
+          <span onClick={() => void api.downloadStudentDoc(submission.id, submission.studentDocName)}>
             <Button variant="outline" size="sm"><Download className="mr-1 h-4 w-4" /> 下载学生文档</Button>
-          </a>
+          </span>
           {exercise && exercise.teacherDocName && (
-            <a href={api.teacherDocUrl(exercise.id)} target="_blank" rel="noreferrer">
+            <span onClick={() => void api.downloadTeacherDoc(exercise.id, exercise.teacherDocName!)}>
               <Button variant="outline" size="sm"><Download className="mr-1 h-4 w-4" /> 下载参考文档</Button>
-            </a>
+            </span>
           )}
         </div>
       </Card>

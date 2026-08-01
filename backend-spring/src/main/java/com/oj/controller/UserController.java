@@ -8,12 +8,12 @@ import com.oj.dto.SubmissionView;
 import com.oj.entity.UserEntity;
 import com.oj.mapper.UserMapper;
 import com.oj.service.SubmissionService;
+import com.oj.service.UserService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
@@ -22,10 +22,13 @@ public class UserController {
 
     private final UserMapper userMapper;
     private final SubmissionService submissionService;
+    private final UserService userService;
 
-    public UserController(UserMapper userMapper, SubmissionService submissionService) {
+    public UserController(UserMapper userMapper, SubmissionService submissionService,
+                          UserService userService) {
         this.userMapper = userMapper;
         this.submissionService = submissionService;
+        this.userService = userService;
     }
 
     @GetMapping("/leaderboard")
@@ -59,11 +62,6 @@ public class UserController {
         return Map.of("total", total, "page", page, "pageSize", pageSize, "submissions", subs);
     }
 
-    // ---- admin user management ----
-
-    private static final Set<String> VALID_ROLES = Set.of("USER", "TEACHER", "ADMIN");
-
-    /** List all users (admin only). */
     @GetMapping
     public Map<String, Object> listUsers(
             @RequestParam(defaultValue = "1") int page,
@@ -85,25 +83,22 @@ public class UserController {
         return Map.of("total", p.getTotal(), "page", page, "pageSize", pageSize, "users", items);
     }
 
-    /** Update a user's role (admin only). */
     @PutMapping("/{id}/role")
     public Map<String, Object> updateRole(@PathVariable int id, @RequestBody Map<String, String> body) {
-        assertAdmin();
-        String newRole = body.get("role");
-        if (newRole == null || !VALID_ROLES.contains(newRole.toUpperCase())) {
-            throw ApiException.badRequest("角色必须是 USER / TEACHER / ADMIN");
-        }
-        UserEntity u = userMapper.selectById(id);
-        if (u == null) throw ApiException.notFound("用户不存在");
-        u.setRole(newRole.toUpperCase());
-        userMapper.updateById(u);
-        return Map.of("user", Map.of(
-                "id", u.getId(),
-                "username", u.getUsername(),
-                "role", u.getRole(),
-                "solvedCount", u.getSolvedCount(),
-                "createdAt", u.getCreatedAt()
-        ));
+        UserEntity user = userService.updateRole(id, body.get("role"));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", user.getId());
+        result.put("username", user.getUsername());
+        result.put("role", user.getRole());
+        result.put("solvedCount", user.getSolvedCount());
+        result.put("createdAt", user.getCreatedAt());
+        return Map.of("user", result);
+    }
+
+    @DeleteMapping("/{id}")
+    public Map<String, String> deleteUser(@PathVariable int id) {
+        userService.deleteUser(id);
+        return Map.of("message", "用户已删除");
     }
 
     private void assertAdmin() {
