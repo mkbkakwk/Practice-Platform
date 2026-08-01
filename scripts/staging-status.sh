@@ -13,7 +13,7 @@ echo
 echo
 "${compose[@]}" images
 
-if "${compose[@]}" exec -T frontend wget -q -O /dev/null http://localhost/api/health 2>/dev/null; then
+if "${compose[@]}" exec -T frontend wget -q -O /dev/null http://127.0.0.1/api/health 2>/dev/null; then
   echo
   echo "Frontend-to-backend health: OK"
 else

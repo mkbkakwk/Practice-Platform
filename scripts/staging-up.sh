@@ -19,7 +19,7 @@ echo "Building staging images for Git $STAGING_GIT_SHA"
 echo "Starting isolated staging project $project_name"
 "${compose[@]}" up -d --wait --wait-timeout 240
 
-"${compose[@]}" exec -T frontend wget -q -O /dev/null http://localhost/api/health
+"${compose[@]}" exec -T frontend wget -q -O /dev/null http://127.0.0.1/api/health
 
 echo "Staging is healthy:"
 echo "  Frontend: http://localhost:$frontend_port"
