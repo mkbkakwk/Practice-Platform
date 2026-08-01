@@ -392,6 +392,63 @@ practice-platform/
 
 ---
 
+## Staging 测试网站
+
+Staging 使用独立 Compose 项目 practice-platform-staging，并固定使用独立的 PostgreSQL、RabbitMQ、DOCX 卷和网络。它不会读取正式 .env、oj_oj-pgdata、oj_oj-docs 或 oj_oj-net。
+
+首次在本机创建只属于 Staging 的随机凭据：
+
+~~~bash
+./scripts/staging-init-env.sh
+~~~
+
+该命令只创建被 Git 忽略的 .env.staging，不会输出密码或 JWT 密钥。占位示例位于 .env.staging.example。首位管理员自动提升始终默认为 false；Staging 公共注册只会创建 USER。
+
+构建、启动并等待健康检查：
+
+~~~bash
+./scripts/staging-up.sh
+~~~
+
+默认访问地址：
+
+- 页面：http://localhost:18080
+- 健康检查：http://localhost:18080/api/health
+- Backend、PostgreSQL 和 RabbitMQ 不暴露宿主机端口
+- Navbar 中的 STAGING 标记会显示当前构建 Git SHA
+
+运行独立 HTTP 冒烟测试：
+
+~~~bash
+./scripts/staging-smoke.sh
+~~~
+
+该测试只在 Staging 网络内创建临时测试用户，验证首页、健康检查、公开题目、匿名 401、注册、登录、鉴权、修改密码、旧 Token 失效和新密码登录；不会访问正式网站或正式数据。
+
+查看状态和日志：
+
+~~~bash
+./scripts/staging-status.sh
+./scripts/staging-logs.sh
+./scripts/staging-logs.sh backend worker
+~~~
+
+安全停止并保留 Staging 数据：
+
+~~~bash
+./scripts/staging-down.sh
+~~~
+
+只有明确需要重建全新 Staging 数据时才使用以下命令；脚本会校验只删除名称包含 staging 的三个 Staging 卷：
+
+~~~bash
+./scripts/staging-down.sh --volumes
+~~~
+
+不要对默认或正式 Compose 项目执行 down，也不要将 .env.staging 提交到仓库。
+
+---
+
 ## ✅ Docker 化测试与持续集成
 
 宿主机只需要 Git、Docker 和 Docker Compose；不要在宿主机直接运行 Maven、Java、Node.js、npm、PostgreSQL 或 RabbitMQ。
