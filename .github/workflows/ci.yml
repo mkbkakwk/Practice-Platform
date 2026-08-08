@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - chore/ci-baseline
+      - chore/release-hardening
       - codex/feature-foresight
   pull_request:
     branches:

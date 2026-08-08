@@ -33,16 +33,23 @@ startup_rc=0
 backend_rc=125
 worker_rc=125
 frontend_rc=125
+release_config_rc=125
 
 echo "==> Building isolated test images"
 "${compose[@]}" build || build_rc=$?
 
 if [[ $build_rc -eq 0 ]]; then
+  echo "==> Validating immutable release configuration"
+  release_config_rc=0
+  "${compose[@]}" run --rm --no-deps release-config-test || release_config_rc=$?
+fi
+
+if [[ $build_rc -eq 0 && $release_config_rc -eq 0 ]]; then
   echo "==> Starting isolated PostgreSQL and RabbitMQ"
   "${compose[@]}" up -d --wait test-db test-rabbitmq || startup_rc=$?
 fi
 
-if [[ $build_rc -eq 0 && $startup_rc -eq 0 ]]; then
+if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 ]]; then
   echo "==> Running backend tests"
   backend_rc=0
   "${compose[@]}" run --rm backend-test || backend_rc=$?
@@ -63,8 +70,9 @@ printf '  dependencies:  %s\n' "$startup_rc"
 printf '  backend-test:  %s\n' "$backend_rc"
 printf '  worker-test:   %s\n' "$worker_rc"
 printf '  frontend-test: %s\n' "$frontend_rc"
+printf '  release-config: %s\n' "$release_config_rc"
 
-for rc in "$build_rc" "$startup_rc" "$backend_rc" "$worker_rc" "$frontend_rc"; do
+for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" "$frontend_rc"; do
   if [[ $rc -ne 0 ]]; then
     exit "$rc"
   fi
