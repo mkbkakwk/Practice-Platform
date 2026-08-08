@@ -18,6 +18,9 @@ target/
 .env.local
 .env.*.local
 !.env.example
+release.env
+deploy/releases/*.env
+!deploy/releases/*.env.example
 
 # ── Editor / IDE ─────────────────────────────────────────
 .vscode/

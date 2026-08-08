@@ -88,3 +88,11 @@ services:
       target: test
     restart: "no"
     command: ["sh", "-c", "npm run lint && npm run test && npm run build"]
+
+  release-config-test:
+    build:
+      context: .
+      dockerfile: release-tests/Dockerfile
+    restart: "no"
+    working_dir: /workspace
+    command: ["bash", "scripts/test-release-config.sh"]

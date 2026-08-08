@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - chore/ci-baseline
+      - chore/release-hardening
       - codex/feature-foresight
   pull_request:
     branches:
@@ -22,6 +23,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Reject tracked runtime environment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked_runtime_env="$(git ls-files -- .env .env.staging 'deploy/releases/*.env')"
+          if [[ -n "$tracked_runtime_env" ]]; then
+            echo "Runtime environment files must not be tracked:" >&2
+            printf '%s\n' "$tracked_runtime_env" >&2
+            exit 1
+          fi
 
       - name: Run isolated Docker tests, including frontend authentication flows
         run: |
