@@ -83,6 +83,18 @@ grep -Fq 'confirm_package_visibility' "$publish_workflow" || fail "registry work
 grep -Fq 'needs: release-gate' "$publish_workflow" || fail "registry publication must depend on the approval gate"
 grep -Fq 'exit 1' "$publish_workflow" || fail "unconfirmed registry publication must fail"
 grep -Fq 'secrets.GITHUB_TOKEN' "$publish_workflow" || fail "registry workflow must use GitHub OIDC-scoped token"
+grep -Fq 'uses: docker/setup-buildx-action@v3' "$publish_workflow" \
+  || fail "registry workflow must initialize Docker Buildx"
+grep -Fq 'driver: docker-container' "$publish_workflow" \
+  || fail "registry workflow must use the docker-container Buildx driver"
+setup_buildx_line="$(grep -nF 'uses: docker/setup-buildx-action@v3' "$publish_workflow" | head -n 1 | cut -d: -f1)"
+build_push_line="$(grep -nF 'uses: docker/build-push-action@v6' "$publish_workflow" | head -n 1 | cut -d: -f1)"
+[ "$setup_buildx_line" -lt "$build_push_line" ] \
+  || fail "Buildx must be initialized before the image build"
+grep -Fq 'provenance: mode=max' "$publish_workflow" \
+  || fail "registry workflow must keep maximum provenance attestation"
+grep -Fq 'sbom: true' "$publish_workflow" \
+  || fail "registry workflow must keep SBOM attestation"
 if grep -Eqi 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' "$publish_workflow"; then
   fail "registry workflow contains a plaintext token"
 fi
