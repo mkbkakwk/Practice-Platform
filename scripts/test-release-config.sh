@@ -6,13 +6,14 @@ compose_file="docker-compose.release.yml"
 release_example="deploy/releases/v0.4.0-foundation.env.example"
 manifest_template="docs/release-manifest-template.md"
 publish_workflow=".github/workflows/publish-release-images.yml"
+ci_workflow=".github/workflows/ci.yml"
 
 fail() {
   echo "RELEASE CONFIG TEST FAILED: $*" >&2
   exit 1
 }
 
-for file in "$compose_file" "$release_example" "$manifest_template" "$publish_workflow"; do
+for file in "$compose_file" "$release_example" "$manifest_template" "$publish_workflow" "$ci_workflow"; do
   [ -f "$file" ] || fail "missing $file"
 done
 
@@ -85,5 +86,10 @@ grep -Fq 'secrets.GITHUB_TOKEN' "$publish_workflow" || fail "registry workflow m
 if grep -Eqi 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' "$publish_workflow"; then
   fail "registry workflow contains a plaintext token"
 fi
+
+grep -Fq 'Reject tracked runtime environment files' "$ci_workflow" \
+  || fail "CI must reject tracked runtime environment files"
+grep -Fq "git ls-files -- .env .env.staging 'deploy/releases/*.env'" "$ci_workflow" \
+  || fail "CI must inspect the Git index for runtime environment files"
 
 echo "Release configuration checks passed (immutable images, external data, no secrets, no staging)."

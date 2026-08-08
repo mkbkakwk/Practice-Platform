@@ -11,5 +11,6 @@ COPY scripts/release-status.sh scripts/release-status.sh
 COPY scripts/test-release-config.sh scripts/test-release-config.sh
 COPY frontend/src/components/Navbar.tsx frontend/src/components/Navbar.tsx
 COPY .github/workflows/publish-release-images.yml .github/workflows/publish-release-images.yml
+COPY .github/workflows/ci.yml .github/workflows/ci.yml
 
 CMD ["bash", "scripts/test-release-config.sh"]

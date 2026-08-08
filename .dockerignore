@@ -17,5 +17,6 @@
 !.github/
 !.github/workflows/
 !.github/workflows/publish-release-images.yml
+!.github/workflows/ci.yml
 !release-tests/
 !release-tests/Dockerfile
