@@ -1,0 +1,150 @@
+name: oj
+
+# Immutable production topology. This file never builds application images.
+# Supply business secrets with .env and audited release metadata with
+# deploy/releases/<release>.env.
+services:
+  db:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE is required}
+    pull_policy: never
+    container_name: ${FORMAL_POSTGRES_CONTAINER:-oj-db}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - formal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      formal-network:
+        aliases: [db]
+
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:?RABBITMQ_IMAGE is required}
+    pull_policy: never
+    container_name: ${FORMAL_RABBITMQ_CONTAINER:-oj-rabbitmq}
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?RABBITMQ_USER is required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}
+    volumes:
+      - formal-rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    ports:
+      - "${RABBITMQ_MANAGEMENT_BIND:-127.0.0.1}:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    networks:
+      formal-network:
+        aliases: [rabbitmq]
+
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    pull_policy: never
+    container_name: ${FORMAL_BACKEND_CONTAINER:-oj-backend}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      PROMOTE_FIRST_ADMIN: "false"
+      DOC_STORAGE: /app/oj-docs
+    volumes:
+      - formal-docs:/app/oj-docs
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:4000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks:
+      formal-network:
+        aliases: [backend]
+
+  worker:
+    image: ${WORKER_IMAGE:?WORKER_IMAGE is required}
+    pull_policy: never
+    container_name: ${FORMAL_WORKER_CONTAINER:-oj-worker-1}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JUDGE_WORKSPACE: /tmp/oj-judge
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      WORKER_MAX_CONCURRENCY: ${WORKER_MAX_CONCURRENCY:-2}
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq 'app.jar' /proc/1/cmdline"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    networks:
+      formal-network:
+        aliases: [worker]
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}
+    pull_policy: never
+    container_name: ${FORMAL_FRONTEND_CONTAINER:-oj-frontend}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FORMAL_FRONTEND_BIND:-127.0.0.1}:${FORMAL_FRONTEND_PORT:?FORMAL_FRONTEND_PORT is required}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      formal-network:
+        aliases: [frontend]
+
+volumes:
+  formal-pgdata:
+    external: true
+    name: ${FORMAL_POSTGRES_VOLUME:?FORMAL_POSTGRES_VOLUME is required}
+  formal-rabbitmq:
+    external: true
+    name: ${FORMAL_RABBITMQ_VOLUME:?FORMAL_RABBITMQ_VOLUME is required}
+  formal-docs:
+    external: true
+    name: ${FORMAL_DOCS_VOLUME:?FORMAL_DOCS_VOLUME is required}
+
+networks:
+  formal-network:
+    external: true
+    name: ${FORMAL_NETWORK:?FORMAL_NETWORK is required}
