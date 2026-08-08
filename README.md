@@ -468,6 +468,7 @@ Staging 使用独立 Compose 项目 practice-platform-staging，并固定使用�
 | `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL/Flyway 回归测试 |
 | `worker-test` | 容器内执行判题核心与消息消费回归测试 |
 | `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run test`、`npm run build` |
+| `release-config-test` | 校验正式 Compose 只使用不可变镜像、外部数据资源且不包含秘密或 Staging 配置 |
 
 隔离保证：
 
@@ -480,7 +481,26 @@ Staging 使用独立 Compose 项目 practice-platform-staging，并固定使用�
   历史数据保留、孤立数据阻断以及外键/`CHECK` 执行；
 - Worker 测试不维护独立核心 schema，使用 Backend 已迁移完成的同一隔离测试库。
 
-GitHub Actions 在推送到 `chore/ci-baseline`、`codex/feature-foresight`，以及目标为 `codex/feature-foresight` 或 `main` 的 Pull Request 上运行同一 Docker 测试入口。工作流只验证，不部署。
+GitHub Actions 在推送到 `chore/ci-baseline`、`chore/release-hardening`、
+`codex/feature-foresight`，以及目标为 `codex/feature-foresight` 或 `main`
+的 Pull Request 上运行同一 Docker 测试入口。工作流只验证，不部署。
+
+### 不可变正式发布
+
+正式发布不再依赖应用镜像的 `latest` 标签，也不在部署现场构建镜像。
+`docker-compose.release.yml` 只接受已验证的 digest，并把 PostgreSQL、
+RabbitMQ、DOCX 卷及正式网络声明为外部资源；名称错误时会直接失败，
+不会自动创建空数据卷。发布前使用只读脚本检查：
+
+```bash
+RELEASE_ENV_FILE=deploy/releases/v0.4.0-foundation.env \
+  ./scripts/release-preflight.sh
+```
+
+完整的 Tag、OCI 标签、GHCR、Manifest 与人工发布边界见
+[`docs/immutable-release-workflow.md`](docs/immutable-release-workflow.md)。
+仓库只保存不含秘密的 Release Manifest 模板，机器相关恢复清单和备份仍
+保存在 Git 工作区之外。
 
 前端认证回归测试使用 Vitest、React Testing Library 和 jsdom，在容器内模拟 API、路由、`localStorage` 和文件下载。当前覆盖登录状态恢复、登录成功、受保护请求 401、登录接口 401、并发 401 去重、403 保持登录、携带 Authorization 的文档下载，以及 Token/`tokenVersion` 不进入可见 DOM。该范围不依赖真实浏览器或当前部署，因此没有引入 Playwright。
 
