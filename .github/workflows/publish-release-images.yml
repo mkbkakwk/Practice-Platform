@@ -26,8 +26,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require explicit package visibility approval
+        env:
+          CONFIRM_PACKAGE_VISIBILITY: ${{ inputs.confirm_package_visibility }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM_PACKAGE_VISIBILITY" != "confirmed-private-or-approved-public" ]]; then
+            echo "Package names and visibility must be explicitly approved before publication." >&2
+            exit 1
+          fi
+
   publish:
-    if: inputs.confirm_package_visibility == 'confirmed-private-or-approved-public'
+    needs: release-gate
     runs-on: ubuntu-latest
     environment: ghcr-release
     strategy:

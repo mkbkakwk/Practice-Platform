@@ -60,6 +60,10 @@ fi
 
 grep -Fq 'PROMOTE_FIRST_ADMIN: "false"' "$compose_file" \
   || fail "production first-admin promotion must be disabled"
+grep -Fq 'config --format json' scripts/release-preflight.sh \
+  || fail "release preflight must inspect the resolved Compose configuration"
+grep -Fq 'resolved Release Compose must force PROMOTE_FIRST_ADMIN=false' scripts/release-preflight.sh \
+  || fail "release preflight must fail when first-admin promotion is enabled"
 if grep -Eq 'VITE_DEPLOY_ENV|VITE_BUILD_SHA' "$compose_file"; then
   fail "production release Compose must not inject the staging badge"
 fi
@@ -75,6 +79,8 @@ done
 grep -Fq 'workflow_dispatch:' "$publish_workflow" || fail "registry workflow must be manual"
 grep -Fq 'packages: write' "$publish_workflow" || fail "registry workflow lacks packages write"
 grep -Fq 'confirm_package_visibility' "$publish_workflow" || fail "registry workflow lacks visibility confirmation"
+grep -Fq 'needs: release-gate' "$publish_workflow" || fail "registry publication must depend on the approval gate"
+grep -Fq 'exit 1' "$publish_workflow" || fail "unconfirmed registry publication must fail"
 grep -Fq 'secrets.GITHUB_TOKEN' "$publish_workflow" || fail "registry workflow must use GitHub OIDC-scoped token"
 if grep -Eqi 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' "$publish_workflow"; then
   fail "registry workflow contains a plaintext token"

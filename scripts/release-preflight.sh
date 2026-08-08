@@ -118,7 +118,18 @@ docker compose \
   --env-file "$release_env_file" \
   -f "$release_compose_file" \
   config --quiet
+resolved_release_config="$(docker compose \
+  --project-name oj \
+  --env-file "$formal_env_file" \
+  --env-file "$release_env_file" \
+  -f "$release_compose_file" \
+  config --format json)"
+printf '%s' "$resolved_release_config" \
+  | grep -Eq '"PROMOTE_FIRST_ADMIN"[[:space:]]*:[[:space:]]*"false"' \
+  || release_die "resolved Release Compose must force PROMOTE_FIRST_ADMIN=false"
+unset resolved_release_config
 echo "Release Compose interpolation: valid"
+echo "Resolved PROMOTE_FIRST_ADMIN: false"
 
 db_container="$(release_env_value "$release_env_file" FORMAL_POSTGRES_CONTAINER)"
 rabbit_container="$(release_env_value "$release_env_file" FORMAL_RABBITMQ_CONTAINER)"
