@@ -1,0 +1,29 @@
+name: Docker CI
+
+on:
+  push:
+    branches:
+      - chore/ci-baseline
+      - codex/feature-foresight
+  pull_request:
+    branches:
+      - codex/feature-foresight
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  docker-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: practice-platform-ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run isolated Docker tests, including frontend authentication flows
+        run: |
+          chmod +x scripts/test-docker.sh
+          ./scripts/test-docker.sh

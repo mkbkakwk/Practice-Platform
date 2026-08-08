@@ -9,23 +9,26 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitConfig {
 
-    public static final String EXCHANGE = "oj.judge";
-    public static final String ROUTING_KEY = "oj.judge.submit";
-    public static final String QUEUE = "oj.judge.queue";
+    private final AppProperties appProperties;
+
+    public RabbitConfig(AppProperties appProperties) {
+        this.appProperties = appProperties;
+    }
 
     @Bean
     public DirectExchange judgeExchange() {
-        return ExchangeBuilder.directExchange(EXCHANGE).durable(true).build();
+        return ExchangeBuilder.directExchange(appProperties.getRabbitmq().getExchange()).durable(true).build();
     }
 
     @Bean
     public Queue judgeQueue() {
-        return QueueBuilder.durable(QUEUE).build();
+        return QueueBuilder.durable(appProperties.getRabbitmq().getQueue()).build();
     }
 
     @Bean
     public Binding judgeBinding(Queue judgeQueue, DirectExchange judgeExchange) {
-        return BindingBuilder.bind(judgeQueue).to(judgeExchange).with(ROUTING_KEY);
+        return BindingBuilder.bind(judgeQueue).to(judgeExchange)
+                .with(appProperties.getRabbitmq().getRoutingKey());
     }
 
     @Bean

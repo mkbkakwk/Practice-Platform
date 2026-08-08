@@ -2,16 +2,19 @@ package com.oj.service;
 
 import at.favre.lib.crypto.bcrypt.BCrypt;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.oj.common.AdministratorLock;
 import com.oj.common.ApiException;
 import com.oj.common.JwtUtil;
 import com.oj.config.AppProperties;
 import com.oj.dto.AuthResponse;
+import com.oj.dto.ChangePasswordRequest;
 import com.oj.dto.LoginRequest;
 import com.oj.dto.RegisterRequest;
 import com.oj.dto.UserDto;
 import com.oj.entity.UserEntity;
 import com.oj.mapper.UserMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
@@ -19,24 +22,26 @@ public class AuthService {
     private final UserMapper userMapper;
     private final JwtUtil jwtUtil;
     private final AppProperties props;
+    private final AdministratorLock administratorLock;
 
-    public AuthService(UserMapper userMapper, JwtUtil jwtUtil, AppProperties props) {
+    public AuthService(UserMapper userMapper, JwtUtil jwtUtil, AppProperties props,
+                       AdministratorLock administratorLock) {
         this.userMapper = userMapper;
         this.jwtUtil = jwtUtil;
         this.props = props;
+        this.administratorLock = administratorLock;
     }
 
+    @Transactional
     public AuthResponse register(RegisterRequest req) {
         UserEntity exists = userMapper.selectOne(new QueryWrapper<UserEntity>().eq("username", req.getUsername()));
         if (exists != null) {
             throw ApiException.conflict("用户名已被占用");
         }
 
-        // Public registration is always USER. Teachers are set by admin in
-        // the user management page. Only the first registered user is auto-
-        // promoted to ADMIN (controlled by PROMOTE_FIRST_ADMIN config).
         String role = "USER";
         if (props.isPromoteFirstAdmin()) {
+            administratorLock.acquire();
             Long count = userMapper.selectCount(null);
             if (count == 0) {
                 role = "ADMIN";
@@ -49,6 +54,7 @@ public class AuthService {
         user.setPassword(hashed);
         user.setRole(role);
         user.setSolvedCount(0);
+        user.setTokenVersion(0);
         userMapper.insert(user);
 
         return buildResponse(user);
@@ -70,6 +76,22 @@ public class AuthService {
         return buildResponse(user);
     }
 
+    @Transactional
+    public void changePassword(int id, ChangePasswordRequest req) {
+        UserEntity user = userMapper.selectByIdForUpdate(id);
+        if (user == null) {
+            throw ApiException.unauthorized("登录状态已失效");
+        }
+        boolean currentMatches = BCrypt.verifyer()
+                .verify(req.getCurrentPassword().toCharArray(), user.getPassword()).verified;
+        if (!currentMatches) {
+            throw ApiException.badRequest("当前密码错误");
+        }
+        String hashed = BCrypt.withDefaults()
+                .hashToString(12, req.getNewPassword().toCharArray());
+        userMapper.updatePasswordAndInvalidateTokens(id, hashed);
+    }
+
     public UserDto getCurrentUser(int id) {
         UserEntity user = userMapper.selectById(id);
         if (user == null) {
@@ -79,7 +101,8 @@ public class AuthService {
     }
 
     private AuthResponse buildResponse(UserEntity user) {
-        String token = jwtUtil.sign(user.getId(), user.getUsername(), user.getRole());
+        String token = jwtUtil.sign(
+                user.getId(), user.getUsername(), user.getRole(), user.getTokenVersion());
         UserDto dto = new UserDto(user.getId(), user.getUsername(), user.getRole(), user.getSolvedCount());
         return new AuthResponse(token, dto);
     }

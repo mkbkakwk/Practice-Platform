@@ -1,0 +1,125 @@
+name: practice-platform-staging
+
+services:
+  db:
+    container_name: practice-platform-staging-postgres
+    environment:
+      POSTGRES_DB: ${STAGING_POSTGRES_DB}
+      POSTGRES_USER: ${STAGING_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD}
+    volumes:
+      - oj-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${STAGING_POSTGRES_USER} -d ${STAGING_POSTGRES_DB}"]
+    labels:
+      com.practice-platform.environment: staging
+
+  rabbitmq:
+    container_name: practice-platform-staging-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${STAGING_RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${STAGING_RABBITMQ_PASSWORD}
+    ports: !reset []
+    volumes:
+      - staging-rabbitmq:/var/lib/rabbitmq
+    labels:
+      com.practice-platform.environment: staging
+
+  backend:
+    image: practice-platform-staging-backend:${STAGING_GIT_SHA:-local}
+    container_name: practice-platform-staging-backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${STAGING_POSTGRES_DB}
+      POSTGRES_USER: ${STAGING_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${STAGING_RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${STAGING_RABBITMQ_PASSWORD}
+      JWT_SECRET: ${STAGING_JWT_SECRET}
+      JWT_EXPIRES_IN: ${STAGING_JWT_EXPIRES_IN:-1d}
+      CORS_ORIGIN: "http://localhost:${STAGING_FRONTEND_PORT:-18080}"
+      PROMOTE_FIRST_ADMIN: ${STAGING_PROMOTE_FIRST_ADMIN:-false}
+      DOC_STORAGE: /app/oj-docs
+    volumes:
+      - oj-docs:/app/oj-docs
+    labels:
+      com.practice-platform.environment: staging
+      org.opencontainers.image.revision: ${STAGING_GIT_SHA:-local}
+
+  worker:
+    image: practice-platform-staging-worker:${STAGING_GIT_SHA:-local}
+    container_name: practice-platform-staging-worker
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/${STAGING_POSTGRES_DB}
+      POSTGRES_USER: ${STAGING_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${STAGING_RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${STAGING_RABBITMQ_PASSWORD}
+      JUDGE_WORKSPACE: /tmp/practice-platform-staging-judge
+      WORKER_CONCURRENCY: ${STAGING_WORKER_CONCURRENCY:-1}
+      WORKER_MAX_CONCURRENCY: ${STAGING_WORKER_MAX_CONCURRENCY:-1}
+    deploy:
+      replicas: 1
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq 'app.jar' /proc/1/cmdline"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    labels:
+      com.practice-platform.environment: staging
+      org.opencontainers.image.revision: ${STAGING_GIT_SHA:-local}
+
+  frontend:
+    image: practice-platform-staging-frontend:${STAGING_GIT_SHA:-local}
+    container_name: practice-platform-staging-frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_DEPLOY_ENV: staging
+        VITE_BUILD_SHA: ${STAGING_GIT_SHA:-local}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports: !override
+      - "127.0.0.1:${STAGING_FRONTEND_PORT:-18080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    labels:
+      com.practice-platform.environment: staging
+      org.opencontainers.image.revision: ${STAGING_GIT_SHA:-local}
+
+  smoke:
+    image: node:20-alpine
+    profiles: ["tools"]
+    restart: "no"
+    environment:
+      STAGING_BASE_URL: http://frontend
+      STAGING_SMOKE_USERNAME_PREFIX: ${STAGING_SMOKE_USERNAME_PREFIX:-stgsmoke}
+      STAGING_SMOKE_PASSWORD: ${STAGING_SMOKE_PASSWORD}
+      STAGING_GIT_SHA: ${STAGING_GIT_SHA:-local}
+    volumes:
+      - ./scripts/staging-smoke.mjs:/app/staging-smoke.mjs:ro
+    command: ["node", "/app/staging-smoke.mjs"]
+    networks:
+      - oj-net
+
+networks:
+  oj-net:
+    name: practice-platform-staging-network
+    driver: bridge
+
+volumes:
+  oj-pgdata:
+    name: practice-platform-staging-pgdata
+  staging-rabbitmq:
+    name: practice-platform-staging-rabbitmq
+  oj-docs:
+    name: practice-platform-staging-docs

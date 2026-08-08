@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
-import com.oj.config.RabbitConfig;
+import com.oj.config.AppProperties;
 import com.oj.dto.SubmitRequest;
 import com.oj.dto.SubmissionView;
 import com.oj.entity.ProblemEntity;
@@ -33,14 +33,17 @@ public class SubmissionService {
     private final UserMapper userMapper;
     private final ProblemService problemService;
     private final RabbitTemplate rabbitTemplate;
+    private final AppProperties appProperties;
     private final Map<Integer, LocalDateTime> lastSubmit = new ConcurrentHashMap<>();
 
     public SubmissionService(SubmissionMapper submissionMapper, UserMapper userMapper,
-                             ProblemService problemService, RabbitTemplate rabbitTemplate) {
+                             ProblemService problemService, RabbitTemplate rabbitTemplate,
+                             AppProperties appProperties) {
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
         this.problemService = problemService;
         this.rabbitTemplate = rabbitTemplate;
+        this.appProperties = appProperties;
     }
 
     public int submit(SubmitRequest request) {
@@ -78,7 +81,9 @@ public class SubmissionService {
             payload.put("timeLimitMs", problem.getTimeLimit());
             payload.put("memoryLimitKb", problem.getMemoryLimit() * 1024);
             payload.put("testCasesJson", problem.getTestCases());
-            rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE, RabbitConfig.ROUTING_KEY, payload);
+            rabbitTemplate.convertAndSend(
+                    appProperties.getRabbitmq().getExchange(),
+                    appProperties.getRabbitmq().getRoutingKey(), payload);
         } catch (Exception exception) {
             submission.setVerdict("SE");
             submission.setMessage("评测服务暂不可用: " + exception.getMessage());

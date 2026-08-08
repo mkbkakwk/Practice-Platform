@@ -9,7 +9,7 @@ public class AppProperties {
 
     private Jwt jwt = new Jwt();
     private Cors cors = new Cors();
-    private boolean promoteFirstAdmin = true;
+    private boolean promoteFirstAdmin = false;
     private RabbitMq rabbitmq = new RabbitMq();
     private String docStorage = "/tmp/oj-docs";
 

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -65,6 +66,12 @@ public class JudgeService {
             r.message = "测试点数据损坏: " + e.getMessage();
             return r;
         }
+        if (testCases == null || testCases.length == 0) {
+            r.verdict = "SE";
+            r.total = 0;
+            r.message = "No test cases configured";
+            return r;
+        }
         r.total = testCases.length;
 
         String runId = UUID.randomUUID().toString();
@@ -75,14 +82,13 @@ public class JudgeService {
             Files.writeString(srcPath, code);
             Path outPath = dir.resolve("main_out");
 
-            // JVM reserves huge virtual memory; skip the hard mem cap for Java.
-            long memCap = "java".equals(language) ? 0 : memoryLimitKb * 2;
+            // JVM and V8 reserve large virtual address spaces; ulimit -v would prevent
+            // either runtime from starting before submitted code executes.
+            long memCap = ("java".equals(language) || "javascript".equals(language)) ? 0 : memoryLimitKb * 2;
 
             // 1) Compile (if needed)
-            if (lang.compileCmd() != null) {
-                String cmd = lang.compileCmd()
-                        .replace("{src}", srcPath.toString())
-                        .replace("{out}", outPath.toString());
+            if (lang.compileCommand() != null) {
+                List<String> cmd = resolveCommand(lang.compileCommand(), srcPath, outPath);
                 RunResult cr = runner.run(cmd, "", 10000, 0, dir);
                 if (cr.timedOut || cr.exitCode != 0) {
                     r.verdict = "CE";
@@ -97,10 +103,7 @@ public class JudgeService {
             long maxTime = 0;
             for (int i = 0; i < testCases.length; i++) {
                 TestCase tc = testCases[i];
-                String runCmd = lang.runCmd()
-                        .replace("{src}", srcPath.toString())
-                        .replace("{out}", outPath.toString())
-                        .replace("{dir}", dir.toString());
+                List<String> runCmd = resolveCommand(lang.runCommand(), srcPath, outPath);
                 RunResult rr = runner.run(runCmd, tc.input == null ? "" : tc.input, timeLimitMs, memCap, dir);
 
                 if (rr.timedOut) {
@@ -170,6 +173,14 @@ public class JudgeService {
             if (i < lines.length - 1) sb.append("\n");
         }
         return sb.toString().replaceAll("\n+$", "").strip();
+    }
+
+    private List<String> resolveCommand(List<String> command, Path srcPath, Path outPath) {
+        return command.stream()
+                .map(argument -> argument
+                        .replace("{src}", srcPath.toString())
+                        .replace("{out}", outPath.toString()))
+                .toList();
     }
 
     private void cleanup(Path dir) {

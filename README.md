@@ -32,14 +32,14 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 ### 为什么选择它
 
 - 🚀 **一键部署** —— 一条 `docker compose up -d --build` 启动数据库、消息队列、后端、评测 Worker、前端
-- 🛡️ **安全的评测沙箱** —— Java `ProcessBuilder` 起子进程 + ulimit 资源限制，超时强制清理进程组
+- 🛡️ **受限评测进程** —— Java `ProcessBuilder` 起子进程 + ulimit 资源限制，`exec` 对准真实程序并在超时后强制终止
 - 🌐 **多语言支持** —— Python 3、JavaScript (Node)、C、C++17、Java 开箱即用
 - 📝 **现代化编辑器** —— 内置 CodeMirror，语法高亮、多语言模板切换
 - ⚡ **异步评测 + 高并发** —— 提交经 RabbitMQ 入队，Worker 池水平扩展，轻松扛 300+ 并发
-- 📦 **预置题库** —— 自带 6 道算法题 + 11 道 Office 选择题，部署后立即可用
+- 📦 **可选演示题库** —— 提供 6 道算法题 + 11 道 Office 选择题的手动开发 seed
 - 📄 **文档排版自动比对** —— Apache POI 解析 .docx 格式，逐段比对字体/字号/加粗/对齐/缩进/行距
 - 👨‍🏫 **三角色权限** —— 教师管理自建内容并复核自己的排版练习，管理员管理全部内容
-- 🔐 **统一学生注册** —— 公开注册统一为学生，管理员可在用户管理中调整角色，首位注册用户自动成为管理员
+- 🔐 **可靠身份权限** —— 公开注册默认统一为学生；角色或密码变化会立即使旧 JWT 失效
 - 🐛 **错误可观测** —— 前端 ErrorBoundary 错误页 + 统一日志
 
 ---
@@ -48,7 +48,7 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 
 | 模块 | 功能 |
 | :--- | :--- |
-| 👤 用户 | 统一学生注册 / 登录（JWT）/ 管理员调整角色 / 首位用户自动管理员 |
+| 👤 用户 | 统一学生注册 / 登录（JWT）/ 管理员调整角色 / 受控首位管理员初始化 |
 | 📚 算法题库 | 题目列表（分页、难度筛选）、Markdown 题面（支持 LaTeX）、样例 |
 | 💻 算法评测 | 多语言代码编辑器、一键提交、异步评测、轮询结果 |
 | 🏷️ 判定 | AC / WA / TLE / RE / CE / SE |
@@ -153,10 +153,18 @@ docker compose up -d --build
 ```
 
 首次构建约 5–10 分钟（需拉取镜像、编译 Java 应用、安装语言运行时）。之后启动只需几秒。
+Backend 启动时由 Flyway 创建或升级数据库结构；Worker 会等待 Backend
+健康检查通过后才开始消费判题消息。全新数据库默认不插入演示题目或账号。
 
 启动完成后访问 👉 **http://localhost:3000**
 
-> 💡 **第一个注册的账号会自动成为管理员**。其余公开注册账号统一为学生，教师角色由管理员授予。
+> 💡 生产环境默认不会自动提升首位注册用户；其余公开注册账号统一为学生，教师角色由管理员授予。
+
+### 管理员安全初始化与会话失效
+
+生产配置默认关闭 `PROMOTE_FIRST_ADMIN`。空库首次部署时，应在网站对外开放前临时、显式设为 `true`，创建唯一首位管理员后立即恢复为 `false`；事务级数据库锁保证并发注册最多产生一个首位管理员。公开注册在配置关闭时始终为学生账号。
+
+JWT 包含 `userId`、`username`、`role` 和 `tokenVersion`。每个认证请求都会重新读取数据库用户并校验版本，最终权限以数据库当前角色为准；修改角色或密码会递增版本，使所有旧 Token 立即返回 401。系统拒绝降级或删除最后一个管理员。匿名访问采用明确白名单：注册、登录、健康检查、语言元数据、已启用算法题列表/详情和排行榜；其他后端接口默认要求登录。
 
 > ⚠️ **Windows 端口说明**：Windows 会动态保留部分 TCP 端口（含 8080/4000），项目 `.env` 已默认设 `PORT=3000`。如遇端口冲突，修改 `.env` 中的 `PORT` 即可。
 
@@ -170,6 +178,41 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+### 数据库迁移与演示数据
+
+Flyway 是唯一的数据库结构来源，迁移文件位于
+`backend-spring/src/main/resources/db/migration`：
+
+1. `V1__baseline_schema.sql` 创建完整空库结构；
+2. `V2__data_integrity_constraints.sql` 检查孤立数据并增加外键和 `CHECK`；
+3. `V3__supporting_indexes.sql` 增加查询所需索引。
+
+全新空库执行 V1–V3。由旧 `schema.sql` 创建的非空数据库会在版本 1
+建立 baseline，然后仅执行 V2–V3；不会重复建表或自动插入演示数据。
+Backend 是唯一迁移执行方，Worker 明确禁用 SQL 初始化。
+
+可选演示题位于 `scripts/dev-seed.sql`，只允许在明确的开发数据库中
+手动加载：
+
+```bash
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/dev-seed.sql
+```
+
+不要在生产环境自动运行该脚本。测试数据由测试代码创建，不依赖演示 seed。
+
+正式升级已有数据库前必须：
+
+1. 进入维护模式或停止写入；
+2. 完整备份 PostgreSQL；
+3. 备份 Office 文档存储；
+4. 在数据库副本上完整演练 migration；
+5. 核对 9 类孤立数据预检查；
+6. 记录升级前 schema 和 Flyway 状态；
+7. 验证备份恢复流程后再安排正式迁移。
+
+迁移发现孤立记录或非法既有值时会失败并保留数据，不会静默删除。
+Flyway 不保证任意 PostgreSQL DDL 都能自动回滚，恢复仍依赖经过验证的备份。
+
 ### 常用命令
 
 ```bash
@@ -179,7 +222,6 @@ docker compose logs -f worker         # 查看 Worker 评测日志
 docker compose ps                     # 查看容器状态
 docker compose up -d --scale worker=3 # 水平扩展到 3 个 Worker（扛并发）
 docker compose down                   # 停止并移除容器
-docker compose down -v                # 停止并清空数据（含数据库）
 ```
 
 ### 水平扩展（扛高并发）
@@ -229,11 +271,12 @@ practice-platform/
 │
 ├── backend-spring/             # Spring Boot 后端
 │   ├── Dockerfile              # 多阶段构建（Maven 编译 + JRE 运行）
-│   ├── pom.xml                 # 含 Apache POI 依赖
+│   ├── pom.xml                 # 含 Apache POI 与 Flyway PostgreSQL 支持
 │   ├── src/main/resources/
 │   │   ├── application.yml     # 配置（含 multipart 文件上传）
-│   │   ├── schema.sql          # 建表（含 Office 题库/练习/提交表）
-│   │   └── data.sql            # 种子数据（6 算法题 + 11 Office 选择题）
+│   │   └── db/migration/       # 唯一权威数据库结构：V1 / V2 / V3
+│   ├── src/test/resources/
+│   │   └── legacy-schema.sql   # 仅用于验证旧 schema 无损升级
 │   └── src/main/java/com/oj/
 │       ├── config/             # WebConfig / RabbitConfig / AppProperties
 │       ├── common/             # JwtUtil / CurrentUser(三角色) / DocxParser / DocComparator
@@ -243,8 +286,10 @@ practice-platform/
 │       ├── service/            # Auth / Problem / Submission / Office / OfficeDoc
 │       └── controller/         # REST 控制器
 │
+├── scripts/dev-seed.sql        # 可选演示题；仅手动加载到开发数据库
+│
 ├── worker/                     # Java 评测 Worker（独立服务）
-│   ├── Dockerfile              # 含 python3/g++/jdk 运行时
+│   ├── Dockerfile              # 含 Python/Node.js/GCC/G++/Temurin JDK 运行时
 │   └── src/main/java/com/oj/   # Runner(ProcessBuilder沙箱) / JudgeService
 │
 └── frontend/                   # React 前端
@@ -258,7 +303,10 @@ practice-platform/
 
 ---
 
-## 📦 预置题库
+## 📦 可选演示题库
+
+以下内容位于 `scripts/dev-seed.sql`，不会随生产或测试启动自动插入。
+全新数据库默认为空，由管理员或教师创建内容。
 
 ### 算法题（6 道）
 
@@ -287,6 +335,7 @@ practice-platform/
 | :--- | :--- | :--- | :--- |
 | POST | `/api/auth/register` | - | 注册（统一创建 USER） |
 | POST | `/api/auth/login` | - | 登录 |
+| PUT | `/api/auth/password` | ✅ | 已登录用户修改自己的密码并使旧 Token 失效 |
 | GET | `/api/auth/me` | ✅ | 当前用户信息 |
 | GET | `/api/problems` | - | 算法题列表 |
 | GET | `/api/problems/:slug` | - | 算法题详情 |
@@ -318,6 +367,7 @@ practice-platform/
 | PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
 | GET | `/api/users` | 🔒 管理员 | 用户列表 |
 | PUT | `/api/users/:id/role` | 🔒 管理员 | 修改用户角色 |
+| DELETE | `/api/users/:id` | 🔒 管理员 | 删除无历史记录的用户（最后管理员受保护） |
 | GET | `/api/users/leaderboard` | - | 排行榜 |
 
 ---
@@ -337,38 +387,144 @@ practice-platform/
 | `JWT_SECRET` | `please-change-...` | JWT 签名密钥（**生产必改**） |
 | `JWT_EXPIRES_IN` | `7d` | Token 有效期 |
 | `CORS_ORIGIN` | `*` | 跨域来源 |
-| `PROMOTE_FIRST_ADMIN` | `true` | 首位注册用户是否成为管理员 |
+| `PROMOTE_FIRST_ADMIN` | `false` | 仅用于对外开放前的受控首位管理员初始化 |
 | `DOC_STORAGE` | `/app/oj-docs` | 文档上传存储路径 |
+
+---
+
+## Staging 测试网站
+
+Staging 使用独立 Compose 项目 practice-platform-staging，并固定使用独立的 PostgreSQL、RabbitMQ、DOCX 卷和网络。它不会读取正式 .env、oj_oj-pgdata、oj_oj-docs 或 oj_oj-net。
+
+首次在本机创建只属于 Staging 的随机凭据：
+
+~~~bash
+./scripts/staging-init-env.sh
+~~~
+
+该命令只创建被 Git 忽略的 .env.staging，不会输出密码或 JWT 密钥。占位示例位于 .env.staging.example。首位管理员自动提升始终默认为 false；Staging 公共注册只会创建 USER。
+
+构建、启动并等待健康检查：
+
+~~~bash
+./scripts/staging-up.sh
+~~~
+
+默认访问地址：
+
+- 页面：http://localhost:18080
+- 健康检查：http://localhost:18080/api/health
+- Backend、PostgreSQL 和 RabbitMQ 不暴露宿主机端口
+- Navbar 中的 STAGING 标记会显示当前构建 Git SHA
+
+运行独立 HTTP 冒烟测试：
+
+~~~bash
+./scripts/staging-smoke.sh
+~~~
+
+该测试只在 Staging 网络内创建临时测试用户，验证首页、健康检查、公开题目、匿名 401、注册、登录、鉴权、修改密码、旧 Token 失效和新密码登录；不会访问正式网站或正式数据。
+
+查看状态和日志：
+
+~~~bash
+./scripts/staging-status.sh
+./scripts/staging-logs.sh
+./scripts/staging-logs.sh backend worker
+~~~
+
+安全停止并保留 Staging 数据：
+
+~~~bash
+./scripts/staging-down.sh
+~~~
+
+只有明确需要重建全新 Staging 数据时才使用以下命令；脚本会校验只删除名称包含 staging 的三个 Staging 卷：
+
+~~~bash
+./scripts/staging-down.sh --volumes
+~~~
+
+不要对默认或正式 Compose 项目执行 down，也不要将 .env.staging 提交到仓库。
+
+---
+
+## ✅ Docker 化测试与持续集成
+
+宿主机只需要 Git、Docker 和 Docker Compose；不要在宿主机直接运行 Maven、Java、Node.js、npm、PostgreSQL 或 RabbitMQ。
+
+统一测试入口：
+
+```bash
+./scripts/test-docker.sh
+```
+
+脚本默认使用独立 Compose 项目 `practice-platform-test`（CI 覆盖为 `practice-platform-ci`），依次构建测试镜像、启动临时 PostgreSQL/RabbitMQ、运行三个测试服务并汇总退出码；无论成功或失败都会执行 `down --remove-orphans` 清理测试容器和网络。
+
+| 服务 | 作用 |
+| :--- | :--- |
+| `test-db` | PostgreSQL 16 测试库，数据目录使用 `tmpfs` |
+| `test-rabbitmq` | RabbitMQ 3.13 测试实例，不映射宿主机端口 |
+| `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL/Flyway 回归测试 |
+| `worker-test` | 容器内执行判题核心与消息消费回归测试 |
+| `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run test`、`npm run build` |
+
+隔离保证：
+
+- 不读取真实 `.env`，测试账号、数据库名和 JWT 仅用于临时测试环境；
+- 不复用 `oj-db`、`oj-rabbitmq`、`oj-pgdata`、`oj-docs` 或当前部署网络；
+- 测试消息使用 `oj.test.*` 队列、交换机和路由键；
+- DOCX 固定资源位于 `backend-spring/src/test/resources/docx`，上传临时目录使用容器 `tmpfs`；
+- 测试服务不发布端口、不启动长期运行的后端/Worker/前端。
+- Flyway 测试在临时 PostgreSQL schema 中覆盖空库、重复迁移、旧结构升级、
+  历史数据保留、孤立数据阻断以及外键/`CHECK` 执行；
+- Worker 测试不维护独立核心 schema，使用 Backend 已迁移完成的同一隔离测试库。
+
+GitHub Actions 在推送到 `chore/ci-baseline`、`codex/feature-foresight`，以及目标为 `codex/feature-foresight` 或 `main` 的 Pull Request 上运行同一 Docker 测试入口。工作流只验证，不部署。
+
+前端认证回归测试使用 Vitest、React Testing Library 和 jsdom，在容器内模拟 API、路由、`localStorage` 和文件下载。当前覆盖登录状态恢复、登录成功、受保护请求 401、登录接口 401、并发 401 去重、403 保持登录、携带 Authorization 的文档下载，以及 Token/`tokenVersion` 不进入可见 DOM。该范围不依赖真实浏览器或当前部署，因此没有引入 Playwright。
+
+测试全部通过后可只构建正式镜像进行验证：
+
+```bash
+docker compose build
+```
+
+该命令只构建镜像；不要用测试流程启动、替换或停止现有网站。
+
+### 判题语言与运行时
+
+前端语言下拉由后端元数据提供，后端允许列表与 Worker `LanguageDef` 保持以下五种语言一致：
+
+| 语言 | 提交 ID | Worker 命令 |
+| :--- | :--- | :--- |
+| Python 3 | `python` | `python3` |
+| JavaScript (Node.js 22 LTS) | `javascript` | `node` |
+| C | `c` | `gcc` |
+| C++17 | `cpp` | `g++ -std=c++17` |
+| Java 21 | `java` | `javac` / `java` |
+
+测试与正式 Worker 镜像共用固定的 Node.js `22.22.3` 运行时。编译和运行命令使用参数列表传递，工作目录由 `ProcessBuilder.directory(...)` 设置，bash 包装层只负责 ulimit 并通过 `exec "$@"` 切换到真实编译器或运行时。
+
+算法题创建和更新都会在后端拒绝缺失、空或结构错误的测试点；Worker 对历史空测试点返回 `SE`（`No test cases configured`），不会判为 AC 或增加 `solved_count`。
+
+
+### 已知测试基线边界
+
+- DOCX 比较当前只读取第一个非空 Run，表格支持边界按现状记录；本阶段不重写 Word 评分算法。
+- 前端构建仍提示主包体积较大和 Browserslist 数据陈旧，但不影响 lint 与构建成功。
 
 ---
 
 ## 🛠️ 本地开发
 
-### 后端（Spring Boot）
+为保持开发、CI 与部署环境一致，本项目不要求在宿主机安装 Maven、Java、Node.js 或 npm。代码变更应先通过上述 Docker 测试入口；需要验证正式多阶段 Dockerfile 时只执行：
 
 ```bash
-# 仅起 db 和 rabbitmq
-docker compose up -d db rabbitmq
-
-# 后端本地运行
-cd backend-spring
-./mvnw spring-boot:run     # http://localhost:4000
+docker compose build
 ```
 
-### Worker
-
-```bash
-cd worker
-./mvnw spring-boot:run      # 消费 RabbitMQ 队列
-```
-
-### 前端
-
-```bash
-cd frontend
-npm install
-VITE_API_BASE=http://localhost:4000/api npm run dev   # http://localhost:5173
-```
+需要启动完整开发部署时参照“快速开始”中的 Compose 命令，并使用独立的开发配置；测试脚本不会操作该部署。
 
 ---
 

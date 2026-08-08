@@ -42,12 +42,14 @@ public class JwtUtil {
         }
     }
 
-    public String sign(int id, String username, String role) {
+    public String sign(int id, String username, String role, int tokenVersion) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(id))
+                .claim("userId", id)
                 .claim("username", username)
                 .claim("role", role)
+                .claim("tokenVersion", tokenVersion)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expiresIn.toMillis()))
                 .signWith(key)

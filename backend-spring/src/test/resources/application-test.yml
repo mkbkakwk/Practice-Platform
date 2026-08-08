@@ -1,0 +1,25 @@
+spring:
+  sql:
+    init:
+      mode: never
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: "1"
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+oj:
+  promote-first-admin: false
+  rabbitmq:
+    exchange: ${OJ_RABBITMQ_EXCHANGE:oj.test.judge}
+    routing-key: ${OJ_RABBITMQ_ROUTING_KEY:oj.test.judge.submit}
+    queue: ${OJ_RABBITMQ_QUEUE:oj.test.judge.queue}
+  doc-storage: ${DOC_STORAGE:/tmp/practice-platform-test-docs}
+
+logging:
+  level:
+    com.oj: WARN
