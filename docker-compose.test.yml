@@ -76,6 +76,7 @@ services:
       OJ_RABBITMQ_EXCHANGE: oj.test.judge
       OJ_RABBITMQ_ROUTING_KEY: oj.test.judge.submit
       OJ_RABBITMQ_QUEUE: oj.test.judge.queue
+      JUDGE_EXECUTION_MODE: legacy-local
       JUDGE_WORKSPACE: /tmp/practice-platform-test-judge
       SPRING_RABBITMQ_LISTENER_SIMPLE_AUTO_STARTUP: "false"
     tmpfs:

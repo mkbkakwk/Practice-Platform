@@ -5,18 +5,15 @@ import com.oj.judge.JudgeService;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
 import com.rabbitmq.client.Channel;
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.Map;
 
 @Component
@@ -26,20 +23,15 @@ public class JudgeConsumer {
 
     private final SubmissionMapper submissionMapper;
     private final UserMapper userMapper;
-    private JudgeService judgeService;
+    private final JudgeService judgeService;
 
-    @Value("${oj.judge.workspace:/tmp/oj-judge}")
-    private String workspacePath;
-
-    public JudgeConsumer(SubmissionMapper submissionMapper, UserMapper userMapper) {
+    public JudgeConsumer(
+            SubmissionMapper submissionMapper,
+            UserMapper userMapper,
+            JudgeService judgeService) {
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
-    }
-
-    @PostConstruct
-    public void init() throws IOException {
-        judgeService = new JudgeService(Path.of(workspacePath));
-        log.info("[worker] judge workspace: {}", workspacePath);
+        this.judgeService = judgeService;
     }
 
     @RabbitListener(queues = "${oj.rabbitmq.queue:oj.judge.queue}")
@@ -86,8 +78,8 @@ public class JudgeConsumer {
                 }
             }
 
-            log.info("[worker] submission #{} verdict={} passed={}/{} timeMs={}",
-                    submissionId, result.verdict, result.passed, result.total, result.timeMs);
+            log.info("[worker] submission #{} requestId={} verdict={} passed={}/{} timeMs={}",
+                    submissionId, result.requestId, result.verdict, result.passed, result.total, result.timeMs);
         } catch (Exception exception) {
             log.error("[worker] submission #{} judge error", submissionId, exception);
             if (submissionId != null) {
