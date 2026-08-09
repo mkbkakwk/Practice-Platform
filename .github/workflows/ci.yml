@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tracked_runtime_env="$(git ls-files -- .env .env.staging 'deploy/releases/*.env')"
+          tracked_runtime_env="$(git ls-files -- .env .env.production .env.staging 'deploy/releases/*.env')"
           if [[ -n "$tracked_runtime_env" ]]; then
             echo "Runtime environment files must not be tracked:" >&2
             printf '%s\n' "$tracked_runtime_env" >&2

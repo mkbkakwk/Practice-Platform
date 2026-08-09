@@ -392,9 +392,22 @@ practice-platform/
 
 ---
 
-## Staging 测试网站
+## Docker environments
 
-Staging 使用独立 Compose 项目 practice-platform-staging，并固定使用独立的 PostgreSQL、RabbitMQ、DOCX 卷和网络。它不会读取正式 .env、oj_oj-pgdata、oj_oj-docs 或 oj_oj-net。
+本机长期只保留两套环境：
+
+| 环境 | Compose project | Frontend | 用途 |
+| :--- | :--- | :--- | :--- |
+| Production | `oj` | http://localhost:3000 | 当前正式网站 |
+| Staging | `practice-platform-staging` | http://localhost:18080 | 下一版本测试与预览 |
+
+`oj` 始终表示 Production。**不要因为 Staging 正在运行就停止
+Production。** Staging 与 Production 完全隔离，并不替代 Production。
+临时 rehearsal/recovery 环境只在演练期间存在，验证结束后应清理。
+
+### Staging 测试网站
+
+Staging 使用独立 Compose 项目 `practice-platform-staging`，并固定使用独立的 PostgreSQL、RabbitMQ、DOCX 卷和网络。它不会读取正式 `.env.production`、`oj_oj-pgdata`、`oj_oj-docs` 或 `oj_oj-net`。
 
 首次在本机创建只属于 Staging 的随机凭据：
 
@@ -472,7 +485,7 @@ Staging 使用独立 Compose 项目 practice-platform-staging，并固定使用�
 
 隔离保证：
 
-- 不读取真实 `.env`，测试账号、数据库名和 JWT 仅用于临时测试环境；
+- 不读取真实 `.env`、`.env.production` 或 `.env.staging`，测试账号、数据库名和 JWT 仅用于临时测试环境；
 - 不复用 `oj-db`、`oj-rabbitmq`、`oj-pgdata`、`oj-docs` 或当前部署网络；
 - 测试消息使用 `oj.test.*` 队列、交换机和路由键；
 - DOCX 固定资源位于 `backend-spring/src/test/resources/docx`，上传临时目录使用容器 `tmpfs`；
@@ -488,16 +501,22 @@ GitHub Actions 在推送到 `chore/ci-baseline`、`chore/release-hardening`、
 ### 不可变正式发布
 
 正式发布不再依赖应用镜像的 `latest` 标签，也不在部署现场构建镜像。
-`docker-compose.release.yml` 只接受已验证的 digest，并把 PostgreSQL、
-RabbitMQ、DOCX 卷及正式网络声明为外部资源；名称错误时会直接失败，
-不会自动创建空数据卷。发布前使用只读脚本检查：
+应用镜像在本机从确定的 Git commit 构建，并使用
+`oj-backend:<release>`、`oj-worker:<release>` 和
+`oj-frontend:<release>` 固定标签。`docker-compose.release.yml` 同时核对
+本地完整 Image ID 与 OCI revision，并把 PostgreSQL、RabbitMQ、DOCX 卷
+及正式网络声明为外部资源；名称错误时会直接失败，不会自动创建空数据卷。
+
+正式 Secret 只保存在被 Git 忽略的 `.env.production`；仓库中的
+`.env.production.example` 只列出变量名和占位值。发布前使用只读脚本检查：
 
 ```bash
 RELEASE_ENV_FILE=deploy/releases/v0.4.0-foundation.env \
+FORMAL_ENV_FILE=.env.production \
   ./scripts/release-preflight.sh
 ```
 
-完整的 Tag、OCI 标签、GHCR、Manifest 与人工发布边界见
+完整的本地固定镜像、Tag、OCI 标签、Manifest 与人工发布边界见
 [`docs/immutable-release-workflow.md`](docs/immutable-release-workflow.md)。
 仓库只保存不含秘密的 Release Manifest 模板，机器相关恢复清单和备份仍
 保存在 Git 工作区之外。

@@ -32,7 +32,12 @@ secret_keys=(
 )
 for key in "${secret_keys[@]}"; do
   release_require_env_key "$formal_env_file" "$key"
+  secret_value="$(release_env_value "$formal_env_file" "$key")"
+  case "${secret_value,,}" in
+    replace-with*|change-me*) release_die "$key still contains a placeholder" ;;
+  esac
 done
+unset secret_value
 
 jwt_secret="$(release_env_value "$formal_env_file" JWT_SECRET)"
 [[ ${#jwt_secret} -ge 32 ]] || release_die "JWT_SECRET must contain at least 32 characters"
@@ -64,7 +69,14 @@ verify_image() {
   local component="$1"
   local image_ref="$2"
   local expected_id="$3"
-  local actual_id revision version digests
+  local actual_id revision version
+  case "${image_ref,,}" in
+    */*|*:latest|*@*)
+      release_die "$component must use a local immutable release tag: $image_ref"
+      ;;
+  esac
+  [[ "$image_ref" == *:* ]] \
+    || release_die "$component image must include an explicit release tag"
   actual_id="$(docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null)" \
     || release_die "$component image is missing: $image_ref"
   [[ "$actual_id" == "$expected_id" ]] \
@@ -76,8 +88,7 @@ verify_image() {
     || release_die "$component OCI revision does not match RELEASE_GIT_SHA"
   [[ "$version" == "$(release_env_value "$release_env_file" EXPECTED_OCI_VERSION)" ]] \
     || release_die "$component OCI version does not match EXPECTED_OCI_VERSION"
-  [[ -n "$digests" ]] || release_die "$component image has no immutable digest"
-  echo "  $component: $actual_id (revision verified)"
+  echo "  $component: $image_ref -> $actual_id (revision verified)"
 }
 
 echo "Verifying immutable release images"
