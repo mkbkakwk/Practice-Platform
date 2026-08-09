@@ -1,0 +1,17 @@
+{
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "language": "CPP17",
+  "sourceCode": "int main() { return 0; }",
+  "limits": {
+    "compileTimeMs": 10000,
+    "runTimeMs": 2000,
+    "memoryMb": 256,
+    "outputLimitBytes": 1048576
+  },
+  "cases": [
+    {
+      "caseId": "1",
+      "stdin": "1 2\n"
+    }
+  ]
+}
