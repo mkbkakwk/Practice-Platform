@@ -1,47 +1,97 @@
-# Immutable production release workflow
+# Immutable local production release workflow
 
-Production releases follow one traceable chain:
+Production releases follow one traceable local chain:
 
 ```text
 annotated Git tag
   -> exact source commit
   -> CI
-  -> OCI-labelled image
-  -> registry digest
+  -> local OCI-labelled images with fixed release tags
+  -> recorded local Image IDs
   -> release manifest
   -> preflight
   -> audited application-container replacement
 ```
 
 Production must never use an application image tagged `latest`, and release
-Compose must never contain `build:`. Image construction happens before the
-maintenance window; deployment consumes only verified images.
+Compose must never contain `build:`. Images are built locally from an exact Git
+commit before the maintenance window; deployment consumes only the verified
+fixed tags and Image IDs recorded for that release.
+
+## Long-lived Docker environments
+
+- `oj` is Production. Its frontend is `http://localhost:3000`.
+- `practice-platform-staging` is Staging. Its frontend is
+  `http://localhost:18080`.
+
+Staging is isolated and does not replace Production. Do not stop Production
+merely because Staging is running. Temporary rehearsal environments must be
+removed after their verification work finishes.
 
 ## Files
 
 - `docker-compose.release.yml` is the no-build production topology.
-- `deploy/releases/v0.4.0-foundation.env.example` records non-secret image and
-  infrastructure identifiers for the current foundation release.
+- `.env.production.example` lists the production secret variable names without
+  containing any real secret.
+- `deploy/releases/v0.4.0-foundation.env.example` records non-secret local image
+  and infrastructure identifiers for the current foundation release.
 - `docs/release-manifest-template.md` is the sanitised manifest template.
 - `scripts/release-preflight.sh` is a fail-closed, read-only gate.
 - `scripts/release-status.sh` reports current production state without secrets.
-- `.github/workflows/publish-release-images.yml` is a manual GHCR publisher.
 
-Copy the release example to the ignored path before running preflight:
+Create the ignored local files before running preflight:
 
 ```bash
+cp .env.production.example .env.production
 cp deploy/releases/v0.4.0-foundation.env.example \
   deploy/releases/v0.4.0-foundation.env
 ```
 
-Replace only the five backup placeholders with existing, verified backup file
-paths. Business credentials remain in the separately protected `.env`; never
-copy them into release metadata.
+Replace every credential placeholder in `.env.production` with the actual
+machine-local production value. Replace the backup placeholders in the local
+release metadata with existing, verified backup paths. Never copy business
+credentials into release metadata or commit either runtime file.
 
-Run the read-only gates:
+## Building fixed local images
+
+Check out the exact release commit in a clean worktree, then build explicit
+release tags and OCI labels. For example:
+
+```bash
+release_version=v0.4.0-foundation
+release_sha=f1e257d2fc719c2be92fa7cdd8406a98f475a4f1
+
+docker build \
+  --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
+  --label org.opencontainers.image.version="$release_version" \
+  --tag "oj-backend:$release_version" backend-spring
+
+docker build \
+  --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
+  --label org.opencontainers.image.version="$release_version" \
+  --tag "oj-worker:$release_version" worker
+
+docker build \
+  --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
+  --label org.opencontainers.image.version="$release_version" \
+  --tag "oj-frontend:$release_version" frontend
+```
+
+Record the complete local Image IDs in the ignored release metadata and release
+manifest. A fixed local tag is a human-readable name; the expected Image ID and
+OCI revision are the fail-closed identity checks. A registry is not part of the
+Production deployment path.
+
+## Read-only gates
+
+Run:
 
 ```bash
 RELEASE_ENV_FILE=deploy/releases/v0.4.0-foundation.env \
+FORMAL_ENV_FILE=.env.production \
   ./scripts/release-preflight.sh
 
 RELEASE_ENV_FILE=deploy/releases/v0.4.0-foundation.env \
@@ -49,10 +99,10 @@ RELEASE_ENV_FILE=deploy/releases/v0.4.0-foundation.env \
 ```
 
 The preflight validates the annotated tag, source ancestry, exact local Image
-IDs, OCI labels, image digests, external volumes/network, required environment
-variable names, backup existence, Flyway version and current health. It uses a
-read-only PostgreSQL session and does not start, stop, recreate, pull or build
-anything.
+IDs, OCI labels, fixed local image references, external volumes/network,
+required environment variable names, backup existence, Flyway version and
+current health. It uses a read-only PostgreSQL session and does not start, stop,
+recreate, pull or build anything.
 
 ## External production data
 
@@ -63,49 +113,15 @@ silently creating empty production storage when a name is wrong.
 The current RabbitMQ data is held in an audited Docker anonymous volume. Its
 exact ID is fixed in the v0.4.0 example so the next release cannot accidentally
 attach empty storage. Moving it to a readable named volume requires a separate
-backup/recovery rehearsal and is not part of this release-hardening change.
-
-## GHCR publication preparation
-
-Target names:
-
-```text
-ghcr.io/mkbkakwk/practice-platform-backend:<git-sha-or-release-tag>
-ghcr.io/mkbkakwk/practice-platform-worker:<git-sha-or-release-tag>
-ghcr.io/mkbkakwk/practice-platform-frontend:<git-sha-or-release-tag>
-```
-
-The manual workflow uses the scoped `GITHUB_TOKEN`; no PAT belongs in Git,
-Dockerfiles or documentation. Before its first invocation:
-
-1. confirm the three package names do not conflict with an existing package;
-2. decide and review private/public package visibility;
-3. configure the `ghcr-release` GitHub Environment with required reviewers;
-4. verify Actions may write packages;
-5. select `confirmed-private-or-approved-public` in the manual dispatch form.
-
-The workflow refuses to overwrite an existing Git-SHA or release-version tag.
-Each image receives:
-
-```text
-org.opencontainers.image.revision=<full source SHA>
-org.opencontainers.image.source=https://github.com/mkbkakwk/Practice-Platform
-org.opencontainers.image.version=<annotated release tag>
-```
-
-It records the resulting registry digest as an artifact for the release
-manifest. Production Compose should be updated to the resulting
-`ghcr.io/...@sha256:...` references only in a later, explicitly approved
-release.
+backup/recovery rehearsal and is not part of this workflow.
 
 ## Deployment boundary
 
 This repository intentionally does not contain an automatic production deploy
-script. A later approved maintenance-window procedure may replace Backend,
-Worker and Frontend one at a time after preflight. PostgreSQL, RabbitMQ,
-external volumes and the production network must remain untouched.
+script. An explicitly approved maintenance-window procedure may replace
+Backend, Worker and Frontend one at a time after preflight. PostgreSQL,
+RabbitMQ, external volumes and the production network must remain untouched.
 
 The existing v0.4.0 images predate the final release tag and therefore retain
 OCI version `f1e257d-release`; their full revision and Image IDs remain fixed.
-All newly published registry images must use the annotated release tag as the
-OCI version.
+Future local release builds must use the release version as their OCI version.

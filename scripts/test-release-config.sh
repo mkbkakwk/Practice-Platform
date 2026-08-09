@@ -4,7 +4,9 @@ set -eu
 
 compose_file="docker-compose.release.yml"
 release_example="deploy/releases/v0.4.0-foundation.env.example"
+production_env_example=".env.production.example"
 manifest_template="docs/release-manifest-template.md"
+release_workflow_doc="docs/immutable-release-workflow.md"
 publish_workflow=".github/workflows/publish-release-images.yml"
 ci_workflow=".github/workflows/ci.yml"
 
@@ -13,9 +15,11 @@ fail() {
   exit 1
 }
 
-for file in "$compose_file" "$release_example" "$manifest_template" "$publish_workflow" "$ci_workflow"; do
+for file in "$compose_file" "$release_example" "$production_env_example" \
+  "$manifest_template" "$release_workflow_doc" "$ci_workflow"; do
   [ -f "$file" ] || fail "missing $file"
 done
+[ ! -e "$publish_workflow" ] || fail "remote registry publishing workflow must be removed"
 
 for script in scripts/release-common.sh scripts/release-preflight.sh scripts/release-status.sh; do
   bash -n "$script" || fail "invalid Bash syntax in $script"
@@ -30,12 +34,29 @@ fi
 if grep -Eqi 'staging' "$compose_file"; then
   fail "release Compose must not reference staging"
 fi
+if grep -Eqi 'ghcr\.io|GitHub Container Registry|GHCR' \
+  "$compose_file" "$release_example" "$manifest_template" "$release_workflow_doc" README.md; then
+  fail "production release documentation and configuration must not require GHCR"
+fi
 
-for image_key in POSTGRES_IMAGE RABBITMQ_IMAGE BACKEND_IMAGE WORKER_IMAGE FRONTEND_IMAGE; do
+for image_key in POSTGRES_IMAGE RABBITMQ_IMAGE; do
   value="$(awk -F= -v key="$image_key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$release_example")"
   [ -n "$value" ] || fail "$image_key is empty"
   printf '%s' "$value" | grep -Eq '@sha256:[0-9a-f]{64}$' \
     || fail "$image_key is not pinned by digest"
+done
+
+release_version="$(awk -F= '$1 == "RELEASE_VERSION" {sub(/^[^=]*=/, ""); print}' "$release_example")"
+[ -n "$release_version" ] || fail "RELEASE_VERSION is empty"
+for image_spec in \
+  "BACKEND_IMAGE:oj-backend" \
+  "WORKER_IMAGE:oj-worker" \
+  "FRONTEND_IMAGE:oj-frontend"; do
+  image_key="${image_spec%%:*}"
+  local_repo="${image_spec#*:}"
+  value="$(awk -F= -v key="$image_key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$release_example")"
+  [ "$value" = "$local_repo:$release_version" ] \
+    || fail "$image_key must use the fixed local release tag $local_repo:$release_version"
 done
 
 for required_ref in \
@@ -59,12 +80,30 @@ if awk '
   fail "release Compose contains a hard-coded secret"
 fi
 
+for key in POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD JWT_SECRET \
+  JWT_EXPIRES_IN CORS_ORIGIN PROMOTE_FIRST_ADMIN WORKER_CONCURRENCY WORKER_MAX_CONCURRENCY; do
+  value="$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$production_env_example")"
+  [ -n "$value" ] || fail "$production_env_example is missing $key"
+done
+[ "$(awk -F= '$1 == "PROMOTE_FIRST_ADMIN" {print $2}' "$production_env_example")" = "false" ] \
+  || fail "production environment example must disable first-admin promotion"
+grep -Fxq '.env.production' .gitignore || fail ".env.production must be ignored"
+grep -Fxq '!.env.production.example' .gitignore || fail ".env.production.example must remain trackable"
+
 grep -Fq 'PROMOTE_FIRST_ADMIN: "false"' "$compose_file" \
   || fail "production first-admin promotion must be disabled"
+grep -Fq 'formal_env_file="${FORMAL_ENV_FILE:-$release_repo_root/.env.production}"' scripts/release-common.sh \
+  || fail "release tools must default to .env.production"
+grep -Fq 'still contains a placeholder' scripts/release-preflight.sh \
+  || fail "release preflight must reject production secret placeholders"
 grep -Fq 'config --format json' scripts/release-preflight.sh \
   || fail "release preflight must inspect the resolved Compose configuration"
 grep -Fq 'resolved Release Compose must force PROMOTE_FIRST_ADMIN=false' scripts/release-preflight.sh \
   || fail "release preflight must fail when first-admin promotion is enabled"
+grep -Fq '*/*|*:latest|*@*)' scripts/release-preflight.sh \
+  || fail "release preflight must reject registry, latest and digest application references"
+grep -Fq 'image must include an explicit release tag' scripts/release-preflight.sh \
+  || fail "release preflight must reject implicit latest image references"
 if grep -Eq 'VITE_DEPLOY_ENV|VITE_BUILD_SHA' "$compose_file"; then
   fail "production release Compose must not inject the staging badge"
 fi
@@ -76,32 +115,12 @@ for field in 'Release Version' 'Release Git SHA' 'Main Merge Commit' \
   'Database Volume' 'RabbitMQ Volume' 'DOCX Volume' 'Backup ID' 'Release PR'; do
   grep -Fq "$field" "$manifest_template" || fail "manifest template is missing $field"
 done
-
-grep -Fq 'workflow_dispatch:' "$publish_workflow" || fail "registry workflow must be manual"
-grep -Fq 'packages: write' "$publish_workflow" || fail "registry workflow lacks packages write"
-grep -Fq 'confirm_package_visibility' "$publish_workflow" || fail "registry workflow lacks visibility confirmation"
-grep -Fq 'needs: release-gate' "$publish_workflow" || fail "registry publication must depend on the approval gate"
-grep -Fq 'exit 1' "$publish_workflow" || fail "unconfirmed registry publication must fail"
-grep -Fq 'secrets.GITHUB_TOKEN' "$publish_workflow" || fail "registry workflow must use GitHub OIDC-scoped token"
-grep -Fq 'uses: docker/setup-buildx-action@v3' "$publish_workflow" \
-  || fail "registry workflow must initialize Docker Buildx"
-grep -Fq 'driver: docker-container' "$publish_workflow" \
-  || fail "registry workflow must use the docker-container Buildx driver"
-setup_buildx_line="$(grep -nF 'uses: docker/setup-buildx-action@v3' "$publish_workflow" | head -n 1 | cut -d: -f1)"
-build_push_line="$(grep -nF 'uses: docker/build-push-action@v6' "$publish_workflow" | head -n 1 | cut -d: -f1)"
-[ "$setup_buildx_line" -lt "$build_push_line" ] \
-  || fail "Buildx must be initialized before the image build"
-grep -Fq 'provenance: mode=max' "$publish_workflow" \
-  || fail "registry workflow must keep maximum provenance attestation"
-grep -Fq 'sbom: true' "$publish_workflow" \
-  || fail "registry workflow must keep SBOM attestation"
-if grep -Eqi 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}' "$publish_workflow"; then
-  fail "registry workflow contains a plaintext token"
-fi
+grep -Fq 'Local Image ID' "$manifest_template" \
+  || fail "manifest template must record local Image IDs"
 
 grep -Fq 'Reject tracked runtime environment files' "$ci_workflow" \
   || fail "CI must reject tracked runtime environment files"
-grep -Fq "git ls-files -- .env .env.staging 'deploy/releases/*.env'" "$ci_workflow" \
-  || fail "CI must inspect the Git index for runtime environment files"
+grep -Fq "git ls-files -- .env .env.production .env.staging 'deploy/releases/*.env'" "$ci_workflow" \
+  || fail "CI must inspect the Git index for production runtime environment files"
 
-echo "Release configuration checks passed (immutable images, external data, no secrets, no staging)."
+echo "Release configuration checks passed (fixed local images, external data, ignored secrets, no registry or staging dependency)."

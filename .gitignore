@@ -12,6 +12,9 @@ target/
 
 # ── Environment & secrets ─────────────────────────────────
 .env
+.env.production
+.env.production.*
+!.env.production.example
 .env.staging
 .env.staging.*
 !.env.staging.example

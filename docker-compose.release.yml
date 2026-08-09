@@ -1,7 +1,7 @@
 name: oj
 
 # Immutable production topology. This file never builds application images.
-# Supply business secrets with .env and audited release metadata with
+# Supply business secrets with .env.production and audited release metadata with
 # deploy/releases/<release>.env.
 services:
   db:
