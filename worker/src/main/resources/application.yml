@@ -36,7 +36,19 @@ mybatis-plus:
 
 oj:
   judge:
+    execution-mode: ${JUDGE_EXECUTION_MODE:legacy-local}
     workspace: ${JUDGE_WORKSPACE:/tmp/oj-judge}
+    compile-timeout-ms: ${JUDGE_COMPILE_TIMEOUT_MS:10000}
+    output-limit-bytes: ${JUDGE_OUTPUT_LIMIT_BYTES:16777216}
+    max-source-bytes: ${JUDGE_MAX_SOURCE_BYTES:1048576}
+    max-stdin-bytes: ${JUDGE_MAX_STDIN_BYTES:1048576}
+    runner:
+      base-url: ${RUNNER_BASE_URL:}
+      token: ${RUNNER_TOKEN:}
+      connect-timeout-ms: ${RUNNER_CONNECT_TIMEOUT_MS:1000}
+      read-timeout-ms: ${RUNNER_READ_TIMEOUT_MS:15000}
+      max-request-bytes: ${RUNNER_MAX_REQUEST_BYTES:4194304}
+      max-response-bytes: ${RUNNER_MAX_RESPONSE_BYTES:33554432}
   rabbitmq:
     exchange: oj.judge
     routing-key: oj.judge.submit

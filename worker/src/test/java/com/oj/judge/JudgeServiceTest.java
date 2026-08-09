@@ -1,5 +1,9 @@
 package com.oj.judge;
 
+import com.oj.sandbox.SandboxLanguage;
+import com.oj.sandbox.local.LegacyLocalSandboxClient;
+import com.oj.sandbox.local.LegacyProcessResult;
+import com.oj.sandbox.local.LegacyProcessRunner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,8 +23,11 @@ class JudgeServiceTest {
     private JudgeService judgeService;
 
     @BeforeEach
-    void createJudgeService() throws Exception {
-        judgeService = new JudgeService(tempDir);
+    void createJudgeService() {
+        judgeService = new JudgeService(
+                new LegacyLocalSandboxClient(tempDir, 1_048_576, 1_048_576),
+                10_000,
+                16 * 1_024 * 1_024);
     }
 
     @AfterEach
@@ -78,6 +85,26 @@ class JudgeServiceTest {
                 "[{\"input\":\"\",\"output\":\"\"}]", 1000);
 
         assertThat(result.verdict).isEqualTo("CE");
+    }
+
+    @Test
+    void cAc() {
+        JudgeService.JudgeResult result = judge(
+                "c",
+                "#include <stdio.h>\nint main(void) { int a,b; scanf(\"%d %d\", &a, &b); printf(\"%d\\n\", a+b); }",
+                "[{\"input\":\"4 6\\n\",\"output\":\"10\\n\"}]", 2000);
+
+        assertThat(result.verdict).isEqualTo("AC");
+    }
+
+    @Test
+    void cpp17Ac() {
+        JudgeService.JudgeResult result = judge(
+                "cpp",
+                "#include <iostream>\nint main() { int a,b; std::cin >> a >> b; std::cout << a+b << '\\n'; }",
+                "[{\"input\":\"7 8\\n\",\"output\":\"15\\n\"}]", 2000);
+
+        assertThat(result.verdict).isEqualTo("AC");
     }
 
     @Test
@@ -226,11 +253,11 @@ class JudgeServiceTest {
 
     @Test
     void allDeclaredLanguageRuntimesAreAvailable() {
-        assertThat(LanguageDef.ALL)
-                .extracting(LanguageDef::id)
-                .containsExactly("python", "javascript", "cpp", "c", "java");
+        assertThat(SandboxLanguage.values())
+                .extracting(SandboxLanguage::platformId)
+                .containsExactly("python", "javascript", "c", "cpp", "java");
 
-        Runner runner = new Runner();
+        LegacyProcessRunner runner = new LegacyProcessRunner();
         List<List<String>> versionCommands = List.of(
                 List.of("python3", "--version"),
                 List.of("node", "--version"),
@@ -240,9 +267,9 @@ class JudgeServiceTest {
                 List.of("java", "-version")
         );
         for (List<String> command : versionCommands) {
-            RunResult result = runner.run(command, "", 3000, 0, tempDir);
-            String diagnostic = result.stdout + result.stderr;
-            assertThat(result.exitCode)
+            LegacyProcessResult result = runner.run(command, "", 3000, 0, 1_048_576, tempDir);
+            String diagnostic = result.stdout() + result.stderr();
+            assertThat(result.exitCode())
                     .as("%s must be installed: %s", command.getFirst(), diagnostic)
                     .isZero();
             assertThat(diagnostic).as("%s version output", command.getFirst()).isNotBlank();

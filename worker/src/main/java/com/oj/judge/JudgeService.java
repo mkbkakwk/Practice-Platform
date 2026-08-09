@@ -1,30 +1,37 @@
 package com.oj.judge;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.oj.sandbox.SandboxCaseResult;
+import com.oj.sandbox.SandboxClient;
+import com.oj.sandbox.SandboxClientException;
+import com.oj.sandbox.SandboxCompileResult;
+import com.oj.sandbox.SandboxLanguage;
+import com.oj.sandbox.SandboxLimits;
+import com.oj.sandbox.SandboxRequest;
+import com.oj.sandbox.SandboxResult;
+import com.oj.sandbox.SandboxStatus;
+import com.oj.sandbox.SandboxTestCase;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Core judging logic: compile once, then run each test case, comparing
- * normalized output. Returns a JudgeResult describing the verdict.
- *
- * Mirrors the Node judge.service.ts semantics exactly so behaviour stays
- * consistent across the migration.
- */
+/** Business-level judging: parse cases, invoke an execution boundary, and decide verdicts. */
 public class JudgeService {
 
-    private final Runner runner = new Runner();
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final Path workspace;
+    private static final Logger log = LoggerFactory.getLogger(JudgeService.class);
 
-    public JudgeService(Path workspace) throws IOException {
-        this.workspace = workspace;
-        Files.createDirectories(workspace);
+    private final SandboxClient sandboxClient;
+    private final long compileTimeoutMs;
+    private final int outputLimitBytes;
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    public JudgeService(SandboxClient sandboxClient, long compileTimeoutMs, int outputLimitBytes) {
+        this.sandboxClient = sandboxClient;
+        this.compileTimeoutMs = compileTimeoutMs;
+        this.outputLimitBytes = outputLimitBytes;
     }
 
     public static class TestCase {
@@ -33,6 +40,7 @@ public class JudgeService {
     }
 
     public static class JudgeResult {
+        public String requestId;
         public String verdict;
         public int passed;
         public int total;
@@ -45,154 +53,222 @@ public class JudgeService {
         public String failedActual;
     }
 
-    public JudgeResult judge(String language, String code, long timeLimitMs, long memoryLimitKb, String testCasesJson) {
-        LanguageDef lang = LanguageDef.of(language);
-        JudgeResult r = new JudgeResult();
-        if (lang == null) {
-            r.verdict = "CE";
-            r.message = "不支持的语言: " + language;
-            try {
-                TestCase[] tcs = mapper.readValue(testCasesJson, TestCase[].class);
-                r.total = tcs.length;
-            } catch (Exception ignored) {}
-            return r;
+    public JudgeResult judge(
+            String language,
+            String code,
+            long timeLimitMs,
+            long memoryLimitKb,
+            String testCasesJson) {
+        JudgeResult result = new JudgeResult();
+        TestCase[] testCases = parseTestCases(testCasesJson, result);
+        if (testCases == null) {
+            return result;
+        }
+        result.total = testCases.length;
+
+        SandboxLanguage sandboxLanguage = SandboxLanguage.fromPlatformId(language).orElse(null);
+        if (sandboxLanguage == null) {
+            result.verdict = "CE";
+            result.message = "不支持的语言: " + language;
+            return result;
         }
 
+        String requestId = UUID.randomUUID().toString();
+        result.requestId = requestId;
+        SandboxRequest request = new SandboxRequest(
+                requestId,
+                sandboxLanguage,
+                code,
+                new SandboxLimits(
+                        compileTimeoutMs,
+                        timeLimitMs,
+                        memoryLimitMb(memoryLimitKb),
+                        outputLimitBytes),
+                sandboxCases(testCases));
+
+        long startedAt = System.nanoTime();
+        try {
+            SandboxResult sandboxResult = sandboxClient.execute(request);
+            if (sandboxResult == null || !requestId.equals(sandboxResult.requestId())) {
+                return systemError(result, "Runner response requestId mismatch");
+            }
+            JudgeResult mapped = mapResult(result, testCases, sandboxResult);
+            log.info("[worker] sandbox requestId={} language={} status={} durationMs={} cases={}",
+                    requestId, sandboxLanguage, mapped.verdict,
+                    (System.nanoTime() - startedAt) / 1_000_000, testCases.length);
+            return mapped;
+        } catch (SandboxClientException exception) {
+            log.warn("[worker] sandbox requestId={} language={} failed: {}",
+                    requestId, sandboxLanguage, exception.getMessage());
+            return systemError(result, "Runner unavailable or returned an invalid response");
+        } catch (RuntimeException exception) {
+            log.error("[worker] sandbox requestId={} language={} unexpected failure",
+                    requestId, sandboxLanguage, exception);
+            return systemError(result, "评测器异常");
+        }
+    }
+
+    private TestCase[] parseTestCases(String testCasesJson, JudgeResult result) {
         TestCase[] testCases;
         try {
             testCases = mapper.readValue(testCasesJson, TestCase[].class);
-        } catch (Exception e) {
-            r.verdict = "SE";
-            r.message = "测试点数据损坏: " + e.getMessage();
-            return r;
+        } catch (Exception exception) {
+            result.verdict = "SE";
+            result.message = "测试点数据损坏";
+            return null;
         }
         if (testCases == null || testCases.length == 0) {
-            r.verdict = "SE";
-            r.total = 0;
-            r.message = "No test cases configured";
-            return r;
+            result.verdict = "SE";
+            result.total = 0;
+            result.message = "No test cases configured";
+            return null;
         }
-        r.total = testCases.length;
+        return testCases;
+    }
 
-        String runId = UUID.randomUUID().toString();
-        Path dir = workspace.resolve(runId);
-        try {
-            Files.createDirectories(dir);
-            Path srcPath = dir.resolve("Main." + lang.ext());
-            Files.writeString(srcPath, code);
-            Path outPath = dir.resolve("main_out");
+    private List<SandboxTestCase> sandboxCases(TestCase[] testCases) {
+        List<SandboxTestCase> cases = new ArrayList<>(testCases.length);
+        for (int index = 0; index < testCases.length; index++) {
+            String stdin = testCases[index].input == null ? "" : testCases[index].input;
+            cases.add(new SandboxTestCase(Integer.toString(index + 1), stdin));
+        }
+        return List.copyOf(cases);
+    }
 
-            // JVM and V8 reserve large virtual address spaces; ulimit -v would prevent
-            // either runtime from starting before submitted code executes.
-            long memCap = ("java".equals(language) || "javascript".equals(language)) ? 0 : memoryLimitKb * 2;
+    private JudgeResult mapResult(
+            JudgeResult result,
+            TestCase[] expectedCases,
+            SandboxResult sandboxResult) {
+        SandboxCompileResult compile = sandboxResult.compile();
+        if (compile == null || compile.status() == null) {
+            return systemError(result, "Runner returned an invalid compile result");
+        }
+        if (compile.status() != SandboxStatus.OK) {
+            return mapCompileFailure(result, compile);
+        }
+        if (sandboxResult.cases() == null || sandboxResult.cases().isEmpty()
+                || sandboxResult.cases().size() > expectedCases.length) {
+            return systemError(result, "Runner returned an invalid case count");
+        }
 
-            // 1) Compile (if needed)
-            if (lang.compileCommand() != null) {
-                List<String> cmd = resolveCommand(lang.compileCommand(), srcPath, outPath);
-                RunResult cr = runner.run(cmd, "", 10000, 0, dir);
-                if (cr.timedOut || cr.exitCode != 0) {
-                    r.verdict = "CE";
-                    r.message = (cr.stderr == null || cr.stderr.isBlank()) ? "编译失败" : cr.stderr.trim();
-                    cleanup(dir);
-                    return r;
-                }
+        int passed = 0;
+        long maxTimeMs = 0;
+        long maxMemoryKb = 0;
+        for (int index = 0; index < sandboxResult.cases().size(); index++) {
+            SandboxCaseResult actual = sandboxResult.cases().get(index);
+            String expectedCaseId = Integer.toString(index + 1);
+            if (actual == null || actual.status() == null || !expectedCaseId.equals(actual.caseId())) {
+                return systemError(result, "Runner returned an invalid case result");
+            }
+            maxTimeMs = Math.max(maxTimeMs, actual.timeMs());
+            maxMemoryKb = Math.max(maxMemoryKb, actual.memoryKb());
+            if (actual.status() != SandboxStatus.OK) {
+                result.passed = passed;
+                result.timeMs = maxTimeMs;
+                result.memoryKb = maxMemoryKb;
+                result.failedCase = index + 1;
+                return mapCaseFailure(result, actual, index + 1);
             }
 
-            // 2) Run each test case
-            int passed = 0;
-            long maxTime = 0;
-            for (int i = 0; i < testCases.length; i++) {
-                TestCase tc = testCases[i];
-                List<String> runCmd = resolveCommand(lang.runCommand(), srcPath, outPath);
-                RunResult rr = runner.run(runCmd, tc.input == null ? "" : tc.input, timeLimitMs, memCap, dir);
-
-                if (rr.timedOut) {
-                    r.verdict = "TLE";
-                    r.passed = passed;
-                    r.timeMs = Math.max(maxTime, timeLimitMs);
-                    r.message = "第 " + (i + 1) + " 个测试点运行超时";
-                    r.failedCase = i + 1;
-                    cleanup(dir);
-                    return r;
-                }
-                if (rr.memoryError) {
-                    r.verdict = "RE";
-                    r.passed = passed;
-                    r.timeMs = maxTime;
-                    r.memoryKb = memoryLimitKb;
-                    r.message = "第 " + (i + 1) + " 个测试点内存超限";
-                    r.failedCase = i + 1;
-                    cleanup(dir);
-                    return r;
-                }
-                if (rr.exitCode != 0) {
-                    r.verdict = "RE";
-                    r.passed = passed;
-                    r.timeMs = maxTime;
-                    r.message = "第 " + (i + 1) + " 个测试点运行错误 (退出码 " + rr.exitCode + ")";
-                    r.failedCase = i + 1;
-                    cleanup(dir);
-                    return r;
-                }
-                maxTime = Math.max(maxTime, rr.elapsedMs);
-                if (!normalize(tc.output).equals(normalize(rr.stdout))) {
-                    r.verdict = "WA";
-                    r.passed = passed;
-                    r.timeMs = maxTime;
-                    r.message = "第 " + (i + 1) + " 个测试点答案错误";
-                    r.failedCase = i + 1;
-                    r.failedInput = tc.input;
-                    r.failedExpected = tc.output;
-                    r.failedActual = rr.stdout;
-                    cleanup(dir);
-                    return r;
-                }
-                passed++;
+            TestCase expected = expectedCases[index];
+            if (!normalize(expected.output).equals(normalize(actual.stdout()))) {
+                result.verdict = "WA";
+                result.passed = passed;
+                result.timeMs = maxTimeMs;
+                result.memoryKb = maxMemoryKb;
+                result.failedCase = index + 1;
+                result.failedInput = expected.input;
+                result.failedExpected = expected.output;
+                result.failedActual = actual.stdout();
+                result.message = "第 " + (index + 1) + " 个测试点答案错误";
+                return result;
             }
-            r.verdict = "AC";
-            r.passed = passed;
-            r.timeMs = maxTime;
-            r.message = "通过全部 " + testCases.length + " 个测试点";
-            return r;
-        } catch (Exception e) {
-            r.verdict = "SE";
-            r.message = "评测器异常: " + e.getMessage();
-            return r;
-        } finally {
-            cleanup(dir);
+            passed++;
         }
+
+        if (passed != expectedCases.length) {
+            return systemError(result, "Runner omitted test case results");
+        }
+        result.verdict = "AC";
+        result.passed = passed;
+        result.timeMs = maxTimeMs;
+        result.memoryKb = maxMemoryKb;
+        result.message = "通过全部 " + expectedCases.length + " 个测试点";
+        return result;
+    }
+
+    private JudgeResult mapCompileFailure(JudgeResult result, SandboxCompileResult compile) {
+        return switch (compile.status()) {
+            case COMPILE_ERROR, TIME_LIMIT_EXCEEDED, MEMORY_LIMIT_EXCEEDED, OUTPUT_LIMIT_EXCEEDED -> {
+                result.verdict = "CE";
+                result.timeMs = compile.timeMs();
+                result.message = nonBlank(compile.message(), nonBlank(compile.stderr(), "编译失败"));
+                yield result;
+            }
+            case RUNTIME_ERROR, SYSTEM_ERROR -> systemError(result, "Runner compilation failed");
+            case OK -> result;
+        };
+    }
+
+    private JudgeResult mapCaseFailure(JudgeResult result, SandboxCaseResult actual, int caseNumber) {
+        switch (actual.status()) {
+            case TIME_LIMIT_EXCEEDED -> {
+                result.verdict = "TLE";
+                result.message = "第 " + caseNumber + " 个测试点运行超时";
+            }
+            case RUNTIME_ERROR -> {
+                result.verdict = "RE";
+                result.message = "第 " + caseNumber + " 个测试点运行错误 (退出码 "
+                        + nonNullExitCode(actual.exitCode()) + ")";
+            }
+            case MEMORY_LIMIT_EXCEEDED -> {
+                result.verdict = "RE";
+                result.message = "第 " + caseNumber + " 个测试点内存超限";
+            }
+            case OUTPUT_LIMIT_EXCEEDED -> {
+                result.verdict = "RE";
+                result.message = "第 " + caseNumber + " 个测试点输出超限";
+            }
+            case COMPILE_ERROR, SYSTEM_ERROR -> systemError(result, "Runner execution failed");
+            case OK -> {
+                return systemError(result, "Runner returned an invalid case status");
+            }
+        }
+        return result;
+    }
+
+    private JudgeResult systemError(JudgeResult result, String message) {
+        result.verdict = "SE";
+        result.message = message;
+        return result;
+    }
+
+    private int memoryLimitMb(long memoryLimitKb) {
+        long value = Math.max(1, (memoryLimitKb + 1_023) / 1_024);
+        return (int) Math.min(Integer.MAX_VALUE, value);
+    }
+
+    private int nonNullExitCode(Integer exitCode) {
+        return exitCode == null ? -1 : exitCode;
+    }
+
+    private String nonBlank(String preferred, String fallback) {
+        return preferred == null || preferred.isBlank() ? fallback : preferred.trim();
     }
 
     /** Trim trailing spaces per line, drop trailing blank lines, trim edges. */
-    private String normalize(String s) {
-        if (s == null) return "";
-        String[] lines = s.replace("\r\n", "\n").replace("\r", "\n").split("\n", -1);
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < lines.length; i++) {
-            sb.append(lines[i].replaceAll("\\s+$", ""));
-            if (i < lines.length - 1) sb.append("\n");
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
         }
-        return sb.toString().replaceAll("\n+$", "").strip();
-    }
-
-    private List<String> resolveCommand(List<String> command, Path srcPath, Path outPath) {
-        return command.stream()
-                .map(argument -> argument
-                        .replace("{src}", srcPath.toString())
-                        .replace("{out}", outPath.toString()))
-                .toList();
-    }
-
-    private void cleanup(Path dir) {
-        try {
-            if (Files.exists(dir)) {
-                try (var stream = Files.walk(dir)) {
-                    stream.sorted(java.util.Comparator.reverseOrder())
-                            .forEach(p -> {
-                                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-                            });
-                }
+        String[] lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n", -1);
+        StringBuilder normalized = new StringBuilder();
+        for (int index = 0; index < lines.length; index++) {
+            normalized.append(lines[index].replaceAll("\\s+$", ""));
+            if (index < lines.length - 1) {
+                normalized.append("\n");
             }
-        } catch (IOException ignored) {}
+        }
+        return normalized.toString().replaceAll("\n+$", "").strip();
     }
 }
