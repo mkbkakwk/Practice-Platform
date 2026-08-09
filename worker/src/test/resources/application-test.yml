@@ -9,6 +9,7 @@ spring:
 
 oj:
   judge:
+    execution-mode: legacy-local
     workspace: ${JUDGE_WORKSPACE:/tmp/practice-platform-test-judge}
   rabbitmq:
     exchange: ${OJ_RABBITMQ_EXCHANGE:oj.test.judge}
