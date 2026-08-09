@@ -6,7 +6,7 @@ release_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 release_repo_root="$(cd "$release_script_dir/.." && pwd)"
 release_compose_file="$release_repo_root/docker-compose.release.yml"
 release_env_file="${RELEASE_ENV_FILE:-$release_repo_root/deploy/releases/v0.4.0-foundation.env}"
-formal_env_file="${FORMAL_ENV_FILE:-$release_repo_root/.env}"
+formal_env_file="${FORMAL_ENV_FILE:-$release_repo_root/.env.production}"
 
 release_die() {
   echo "ERROR: $*" >&2
