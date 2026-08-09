@@ -1,12 +1,16 @@
 package com.oj.sandbox.local;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,6 +20,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * not be used as the final isolation boundary for untrusted code.
  */
 public final class LegacyProcessRunner {
+
+    private static final List<String> TRUSTED_SYSTEM_PATHS = List.of(
+            "/usr/local/sbin",
+            "/usr/local/bin",
+            "/usr/sbin",
+            "/usr/bin",
+            "/sbin",
+            "/bin");
 
     public LegacyProcessResult run(
             List<String> command,
@@ -48,10 +60,7 @@ public final class LegacyProcessRunner {
         processBuilder.directory(cwd.toFile());
         processBuilder.redirectErrorStream(false);
         processBuilder.environment().clear();
-        processBuilder.environment().put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
-        processBuilder.environment().put("HOME", cwd.toString());
-        processBuilder.environment().put("LANG", "C.UTF-8");
-        processBuilder.environment().put("LC_ALL", "C.UTF-8");
+        processBuilder.environment().putAll(trustedEnvironment(cwd));
 
         long startedAt = System.currentTimeMillis();
         Process process;
@@ -121,6 +130,29 @@ public final class LegacyProcessRunner {
 
         return new LegacyProcessResult(stdoutText, stderrText, exitCode, timedOut,
                 memoryError, outputExceeded.get(), elapsedMs);
+    }
+
+    static Map<String, String> trustedEnvironment(Path cwd) {
+        String javaHome = currentJavaHome();
+        LinkedHashSet<String> pathEntries = new LinkedHashSet<>();
+        pathEntries.add(Path.of(javaHome).resolve("bin").normalize().toString());
+        pathEntries.addAll(TRUSTED_SYSTEM_PATHS);
+
+        Map<String, String> environment = new LinkedHashMap<>();
+        environment.put("JAVA_HOME", javaHome);
+        environment.put("PATH", String.join(File.pathSeparator, pathEntries));
+        environment.put("HOME", cwd.toString());
+        environment.put("LANG", "C.UTF-8");
+        environment.put("LC_ALL", "C.UTF-8");
+        return Map.copyOf(environment);
+    }
+
+    private static String currentJavaHome() {
+        String javaHome = System.getProperty("java.home");
+        if (javaHome == null || javaHome.isBlank()) {
+            throw new IllegalStateException("Current JVM java.home is unavailable");
+        }
+        return Path.of(javaHome).toAbsolutePath().normalize().toString();
     }
 
     private Thread readerThread(
