@@ -32,6 +32,8 @@ build_rc=0
 startup_rc=0
 backend_rc=125
 worker_rc=125
+runner_rc=125
+worker_runner_contract_rc=125
 frontend_rc=125
 release_config_rc=125
 
@@ -45,11 +47,15 @@ if [[ $build_rc -eq 0 ]]; then
 fi
 
 if [[ $build_rc -eq 0 && $release_config_rc -eq 0 ]]; then
-  echo "==> Starting isolated PostgreSQL and RabbitMQ"
-  "${compose[@]}" up -d --wait test-db test-rabbitmq || startup_rc=$?
+  echo "==> Starting isolated PostgreSQL, RabbitMQ, and Runner contract service"
+  "${compose[@]}" up -d --wait test-db test-rabbitmq runner-contract || startup_rc=$?
 fi
 
 if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 ]]; then
+  echo "==> Running Runner service tests"
+  runner_rc=0
+  "${compose[@]}" run --rm runner-test || runner_rc=$?
+
   echo "==> Running backend tests"
   backend_rc=0
   "${compose[@]}" run --rm backend-test || backend_rc=$?
@@ -57,6 +63,10 @@ if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 ]]; then
   echo "==> Running worker tests"
   worker_rc=0
   "${compose[@]}" run --rm worker-test || worker_rc=$?
+
+  echo "==> Running Worker-to-Runner HTTP contract test"
+  worker_runner_contract_rc=0
+  "${compose[@]}" run --rm worker-runner-contract-test || worker_runner_contract_rc=$?
 
   echo "==> Running frontend lint, authentication tests, and build"
   frontend_rc=0
@@ -69,10 +79,13 @@ printf '  image build:   %s\n' "$build_rc"
 printf '  dependencies:  %s\n' "$startup_rc"
 printf '  backend-test:  %s\n' "$backend_rc"
 printf '  worker-test:   %s\n' "$worker_rc"
+printf '  runner-test:   %s\n' "$runner_rc"
+printf '  worker-runner-contract: %s\n' "$worker_runner_contract_rc"
 printf '  frontend-test: %s\n' "$frontend_rc"
 printf '  release-config: %s\n' "$release_config_rc"
 
-for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" "$frontend_rc"; do
+for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" \
+  "$runner_rc" "$worker_runner_contract_rc" "$frontend_rc"; do
   if [[ $rc -ne 0 ]]; then
     exit "$rc"
   fi
