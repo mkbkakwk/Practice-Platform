@@ -156,4 +156,101 @@ grep -Fq 'runtime rootfs' "$output" || fail "runtime rootfs check disappeared"
 grep -Fq 'workspace root' "$output" || fail "workspace check disappeared"
 grep -Fq 'seccomp policy' "$output" || fail "seccomp policy check disappeared"
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  rootfs="$temp_root/rootfs"
+  mkdir -p -- \
+    "$rootfs/dev" \
+    "$rootfs/proc" \
+    "$rootfs/tmp" \
+    "$rootfs/workspace" \
+    "$rootfs/usr/bin" \
+    "$rootfs/usr/libexec" \
+    "$rootfs/usr/local/bin" \
+    "$rootfs/etc/alternatives" \
+    "$rootfs/usr/lib/jvm/java-21-openjdk-amd64/bin"
+  : > "$rootfs/usr/libexec/python3"
+  : > "$rootfs/usr/bin/gcc"
+  : > "$rootfs/usr/bin/g++"
+  : > "$rootfs/usr/local/bin/node"
+  : > "$rootfs/usr/lib/jvm/java-21-openjdk-amd64/bin/java"
+  : > "$rootfs/usr/lib/jvm/java-21-openjdk-amd64/bin/javac"
+  ln -s -- ../libexec/python3 "$rootfs/usr/bin/python3"
+  ln -s -- /usr/local/bin/node "$rootfs/usr/bin/node"
+  ln -s -- /etc/alternatives/java "$rootfs/usr/bin/java"
+  ln -s -- /usr/lib/jvm/java-21-openjdk-amd64/bin/java "$rootfs/etc/alternatives/java"
+  ln -s -- /etc/alternatives/javac "$rootfs/usr/bin/javac"
+  ln -s -- /usr/lib/jvm/java-21-openjdk-amd64/bin/javac "$rootfs/etc/alternatives/javac"
+
+  output="$temp_root/rootfs-valid.out"
+  run_preflight "$output" \
+    PATH="$base_bin:$system_path" \
+    RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
+    RUNNER_SANDBOX_ROOTFS="$rootfs" \
+    MOCK_NSJAIL_RC=0 \
+    MOCK_UNSHARE_RC=0 || true
+  for required in \
+    dev proc tmp workspace \
+    usr/bin/python3 usr/bin/node usr/bin/gcc usr/bin/g++ usr/bin/javac usr/bin/java \
+    usr/lib/jvm/java-21-openjdk-amd64; do
+    assert_contains "$output" "PASS  rootfs path: /$required"
+  done
+
+  rm -- "$rootfs/usr/bin/node"
+  ln -s -- /usr/local/bin/missing-node "$rootfs/usr/bin/node"
+  output="$temp_root/rootfs-broken.out"
+  run_preflight "$output" \
+    PATH="$base_bin:$system_path" \
+    RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
+    RUNNER_SANDBOX_ROOTFS="$rootfs" \
+    MOCK_NSJAIL_RC=0 \
+    MOCK_UNSHARE_RC=0 || true
+  assert_contains "$output" "FAIL  rootfs path missing: /usr/bin/node"
+
+  rm -- "$rootfs/usr/bin/node"
+  ln -s -- /usr/local/bin/node "$rootfs/usr/bin/node"
+  ln -s -- /usr/bin/node "$rootfs/usr/local/bin/node-loop"
+  rm -- "$rootfs/usr/local/bin/node"
+  mv -- "$rootfs/usr/local/bin/node-loop" "$rootfs/usr/local/bin/node"
+  output="$temp_root/rootfs-loop.out"
+  run_preflight "$output" \
+    PATH="$base_bin:$system_path" \
+    RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
+    RUNNER_SANDBOX_ROOTFS="$rootfs" \
+    MOCK_NSJAIL_RC=0 \
+    MOCK_UNSHARE_RC=0 || true
+  assert_contains "$output" "FAIL  rootfs path missing: /usr/bin/node"
+
+  rm -- "$rootfs/usr/bin/node" "$rootfs/usr/local/bin/node"
+  : > "$temp_root/outside-node"
+  ln -s -- ../../../outside-node "$rootfs/usr/bin/node"
+  output="$temp_root/rootfs-escape.out"
+  run_preflight "$output" \
+    PATH="$base_bin:$system_path" \
+    RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
+    RUNNER_SANDBOX_ROOTFS="$rootfs" \
+    MOCK_NSJAIL_RC=0 \
+    MOCK_UNSHARE_RC=0 || true
+  assert_contains "$output" "FAIL  rootfs path missing: /usr/bin/node"
+
+  rm -- "$rootfs/usr/bin/node"
+  : > "$rootfs/usr/local/bin/node-final"
+  for ((link_index = 0; link_index <= 40; link_index++)); do
+    if [[ $link_index -eq 40 ]]; then
+      link_target=/usr/local/bin/node-final
+    else
+      link_target="/usr/local/bin/node-link-$((link_index + 1))"
+    fi
+    ln -s -- "$link_target" "$rootfs/usr/local/bin/node-link-$link_index"
+  done
+  ln -s -- /usr/local/bin/node-link-0 "$rootfs/usr/bin/node"
+  output="$temp_root/rootfs-depth.out"
+  run_preflight "$output" \
+    PATH="$base_bin:$system_path" \
+    RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
+    RUNNER_SANDBOX_ROOTFS="$rootfs" \
+    MOCK_NSJAIL_RC=0 \
+    MOCK_UNSHARE_RC=0 || true
+  assert_contains "$output" "FAIL  rootfs path missing: /usr/bin/node"
+fi
+
 printf 'Runner Linux preflight compatibility checks passed.\n'

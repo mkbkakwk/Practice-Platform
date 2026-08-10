@@ -21,6 +21,68 @@ pass() {
   printf 'PASS  %s\n' "$1"
 }
 
+# Resolve a guest path one component at a time without allowing the host kernel
+# to interpret absolute symlink targets outside the configured runtime root.
+rootfs_path_exists() {
+  local root="$1"
+  local guest_path="$2"
+  local root_abs component candidate target
+  local symlink_count=0
+  local max_symlinks=40
+  local -a pending=()
+  local -a resolved=()
+  local -a target_parts=()
+
+  [[ -d "$root" && ! -L "$root" ]] || return 1
+  root_abs="$(CDPATH= cd -- "$root" 2>/dev/null && pwd -P)" || return 1
+  [[ "$guest_path" == /* ]] || guest_path="/$guest_path"
+  IFS='/' read -r -a pending <<< "$guest_path"
+
+  while [[ ${#pending[@]} -gt 0 ]]; do
+    component="${pending[0]}"
+    pending=("${pending[@]:1}")
+    case "$component" in
+      ''|.)
+        continue
+        ;;
+      ..)
+        [[ ${#resolved[@]} -gt 0 ]] || return 1
+        resolved=("${resolved[@]:0:$((${#resolved[@]} - 1))}")
+        continue
+        ;;
+    esac
+
+    candidate="$root_abs"
+    local resolved_component
+    for resolved_component in "${resolved[@]}"; do
+      candidate+="/$resolved_component"
+    done
+    candidate+="/$component"
+
+    if [[ -L "$candidate" ]]; then
+      symlink_count=$((symlink_count + 1))
+      [[ $symlink_count -le $max_symlinks ]] || return 1
+      target="$(readlink -- "$candidate" 2>/dev/null)" || return 1
+      [[ -n "$target" ]] || return 1
+      target_parts=()
+      IFS='/' read -r -a target_parts <<< "$target"
+      if [[ "$target" == /* ]]; then
+        resolved=()
+      fi
+      pending=("${target_parts[@]}" "${pending[@]}")
+    elif [[ -e "$candidate" ]]; then
+      if [[ ${#pending[@]} -gt 0 && ! -d "$candidate" ]]; then
+        return 1
+      fi
+      resolved+=("$component")
+    else
+      return 1
+    fi
+  done
+
+  return 0
+}
+
 echo "Runner Linux security preflight (read-only)"
 
 if [[ "$(uname -s 2>/dev/null || true)" != "Linux" ]]; then
@@ -128,7 +190,7 @@ if [[ -d "$rootfs" && ! -L "$rootfs" ]]; then
     dev proc tmp workspace \
     usr/bin/python3 usr/bin/node usr/bin/gcc usr/bin/g++ usr/bin/javac usr/bin/java \
     usr/lib/jvm/java-21-openjdk-amd64; do
-    if [[ -e "$rootfs/$required" ]]; then
+    if rootfs_path_exists "$rootfs" "/$required"; then
       pass "rootfs path: /$required"
     else
       fail "rootfs path missing: /$required"
