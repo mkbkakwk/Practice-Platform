@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 @Profile("!runner-contract-test")
@@ -30,6 +31,12 @@ public class LinuxSandboxPreflight {
     private static final Set<String> REQUIRED_CONTROLLERS = Set.of("cpu", "memory", "pids");
     private static final List<String> REQUIRED_NAMESPACES = List.of(
             "mnt", "pid", "net", "uts", "ipc", "user", "cgroup", "time");
+    private static final int SELF_TEST_LOG_VALUE_LIMIT = 8192;
+    private static final String TRUNCATED_MARKER = "...[truncated]";
+    private static final Pattern RUNNER_TOKEN_ASSIGNMENT = Pattern.compile(
+            "(?i)(RUNNER_TOKEN\\s*[=:]\\s*)[^\\s\\\\]+");
+    private static final Pattern BEARER_AUTHORIZATION = Pattern.compile(
+            "(?i)(Authorization\\s*:\\s*Bearer\\s+)[^\\s\\\\]+");
 
     private final LinuxSandboxProperties properties;
     private final LanguageProfileRegistry profileRegistry;
@@ -94,7 +101,7 @@ public class LinuxSandboxPreflight {
         return new SandboxAvailability(failures.isEmpty(), failures);
     }
 
-    private boolean executeSelfTest() {
+    boolean executeSelfTest() {
         SandboxWorkspace workspace = null;
         boolean success = false;
         try {
@@ -113,18 +120,44 @@ public class LinuxSandboxPreflight {
                     128,
                     4096));
             success = result.termination() == SandboxTermination.COMPLETED && result.exitCode() == 0;
+            if (!success) {
+                log.warn("Linux sandbox self-test failed termination={} exitCode={} timeMs={} memoryKb={} "
+                                + "stderr={} diagnostic={}",
+                        result.termination(), result.exitCode(), result.timeMs(), result.memoryKb(),
+                        safeLogValue(result.stderr()), safeLogValue(result.diagnostic()));
+            }
         } catch (IOException | RuntimeException exception) {
+            logSelfTestException("execution", exception);
             success = false;
         } finally {
             if (workspace != null) {
                 try {
                     workspaceManager.cleanup(workspace);
                 } catch (IOException exception) {
+                    logSelfTestException("cleanup", exception);
                     success = false;
                 }
             }
         }
         return success;
+    }
+
+    private void logSelfTestException(String stage, Exception exception) {
+        log.warn("Linux sandbox self-test {} failed exceptionType={} message={}",
+                stage, exception.getClass().getSimpleName(), safeLogValue(exception.getMessage()));
+    }
+
+    private String safeLogValue(String value) {
+        String sanitized = value == null || value.isBlank()
+                ? "<empty>"
+                : value.replace("\r", "\\r").replace("\n", "\\n");
+        sanitized = RUNNER_TOKEN_ASSIGNMENT.matcher(sanitized).replaceAll("$1[redacted]");
+        sanitized = BEARER_AUTHORIZATION.matcher(sanitized).replaceAll("$1[redacted]");
+        if (sanitized.length() <= SELF_TEST_LOG_VALUE_LIMIT) {
+            return sanitized;
+        }
+        int contentLimit = SELF_TEST_LOG_VALUE_LIMIT - TRUNCATED_MARKER.length();
+        return sanitized.substring(0, contentLimit) + TRUNCATED_MARKER;
     }
 
     private void inspectIdentity(List<String> failures) {
