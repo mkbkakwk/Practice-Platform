@@ -6,6 +6,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,7 @@ import java.util.Set;
 @Component
 @Profile("!runner-contract-test")
 @ConditionalOnProperty(prefix = "runner.sandbox", name = "mode", havingValue = "linux")
+@DependsOn("delegatedCgroupControllerInitializer")
 public class LinuxSandboxPreflight {
 
     private static final Logger log = LoggerFactory.getLogger(LinuxSandboxPreflight.class);
