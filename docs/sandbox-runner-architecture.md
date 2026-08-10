@@ -4,9 +4,9 @@
 
 - **Stage 3A — complete:** Worker execution abstraction and versioned remote
   protocol.
-- **Stage 3B-1 — current:** independent Runner HTTP service, authentication,
+- **Stage 3B-1 — complete:** independent Runner HTTP service, authentication,
   validation, bounded job orchestration, and the `SandboxExecutor` boundary.
-- **Stage 3B-2 — not started:** dedicated Linux isolation using namespaces,
+- **Stage 3B-2 — implementation complete; Linux acceptance pending:** dedicated Linux isolation using namespaces,
   cgroup v2, syscall filtering, non-root execution, a read-only filesystem, and
   network isolation.
 - **Stage 3C — not started:** end-to-end integration and adversarial validation.
@@ -62,7 +62,9 @@ The default `UnavailableSandboxExecutor` never starts student code. It returns a
 controlled `SYSTEM_ERROR` and reports `sandboxAvailable=false`. The deterministic
 fake executor is selected only by the disposable `runner-contract-test` profile.
 It exists to exercise Worker-to-Runner HTTP compatibility and is not a deployment
-executor. A real `LinuxSandboxExecutor` is deliberately deferred to Stage 3B-2.
+executor. `LinuxSandboxExecutor` is selected only by
+`RUNNER_SANDBOX_MODE=linux`. The default remains unavailable, so merely building
+or deploying the service does not enable student execution.
 
 **Runner Service != Sandbox Security Boundary.** A Runner Docker container alone
 does not make execution of hostile code safe.
@@ -222,6 +224,80 @@ sends a real authenticated request through `RemoteSandboxClient`, then removes t
 container and network. No long-running Runner is added to Production or Staging.
 Regression tests retain Python, JavaScript, C, C++17, and Java behaviour through
 the legacy adapter.
+
+## Linux isolation implementation (Stage 3B-2)
+
+The Linux path is deliberately a direct service on a dedicated Linux host or VM:
+
+```text
+RunnerJobService
+  -> LinuxSandboxExecutor
+       -> LanguageCommandResolver (fixed argv only)
+       -> NsJailConfigWriter
+       -> NsJailLauncher -> /usr/bin/nsjail --config ... -- <fixed argv>
+```
+
+`NsJailLauncher` is the only production class that uses `ProcessBuilder`. It can
+start only the configured nsjail binary. There is no `bash -c`, `sh -c`, command
+interpolation, Docker socket, privileged container, host PID/network namespace,
+or `seccomp=unconfined` fallback. The HTTP contract still accepts only the five
+language enums, source, stdin, and limits.
+
+Compilation and every case execute in separate nsjail invocations. Source is
+written once into a random per-job directory (`0700`), compiled once, and the
+artifact is reused for ordered cases. C/C++/Java compilation, Python syntax
+checking, and Node syntax checking are all isolated. Every outcome uses a `finally`
+cleanup that does not follow student-created symbolic links.
+
+Each invocation enables mount, PID, network, UTS, IPC, user, cgroup, and time
+namespaces. The network namespace has no loopback interface and the seccomp policy
+also denies `socket`. The mount tree consists of a read-only minimal language
+rootfs, one writable `/workspace`, bounded tmpfs `/tmp`, minimal `/dev` devices,
+and isolated read-only `/proc`. Student UID/GID default to `65534:65534`, inherited
+environment and capabilities are cleared, and `no_new_privs` is enforced.
+
+nsjail creates an execution cgroup under a systemd-delegated cgroup-v2 root. The
+configuration applies `memory.max`, `memory.swap.max=0`, `pids.max`, and `cpu.max`.
+The outer watchdog enforces the requested wall clock limit, monitors that exact
+execution cgroup, bounds stdout+stderr while streaming, bounds workspace bytes and
+file count, and kills the whole nsjail process tree on TLE/MLE/OLE or infrastructure
+failure. A cleanup failure becomes `SYSTEM_ERROR`, never a successful result.
+
+Java heap, metaspace, direct-memory, stack, and active-processor flags are derived
+from the already validated request limit and remain below the cgroup ceiling. Node
+receives a derived old-space limit. Profiles contain fixed absolute compiler and
+runtime argv plus a minimal `PATH`, locale, home, and Java home; request fields
+cannot change any executable or environment path.
+
+At startup, Linux mode checks nsjail, namespaces, a read-only runtime root, tmpfs
+workspace, the project seccomp policy, an empty delegated cgroup root with enabled
+cpu/memory/pids controllers, required language runtimes, non-root identity, and an
+empty effective capability set. It then executes a known non-student nsjail
+self-test through the same path. Any failure leaves `sandboxAvailable=false`; there
+is no unsafe fallback.
+
+The example systemd service uses `Delegate=cpu memory pids` and
+`DelegateSubgroup=runner` (systemd 254+) so the service remains unprivileged while
+the delegated root is empty. Hosts that require root, `privileged`, host cgroups,
+host namespaces, or a Docker socket are unsupported.
+
+## Linux security acceptance
+
+`scripts/runner-linux-preflight.sh` is read-only and prints exactly `SUPPORTED` or
+`UNSUPPORTED`. `scripts/test-runner-linux.sh` refuses to run the security suite
+unless preflight succeeds; an unsupported host reports `Linux isolation tests: NOT
+RUN` and returns non-zero instead of silently skipping.
+
+The Linux-only Maven profile covers all five languages, compile/runtime failures,
+TLE, cgroup MLE, bounded stdout and stderr OLE, a fork bomb, background descendants,
+student UID/GID and capabilities, environment/secret reads, isolated `/proc`, DNS
+and localhost, mount/ptrace/raw socket attempts, read-only root writes, bounded
+tmpfs, Runner health after attacks, and residual process/workspace/cgroup checks.
+
+The current Windows Docker Desktop workspace is useful only for unit, protocol,
+service, and configuration tests. It is explicitly rejected by preflight. Until
+the Linux-only suite passes on the dedicated host, Stage 3B-2 is **not accepted**
+and the Runner must not be connected to Staging or Production.
 
 Stage 4 still owns RabbitMQ acknowledgement reliability, retries, Outbox, and DLQ;
 this refactor intentionally does not change those semantics.

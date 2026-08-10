@@ -1,0 +1,42 @@
+[Unit]
+Description=Practice Platform dedicated Linux sandbox runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ojrunner
+Group=ojrunner
+UMask=0077
+EnvironmentFile=/etc/oj-sandbox-runner/runner.env
+ExecStart=/usr/bin/java -jar /opt/oj-sandbox-runner/oj-sandbox-runner.jar
+Restart=on-failure
+RestartSec=5s
+
+# systemd 254+ places the JVM in a child subgroup so the delegated unit root is
+# empty and nsjail can create one cgroup per execution without root privileges.
+Delegate=cpu memory pids
+DelegateSubgroup=runner
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=no
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+
+ReadOnlyPaths=/srv/oj-sandbox-runner/rootfs
+ReadOnlyPaths=/etc/oj-sandbox-runner/nsjail-seccomp.policy
+TemporaryFileSystem=/run/oj-sandbox-runner/jobs:rw,nosuid,nodev,exec,size=256M,mode=0700,uid=10001,gid=10001
+
+[Install]
+WantedBy=multi-user.target
