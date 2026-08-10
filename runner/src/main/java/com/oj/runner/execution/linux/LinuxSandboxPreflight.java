@@ -151,8 +151,8 @@ public class LinuxSandboxPreflight {
         if (nsjail != null && (!Files.isRegularFile(nsjail) || !Files.isExecutable(nsjail))) {
             failures.add("nsjail-not-executable");
         }
-        if (nsjail != null && !NsJailLauncher.probeVersion(nsjail)) {
-            failures.add("nsjail-version-check-failed");
+        if (nsjail != null && !NsJailLauncher.probeHelp(nsjail)) {
+            failures.add("nsjail-help-check-failed");
         }
     }
 

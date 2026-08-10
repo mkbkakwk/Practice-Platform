@@ -10,6 +10,7 @@ rootfs="${RUNNER_SANDBOX_ROOTFS:-/srv/oj-sandbox-runner/rootfs}"
 workspace="${RUNNER_WORKSPACE_ROOT:-/run/oj-sandbox-runner/jobs}"
 cgroup_root="${RUNNER_CGROUP_V2_MOUNT:-/sys/fs/cgroup/system.slice/oj-sandbox-runner.service}"
 seccomp_policy="${RUNNER_SECCOMP_POLICY:-/etc/oj-sandbox-runner/nsjail-seccomp.policy}"
+apparmor_preflight_profile="${RUNNER_APPARMOR_PREFLIGHT_PROFILE:-}"
 
 fail() {
   failures+=("$1")
@@ -58,17 +59,27 @@ for namespace in mnt pid net uts ipc user cgroup time; do
   fi
 done
 
-if command -v unshare >/dev/null 2>&1 \
-  && unshare --user --map-current-user --mount --pid --fork --net --ipc --uts true >/dev/null 2>&1; then
+namespace_probe=(
+  unshare --user --map-current-user --mount --pid --fork --net --ipc --uts true
+)
+if [[ -n "$apparmor_preflight_profile" ]]; then
+  if command -v aa-exec >/dev/null 2>&1 \
+    && aa-exec -p "$apparmor_preflight_profile" -- "${namespace_probe[@]}" >/dev/null 2>&1; then
+    pass "unprivileged namespace creation"
+  else
+    fail "unprivileged namespace creation"
+  fi
+elif command -v unshare >/dev/null 2>&1 \
+  && "${namespace_probe[@]}" >/dev/null 2>&1; then
   pass "unprivileged namespace creation"
 else
   fail "unprivileged namespace creation"
 fi
 
-if [[ -x "$nsjail_path" ]] && "$nsjail_path" --version >/dev/null 2>&1; then
+if [[ -x "$nsjail_path" ]] && "$nsjail_path" --help >/dev/null 2>&1; then
   pass "nsjail executable"
 else
-  fail "nsjail executable/version"
+  fail "nsjail executable"
 fi
 
 if [[ "$(stat -fc %T /sys/fs/cgroup 2>/dev/null || true)" == "cgroup2fs" ]]; then

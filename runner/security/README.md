@@ -25,6 +25,20 @@ scripts. Run the read-only preflight first:
 ./scripts/runner-linux-preflight.sh
 ```
 
+On Ubuntu 24.04, keep
+`kernel.apparmor_restrict_unprivileged_userns=1`. If host provisioning supplies a
+dedicated AppArmor profile containing the required `userns,` permission, run the
+namespace probe through that profile without weakening the global policy:
+
+```bash
+export RUNNER_APPARMOR_PREFLIGHT_PROFILE=oj-runner-preflight
+./scripts/runner-linux-preflight.sh
+```
+
+The project does not create or modify AppArmor profiles. Supplying and auditing
+the dedicated host profile is a deployment responsibility. Globally disabling
+Ubuntu's unprivileged-user-namespace restriction is not recommended or supported.
+
 Only a `SUPPORTED` result permits the Linux-only acceptance suite:
 
 ```bash

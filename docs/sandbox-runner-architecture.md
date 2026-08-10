@@ -288,6 +288,13 @@ host namespaces, or a Docker socket are unsupported.
 unless preflight succeeds; an unsupported host reports `Linux isolation tests: NOT
 RUN` and returns non-zero instead of silently skipping.
 
+Ubuntu 24.04 hosts should retain AppArmor's global unprivileged-user-namespace
+restriction. A provisioned and audited per-service profile can be selected for the
+read-only namespace probe with
+`RUNNER_APPARMOR_PREFLIGHT_PROFILE=oj-runner-preflight`; the profile name is passed
+as one `aa-exec` argument, never through a shell command. This repository does not
+create profiles or modify `/etc` or sysctls.
+
 The Linux-only Maven profile covers all five languages, compile/runtime failures,
 TLE, cgroup MLE, bounded stdout and stderr OLE, a fork bomb, background descendants,
 student UID/GID and capabilities, environment/secret reads, isolated `/proc`, DNS

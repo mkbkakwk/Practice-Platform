@@ -24,6 +24,12 @@ done
 for script in scripts/release-common.sh scripts/release-preflight.sh scripts/release-status.sh; do
   bash -n "$script" || fail "invalid Bash syntax in $script"
 done
+bash -n scripts/runner-linux-preflight.sh \
+  || fail "invalid Bash syntax in scripts/runner-linux-preflight.sh"
+bash -n scripts/test-runner-linux-preflight.sh \
+  || fail "invalid Bash syntax in scripts/test-runner-linux-preflight.sh"
+bash scripts/test-runner-linux-preflight.sh \
+  || fail "Runner Linux preflight compatibility checks failed"
 
 if grep -Eq '^[[:space:]]+build:' "$compose_file"; then
   fail "release Compose must not contain build directives"

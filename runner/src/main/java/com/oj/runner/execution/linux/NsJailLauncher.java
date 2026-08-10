@@ -49,10 +49,10 @@ public class NsJailLauncher implements SandboxProcessLauncher {
         this.cgroupRoot = Path.of(properties.getCgroupV2Mount()).toAbsolutePath().normalize();
     }
 
-    public static boolean probeVersion(Path nsjail) {
+    public static boolean probeHelp(Path nsjail) {
         Process process = null;
         try {
-            ProcessBuilder builder = new ProcessBuilder(nsjail.toString(), "--version");
+            ProcessBuilder builder = new ProcessBuilder(nsjail.toString(), "--help");
             builder.environment().clear();
             builder.redirectErrorStream(true);
             builder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
