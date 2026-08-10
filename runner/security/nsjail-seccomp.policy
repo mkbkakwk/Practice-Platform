@@ -1,9 +1,8 @@
 // Project-owned nsjail policy. Namespace and filesystem isolation are the primary
 // boundary; this layer denies capabilities that student programs do not need.
-#define EPERM 1
-
+// The deployed Kafel parser requires a numeric ERRNO action target; Linux EPERM is 1.
 POLICY student {
-    ERRNO(EPERM) {
+    ERRNO(1) {
         mount,
         umount2,
         pivot_root,
