@@ -4,7 +4,8 @@
 POLICY student {
     ERRNO(1) {
         mount,
-        umount2,
+        // Kafel AMD64 names Linux x86_64 syscall 166 "umount".
+        umount,
         pivot_root,
         ptrace,
         process_vm_readv,

@@ -31,6 +31,11 @@ invalid_kafel_directives="$(awk '
   || fail "nsjail Kafel policy contains an invalid # comment or directive"
 grep -Eq '^[[:space:]]*ERRNO[[:space:]]*\([[:space:]]*1[[:space:]]*\)[[:space:]]*\{' "$seccomp_policy" \
   || fail "nsjail Kafel policy ERRNO target must use numeric Linux EPERM value 1"
+grep -Eq '^[[:space:]]*umount[[:space:]]*,' "$seccomp_policy" \
+  || fail "nsjail Kafel AMD64 policy must deny syscall 166 by its umount name"
+if grep -Eq '^[[:space:]]*umount2[[:space:]]*,' "$seccomp_policy"; then
+  fail "nsjail Kafel AMD64 policy must not use the undefined umount2 name"
+fi
 
 assert_contains() {
   local file="$1"
