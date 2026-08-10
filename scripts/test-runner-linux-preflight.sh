@@ -29,6 +29,10 @@ invalid_kafel_directives="$(awk '
 ' "$seccomp_policy")"
 [[ -z "$invalid_kafel_directives" ]] \
   || fail "nsjail Kafel policy contains an invalid # comment or directive"
+grep -Eq '^[[:space:]]*#[[:space:]]*define[[:space:]]+EPERM[[:space:]]+1([[:space:]]*(//.*)?)?$' "$seccomp_policy" \
+  || fail "nsjail Kafel policy must define EPERM as Linux errno 1"
+grep -Eq '^[[:space:]]*ERRNO[[:space:]]*\([[:space:]]*EPERM[[:space:]]*\)[[:space:]]*\{' "$seccomp_policy" \
+  || fail "nsjail Kafel policy ERRNO target must use the defined EPERM constant"
 
 assert_contains() {
   local file="$1"

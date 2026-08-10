@@ -1,5 +1,7 @@
 // Project-owned nsjail policy. Namespace and filesystem isolation are the primary
 // boundary; this layer denies capabilities that student programs do not need.
+#define EPERM 1
+
 POLICY student {
     ERRNO(EPERM) {
         mount,
