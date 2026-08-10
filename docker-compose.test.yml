@@ -58,6 +58,8 @@ services:
     build:
       context: ./worker
       target: test
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
     restart: "no"
     depends_on:
       test-db:
@@ -79,9 +81,59 @@ services:
       JUDGE_EXECUTION_MODE: legacy-local
       JUDGE_WORKSPACE: /tmp/practice-platform-test-judge
       SPRING_RABBITMQ_LISTENER_SIMPLE_AUTO_STARTUP: "false"
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
     tmpfs:
       - /tmp/practice-platform-test-judge
     command: ["mvn", "-B", "test"]
+
+  runner-test:
+    build:
+      context: ./runner
+      target: test
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      RUNNER_TOKEN: test-runner-token
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
+    command: ["mvn", "-B", "test"]
+
+  runner-contract:
+    build:
+      context: ./runner
+      target: runtime
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      SPRING_PROFILES_ACTIVE: runner-contract-test
+      RUNNER_TOKEN: test-runner-token
+      RUNNER_MAX_CONCURRENT_JOBS: 1
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  worker-runner-contract-test:
+    build:
+      context: ./worker
+      target: test
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    depends_on:
+      runner-contract:
+        condition: service_healthy
+    environment:
+      RUNNER_CONTRACT_BASE_URL: http://runner-contract:8080
+      RUNNER_CONTRACT_TOKEN: test-runner-token
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
+    command: ["mvn", "-B", "-Dtest=RemoteSandboxRunnerContractIT", "test"]
 
   frontend-test:
     build:

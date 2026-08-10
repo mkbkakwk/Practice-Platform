@@ -1,0 +1,23 @@
+{
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "compile": {
+    "status": "OK",
+    "exitCode": 0,
+    "stderr": "",
+    "timeMs": 20,
+    "message": ""
+  },
+  "cases": [
+    {
+      "caseId": "1",
+      "status": "RUNTIME_ERROR",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "runtime failed",
+      "timeMs": 5,
+      "memoryKb": 1024,
+      "message": "Runtime failed"
+    }
+  ],
+  "message": "Runtime failed"
+}

@@ -22,6 +22,7 @@ RUN apt-get update \
     && ln -sf /opt/java/openjdk/bin/javac /usr/local/bin/javac
 RUN node --version
 COPY src ./src
+COPY --from=fixtures . /contracts/runner
 CMD ["mvn", "-B", "test"]
 
 # ---------- build stage ----------

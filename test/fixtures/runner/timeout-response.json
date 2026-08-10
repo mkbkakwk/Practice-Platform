@@ -1,0 +1,23 @@
+{
+  "requestId": "11111111-1111-4111-8111-111111111111",
+  "compile": {
+    "status": "OK",
+    "exitCode": 0,
+    "stderr": "",
+    "timeMs": 20,
+    "message": ""
+  },
+  "cases": [
+    {
+      "caseId": "1",
+      "status": "TIME_LIMIT_EXCEEDED",
+      "exitCode": -1,
+      "stdout": "",
+      "stderr": "",
+      "timeMs": 2000,
+      "memoryKb": 1024,
+      "message": "Time limit exceeded"
+    }
+  ],
+  "message": "Time limit exceeded"
+}
