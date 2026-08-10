@@ -43,21 +43,25 @@ class RunnerFailClosedTest {
     }
 
     @Test
-    void runnerMainSourcesContainNoStudentProcessExecution() throws Exception {
+    void onlyNsjailLauncherMayStartAnOperatingSystemProcess() throws Exception {
         Path sourceRoot = Path.of("src", "main", "java");
         try (var files = Files.walk(sourceRoot)) {
-            String allSources = files
+            var sources = files
                     .filter(path -> path.toString().endsWith(".java"))
-                    .map(path -> {
-                        try {
-                            return Files.readString(path);
-                        } catch (Exception exception) {
-                            throw new IllegalStateException(exception);
-                        }
-                    })
-                    .reduce("", String::concat);
-            assertThat(allSources).doesNotContain(
-                    "ProcessBuilder", "docker.sock", "privileged: true", "seccomp=unconfined", "nsjail");
+                    .toList();
+            for (Path source : sources) {
+                String value = Files.readString(source);
+                if (!source.getFileName().toString().equals("NsJailLauncher.java")) {
+                    assertThat(value).as(source.toString()).doesNotContain("ProcessBuilder");
+                }
+                assertThat(value).as(source.toString()).doesNotContain(
+                        "Runtime.getRuntime().exec", "bash -c", "sh -c", "docker.sock",
+                        "privileged: true", "seccomp=unconfined");
+            }
+            String launcher = Files.readString(sourceRoot.resolve(
+                    Path.of("com", "oj", "runner", "execution", "linux", "NsJailLauncher.java")));
+            assertThat(launcher).contains("new ProcessBuilder", "--config", "command.addAll(invocation.argv())");
+            assertThat(launcher).doesNotContain("bash", "sh -c");
         }
     }
 

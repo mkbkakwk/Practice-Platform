@@ -1,0 +1,64 @@
+package com.oj.runner.execution.linux;
+
+import com.oj.runner.api.RunnerLanguage;
+import com.oj.runner.config.LinuxSandboxProperties;
+import com.oj.runner.language.LanguageProfileRegistry;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class NsJailConfigWriterTest {
+
+    @TempDir
+    Path temporaryDirectory;
+
+    @Test
+    void configEnforcesNamespacesCgroupsReadOnlyRootAndMinimalEnvironment() throws Exception {
+        LinuxSandboxProperties properties = properties();
+        SandboxWorkspace workspace = workspace();
+        var profile = new LanguageProfileRegistry().require(RunnerLanguage.JAVA);
+        Path config = new NsJailConfigWriter(properties).write(workspace, profile, "compile", 2000, 256);
+
+        String value = Files.readString(config);
+        assertThat(value).contains(
+                "clone_newnet: true", "clone_newuser: true", "clone_newns: true",
+                "clone_newpid: true", "clone_newipc: true", "clone_newuts: true",
+                "clone_newcgroup: true", "clone_newtime: true", "iface_no_lo: true",
+                "keep_env: false", "keep_caps: false", "disable_no_new_privs: false",
+                "use_cgroupv2: true", "cgroup_mem_max: 268435456",
+                "cgroup_mem_swap_max: 0", "cgroup_pids_max: 32",
+                "cgroup_cpu_ms_per_sec: 1000", "seccomp_policy_file:",
+                "dst: \"/\" is_bind: true rw: false", "dst: \"/workspace\" is_bind: true rw: true",
+                "dst: \"/dev\" fstype: \"tmpfs\" rw: true", "src: \"/dev/null\"",
+                "dst: \"/tmp\" fstype: \"tmpfs\" rw: true", "noexec: true",
+                "envar: \"JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64\"");
+        assertThat(value).doesNotContain("RUNNER_TOKEN", "DATABASE_URL", "JWT", "sourceCode");
+    }
+
+    @Test
+    void phaseIdCannotEscapeMetadataDirectory() throws Exception {
+        NsJailConfigWriter writer = new NsJailConfigWriter(properties());
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> writer.write(
+                workspace(), new LanguageProfileRegistry().require(RunnerLanguage.C),
+                "../escape", 1000, 64))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private LinuxSandboxProperties properties() {
+        LinuxSandboxProperties properties = new LinuxSandboxProperties();
+        properties.setRootfs("/srv/oj-sandbox-runner/rootfs");
+        properties.setSeccompPolicy("/etc/oj-sandbox-runner/nsjail-seccomp.policy");
+        properties.setCgroupV2Mount("/sys/fs/cgroup/system.slice/oj-sandbox-runner.service");
+        return properties;
+    }
+
+    private SandboxWorkspace workspace() throws Exception {
+        Path root = Files.createTempDirectory(temporaryDirectory, "job-");
+        Path files = Files.createDirectory(root.resolve("workspace"));
+        Path metadata = Files.createDirectory(root.resolve("metadata"));
+        return new SandboxWorkspace(root, files, metadata);
+    }
+}
