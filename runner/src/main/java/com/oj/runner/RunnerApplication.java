@@ -1,12 +1,13 @@
 package com.oj.runner;
 
+import com.oj.runner.config.LinuxSandboxProperties;
 import com.oj.runner.config.RunnerProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties(RunnerProperties.class)
+@EnableConfigurationProperties({RunnerProperties.class, LinuxSandboxProperties.class})
 public class RunnerApplication {
 
     public static void main(String[] args) {

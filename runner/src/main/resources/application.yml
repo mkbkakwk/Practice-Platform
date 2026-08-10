@@ -25,6 +25,24 @@ runner:
   max-run-time-ms: ${RUNNER_MAX_RUN_TIME_MS:10000}
   max-memory-mb: ${RUNNER_MAX_MEMORY_MB:2048}
   max-output-limit-bytes: ${RUNNER_MAX_OUTPUT_LIMIT_BYTES:16777216}
+  sandbox:
+    mode: ${RUNNER_SANDBOX_MODE:unavailable}
+    nsjail-path: ${RUNNER_NSJAIL_PATH:/usr/bin/nsjail}
+    rootfs: ${RUNNER_SANDBOX_ROOTFS:/srv/oj-sandbox-runner/rootfs}
+    workspace-root: ${RUNNER_WORKSPACE_ROOT:/run/oj-sandbox-runner/jobs}
+    seccomp-policy: ${RUNNER_SECCOMP_POLICY:/etc/oj-sandbox-runner/nsjail-seccomp.policy}
+    cgroup-v2-mount: ${RUNNER_CGROUP_V2_MOUNT:/sys/fs/cgroup/system.slice/oj-sandbox-runner.service}
+    student-uid: ${RUNNER_STUDENT_UID:65534}
+    student-gid: ${RUNNER_STUDENT_GID:65534}
+    pids-max: ${RUNNER_PIDS_MAX:32}
+    cpu-ms-per-second: ${RUNNER_CPU_MS_PER_SECOND:1000}
+    tmpfs-bytes: ${RUNNER_TMPFS_BYTES:67108864}
+    workspace-bytes: ${RUNNER_WORKSPACE_BYTES:134217728}
+    workspace-files: ${RUNNER_WORKSPACE_FILES:4096}
+    max-file-bytes: ${RUNNER_MAX_FILE_BYTES:67108864}
+    max-open-files: ${RUNNER_MAX_OPEN_FILES:64}
+    outer-timeout-grace-ms: ${RUNNER_OUTER_TIMEOUT_GRACE_MS:1000}
+    workspace-poll-ms: ${RUNNER_WORKSPACE_POLL_MS:25}
 
 logging:
   level:

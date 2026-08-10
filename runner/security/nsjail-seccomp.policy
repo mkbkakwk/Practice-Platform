@@ -1,0 +1,34 @@
+# Project-owned nsjail policy. Namespace and filesystem isolation are the primary
+# boundary; this layer denies capabilities that student programs do not need.
+POLICY student {
+    ERRNO(EPERM) {
+        mount,
+        umount2,
+        pivot_root,
+        ptrace,
+        process_vm_readv,
+        process_vm_writev,
+        setns,
+        unshare,
+        bpf,
+        perf_event_open,
+        keyctl,
+        add_key,
+        request_key,
+        reboot,
+        kexec_load,
+        kexec_file_load,
+        open_by_handle_at,
+        init_module,
+        finit_module,
+        delete_module,
+        swapon,
+        swapoff,
+        syslog,
+        fanotify_init,
+        userfaultfd,
+        socket
+    }
+}
+
+USE student DEFAULT ALLOW
