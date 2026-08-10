@@ -70,7 +70,6 @@ public class NsJailConfigWriter {
                 .append("clone_newuts: true\n")
                 .append("clone_newcgroup: true\n")
                 .append("clone_newtime: true\n")
-                .append("mount_proc: true\n")
                 .append("iface_no_lo: true\n")
                 .append("oom_score_adj: 500\n")
                 .append("use_cgroupv2: true\n")
@@ -90,6 +89,8 @@ public class NsJailConfigWriter {
 
         mount(value, properties.getRootfs(), "/", false, true, true, false);
         mount(value, workspace.files().toString(), "/workspace", true, true, true, false);
+        value.append("mount { dst: \"/proc\" fstype: \"proc\" options: \"subset=pid\" ")
+                .append("rw: false mandatory: true nosuid: true nodev: true noexec: true }\n");
         value.append("mount { dst: \"/dev\" fstype: \"tmpfs\" rw: true mandatory: true ")
                 .append("nosuid: true nodev: false noexec: true options: \"size=65536,mode=0755\" }\n");
         for (String device : java.util.List.of("/dev/null", "/dev/zero", "/dev/random", "/dev/urandom")) {

@@ -47,6 +47,19 @@ class NsJailConfigWriterTest {
                 "../escape", 1000, 64))).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void configUsesExplicitReadOnlySubsetPidProcMount() throws Exception {
+        Path config = new NsJailConfigWriter(properties()).write(
+                workspace(), new LanguageProfileRegistry().require(RunnerLanguage.PYTHON),
+                "run-1", 1000, 64);
+
+        String value = Files.readString(config);
+        assertThat(value).doesNotContain("mount_proc: true");
+        assertThat(value).contains(
+                "mount { dst: \"/proc\" fstype: \"proc\" options: \"subset=pid\" "
+                        + "rw: false mandatory: true nosuid: true nodev: true noexec: true }");
+    }
+
     private LinuxSandboxProperties properties() {
         LinuxSandboxProperties properties = new LinuxSandboxProperties();
         properties.setRootfs("/srv/oj-sandbox-runner/rootfs");
