@@ -5,6 +5,7 @@ set -euo pipefail
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 preflight="$repo_root/scripts/runner-linux-preflight.sh"
 mock_source="$repo_root/scripts/test-fixtures/runner-preflight-command-mock.sh"
+seccomp_policy="$repo_root/runner/security/nsjail-seccomp.policy"
 shell_path="$(command -v bash)"
 system_path="$PATH"
 temp_root="$(mktemp -d)"
@@ -17,6 +18,17 @@ fail() {
   printf 'RUNNER PREFLIGHT TEST FAILED: %s\n' "$*" >&2
   exit 1
 }
+
+[[ -f "$seccomp_policy" ]] || fail "missing project-owned nsjail seccomp policy"
+invalid_kafel_directives="$(awk '
+  /^[[:space:]]*#/ {
+    directive = $0
+    sub(/^[[:space:]]*#[[:space:]]*/, "", directive)
+    if (directive !~ /^(define|include)([[:space:]]|$)/) print
+  }
+' "$seccomp_policy")"
+[[ -z "$invalid_kafel_directives" ]] \
+  || fail "nsjail Kafel policy contains an invalid # comment or directive"
 
 assert_contains() {
   local file="$1"

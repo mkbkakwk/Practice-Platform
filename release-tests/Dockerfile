@@ -16,6 +16,7 @@ COPY scripts/test-release-config.sh scripts/test-release-config.sh
 COPY scripts/runner-linux-preflight.sh scripts/runner-linux-preflight.sh
 COPY scripts/test-runner-linux-preflight.sh scripts/test-runner-linux-preflight.sh
 COPY scripts/test-fixtures/runner-preflight-command-mock.sh scripts/test-fixtures/runner-preflight-command-mock.sh
+COPY runner/security/nsjail-seccomp.policy runner/security/nsjail-seccomp.policy
 COPY frontend/src/components/Navbar.tsx frontend/src/components/Navbar.tsx
 COPY .github/workflows .github/workflows
 

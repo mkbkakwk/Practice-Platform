@@ -14,6 +14,9 @@
 !scripts/release-preflight.sh
 !scripts/release-status.sh
 !scripts/test-release-config.sh
+!runner/
+!runner/security/
+!runner/security/nsjail-seccomp.policy
 !frontend/
 !frontend/src/
 !frontend/src/components/
