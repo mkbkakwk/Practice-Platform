@@ -26,6 +26,7 @@ class NsJailConfigWriterTest {
 
         String value = Files.readString(config);
         assertThat(value).contains(
+                "mode: ONCE",
                 "clone_newnet: true", "clone_newuser: true", "clone_newns: true",
                 "clone_newpid: true", "clone_newipc: true", "clone_newuts: true",
                 "clone_newcgroup: true", "clone_newtime: true", "iface_no_lo: true",
@@ -37,6 +38,7 @@ class NsJailConfigWriterTest {
                 "dst: \"/dev\" fstype: \"tmpfs\" rw: true", "src: \"/dev/null\"",
                 "dst: \"/tmp\" fstype: \"tmpfs\" rw: true", "noexec: true",
                 "envar: \"JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64\"");
+        assertThat(value).doesNotContain("mode: EXECVE");
         assertThat(value).doesNotContain("dst: \"/\" is_bind: true rw: true");
         assertThat(value).doesNotContain("RUNNER_TOKEN", "DATABASE_URL", "JWT", "sourceCode");
     }

@@ -39,6 +39,9 @@ class LinuxSandboxSecurityIT {
     @Autowired
     LinuxSandboxProperties properties;
 
+    @Autowired
+    NamespaceIsolationVerifier namespaceVerifier;
+
     @BeforeEach
     void requireRealSandbox() {
         assertThat(jobs.sandboxAvailable())
@@ -157,6 +160,28 @@ class LinuxSandboxSecurityIT {
         assertThat(values[2]).isEqualTo("1");
         assertThat(values[3]).isEqualTo("student-sandbox");
         assertThat(values[4]).matches("0+");
+    }
+
+    @Test
+    void allRequiredNamespacesAreActuallyIsolatedAndStudentIsPidOne() {
+        RunnerJobResponse response = normal(
+                RunnerLanguage.PYTHON, NamespaceIsolationVerifier.pythonProbeSource());
+        NamespaceIsolationVerifier.Verification verification = namespaceVerifier.verify(
+                response.cases().getFirst().stdout());
+
+        assertThat(verification.failures()).isEmpty();
+        assertThat(verification.sandboxPid()).isEqualTo(1);
+        for (String namespace : NamespaceIsolationVerifier.REQUIRED_NAMESPACES) {
+            assertThat(verification.sandboxNamespaces())
+                    .as("sandbox namespace inode for %s", namespace)
+                    .containsKey(namespace);
+            assertThat(verification.runnerNamespaces())
+                    .as("Runner namespace inode for %s", namespace)
+                    .containsKey(namespace);
+            assertThat(verification.sandboxNamespaces().get(namespace))
+                    .as("sandbox %s namespace must differ from Runner JVM", namespace)
+                    .isNotEqualTo(verification.runnerNamespaces().get(namespace));
+        }
     }
 
     @Test

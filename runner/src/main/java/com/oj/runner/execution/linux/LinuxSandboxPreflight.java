@@ -44,6 +44,7 @@ public class LinuxSandboxPreflight {
     private final NsJailConfigWriter configWriter;
     private final LanguageCommandResolver commandResolver;
     private final SandboxProcessLauncher launcher;
+    private final NamespaceIsolationVerifier namespaceVerifier;
     private volatile SandboxAvailability availability = new SandboxAvailability(false, List.of("not checked"));
 
     public LinuxSandboxPreflight(
@@ -52,13 +53,15 @@ public class LinuxSandboxPreflight {
             SandboxWorkspaceManager workspaceManager,
             NsJailConfigWriter configWriter,
             LanguageCommandResolver commandResolver,
-            SandboxProcessLauncher launcher) {
+            SandboxProcessLauncher launcher,
+            NamespaceIsolationVerifier namespaceVerifier) {
         this.properties = properties;
         this.profileRegistry = profileRegistry;
         this.workspaceManager = workspaceManager;
         this.configWriter = configWriter;
         this.commandResolver = commandResolver;
         this.launcher = launcher;
+        this.namespaceVerifier = namespaceVerifier;
     }
 
     @PostConstruct
@@ -95,51 +98,65 @@ public class LinuxSandboxPreflight {
         inspectWorkspace(failures);
         inspectCgroup(failures);
         inspectSeccomp(failures);
-        if (failures.isEmpty() && !executeSelfTest()) {
-            failures.add("sandbox-self-test-failed");
+        if (failures.isEmpty()) {
+            failures.addAll(executeSelfTestFailures());
         }
         return new SandboxAvailability(failures.isEmpty(), failures);
     }
 
     boolean executeSelfTest() {
+        return executeSelfTestFailures().isEmpty();
+    }
+
+    List<String> executeSelfTestFailures() {
         SandboxWorkspace workspace = null;
-        boolean success = false;
+        List<String> failures = new ArrayList<>();
         try {
             var profile = profileRegistry.require(com.oj.runner.api.RunnerLanguage.PYTHON);
             workspace = workspaceManager.create("00000000-0000-4000-8000-000000000000");
-            workspaceManager.writeSource(workspace, profile.sourceFilename(), "print('sandbox-self-test')\n");
+            workspaceManager.writeSource(
+                    workspace, profile.sourceFilename(), NamespaceIsolationVerifier.pythonProbeSource());
             Path config = configWriter.write(workspace, profile, "self-test", 2000, 128);
             NsJailExecutionResult result = launcher.launch(new NsJailInvocation(
-                    SandboxPhase.COMPILE,
+                    SandboxPhase.RUN,
                     config,
                     configWriter.logPath(workspace, "self-test"),
                     workspace.files(),
-                    commandResolver.compile(profile, 128),
+                    commandResolver.run(profile, 128),
                     new byte[0],
                     2000,
                     128,
                     4096));
-            success = result.termination() == SandboxTermination.COMPLETED && result.exitCode() == 0;
-            if (!success) {
+            boolean executionSucceeded = result.termination() == SandboxTermination.COMPLETED
+                    && result.exitCode() == 0;
+            if (!executionSucceeded) {
+                failures.add("sandbox-self-test-failed");
                 log.warn("Linux sandbox self-test failed termination={} exitCode={} timeMs={} memoryKb={} "
                                 + "stderr={} diagnostic={}",
                         result.termination(), result.exitCode(), result.timeMs(), result.memoryKb(),
                         safeLogValue(result.stderr()), safeLogValue(result.diagnostic()));
+            } else {
+                NamespaceIsolationVerifier.Verification verification = namespaceVerifier.verify(result.stdout());
+                failures.addAll(verification.failures());
+                if (!verification.failures().isEmpty()) {
+                    log.warn("Linux sandbox namespace self-test failed checks={}",
+                            String.join(",", verification.failures()));
+                }
             }
         } catch (IOException | RuntimeException exception) {
             logSelfTestException("execution", exception);
-            success = false;
+            failures.add("sandbox-self-test-failed");
         } finally {
             if (workspace != null) {
                 try {
                     workspaceManager.cleanup(workspace);
                 } catch (IOException exception) {
                     logSelfTestException("cleanup", exception);
-                    success = false;
+                    failures.add("sandbox-self-test-cleanup-failed");
                 }
             }
         }
-        return success;
+        return failures.stream().distinct().toList();
     }
 
     private void logSelfTestException(String stage, Exception exception) {

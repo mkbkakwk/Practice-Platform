@@ -270,6 +270,16 @@ block the character-device operations themselves (for example, writing to
 `mount_setattr()` attempt to clear `MOUNT_ATTR_RDONLY`. The parent sandbox `/dev`
 remains a separate writable, bounded tmpfs with `nosuid` and `noexec` enabled.
 
+The production nsjail configuration remains `mode: ONCE` with
+`clone_newtime: true`. Some nsjail builds log that `CLONE_NEWTIME` is supported
+only by unshare mode even when their `clone3(CLONE_NEWTIME)` path successfully
+creates the namespace. Warning text is therefore not an availability signal.
+Startup preflight executes a real sandbox probe, reads `mnt`, `pid`, `net`,
+`uts`, `ipc`, `user`, `cgroup`, and `time` identities from `/proc/self/ns`, and
+fails closed unless every sandbox inode differs from the Runner JVM and the
+sandbox process reports PID 1. The Linux-only security suite repeats the same
+kernel-observed validation.
+
 nsjail creates an execution cgroup under a systemd-delegated cgroup-v2 root. The
 configuration applies `memory.max`, `memory.swap.max=0`, `pids.max`, and `cpu.max`.
 The outer watchdog enforces the requested wall clock limit, monitors that exact

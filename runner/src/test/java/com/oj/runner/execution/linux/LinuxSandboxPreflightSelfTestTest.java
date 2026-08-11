@@ -24,6 +24,7 @@ class LinuxSandboxPreflightSelfTestTest {
     private SandboxWorkspaceManager workspaceManager;
     private NsJailConfigWriter configWriter;
     private SandboxProcessLauncher launcher;
+    private NamespaceIsolationVerifier namespaceVerifier;
     private LinuxSandboxPreflight preflight;
 
     @BeforeEach
@@ -31,6 +32,7 @@ class LinuxSandboxPreflightSelfTestTest {
         workspaceManager = mock(SandboxWorkspaceManager.class);
         configWriter = mock(NsJailConfigWriter.class);
         launcher = mock(SandboxProcessLauncher.class);
+        namespaceVerifier = mock(NamespaceIsolationVerifier.class);
         SandboxWorkspace workspace = new SandboxWorkspace(
                 Path.of("/runner-self-test"),
                 Path.of("/runner-self-test/workspace"),
@@ -40,13 +42,16 @@ class LinuxSandboxPreflightSelfTestTest {
                 .thenReturn(Path.of("/runner-self-test/metadata/nsjail-self-test.cfg"));
         when(configWriter.logPath(any(), anyString()))
                 .thenReturn(Path.of("/runner-self-test/metadata/nsjail-self-test.log"));
+        when(namespaceVerifier.verify(anyString())).thenReturn(new NamespaceIsolationVerifier.Verification(
+                java.util.List.of(), java.util.Map.of(), java.util.Map.of(), 1));
         preflight = new LinuxSandboxPreflight(
                 new LinuxSandboxProperties(),
                 new LanguageProfileRegistry(),
                 workspaceManager,
                 configWriter,
                 new LanguageCommandResolver(),
-                launcher);
+                launcher,
+                namespaceVerifier);
     }
 
     @Test
@@ -56,6 +61,20 @@ class LinuxSandboxPreflightSelfTestTest {
 
         assertThat(preflight.executeSelfTest()).isTrue();
         assertThat(output.getAll()).doesNotContain("Linux sandbox self-test failed");
+    }
+
+    @Test
+    void namespaceVerificationFailuresRemainExplicitAndFailClosed(CapturedOutput output) {
+        when(launcher.launch(any())).thenReturn(result(
+                SandboxTermination.COMPLETED, 0, 12, 2048, "", ""));
+        when(namespaceVerifier.verify(anyString())).thenReturn(new NamespaceIsolationVerifier.Verification(
+                java.util.List.of("namespace-time-not-isolated", "namespace-pid-not-init"),
+                java.util.Map.of(), java.util.Map.of(), 2));
+
+        assertThat(preflight.executeSelfTestFailures())
+                .containsExactly("namespace-time-not-isolated", "namespace-pid-not-init");
+        assertThat(output.getAll())
+                .contains("checks=namespace-time-not-isolated,namespace-pid-not-init");
     }
 
     @Test
