@@ -198,6 +198,7 @@ public class NsJailLauncher implements SandboxProcessLauncher {
         command.add(nsjailPath.toString());
         command.add("--experimental_mnt");
         command.add("new");
+        command.add("--rw");
         command.add("--config");
         command.add(invocation.config().toString());
         command.add("--");

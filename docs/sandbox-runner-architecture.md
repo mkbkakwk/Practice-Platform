@@ -234,7 +234,7 @@ RunnerJobService
   -> LinuxSandboxExecutor
        -> LanguageCommandResolver (fixed argv only)
        -> NsJailConfigWriter
-       -> NsJailLauncher -> <pinned nsjail> --experimental_mnt new --config ... -- <fixed argv>
+       -> NsJailLauncher -> <pinned nsjail> --experimental_mnt new --rw --config ... -- <fixed argv>
 ```
 
 `NsJailLauncher` is the only production class that uses `ProcessBuilder`. It can
@@ -255,6 +255,11 @@ also denies `socket`. The mount tree consists of a read-only minimal language
 rootfs, one writable `/workspace`, bounded tmpfs `/tmp`, minimal `/dev` devices,
 and isolated read-only `/proc`. Student UID/GID default to `65534:65534`, inherited
 environment and capabilities are cleared, and `no_new_privs` is enforced.
+The fixed nsjail `--rw` option prevents its synthetic mount tree from blocking
+the explicitly writable child mounts; it does not replace the configured
+read-only bind mount at `/`. Startup preflight parses `/proc/self/mountinfo`,
+selects the most specific mount covering the configured runtime rootfs, and
+fails closed unless that real host mount is `ro`.
 
 nsjail creates an execution cgroup under a systemd-delegated cgroup-v2 root. The
 configuration applies `memory.max`, `memory.swap.max=0`, `pids.max`, and `cpu.max`.

@@ -198,8 +198,16 @@ public class LinuxSandboxPreflight {
             failures.add("rootfs-unavailable");
             return;
         }
-        if (Files.isWritable(rootfs)) {
-            failures.add("rootfs-must-be-read-only");
+        var mountInfo = read(Path.of("/proc/self/mountinfo"));
+        if (mountInfo.isEmpty()) {
+            failures.add("rootfs-mountinfo-unavailable");
+        } else {
+            switch (MountInfoInspector.inspectReadOnly(rootfs, mountInfo.get())) {
+                case READ_ONLY -> { }
+                case READ_WRITE -> failures.add("rootfs-not-readonly");
+                case INVALID -> failures.add("rootfs-mountinfo-invalid");
+                case TARGET_UNAVAILABLE -> failures.add("rootfs-unavailable");
+            }
         }
         for (String directory : List.of("dev", "proc", "tmp", "workspace")) {
             if (!Files.isDirectory(rootfs.resolve(directory), LinkOption.NOFOLLOW_LINKS)) {

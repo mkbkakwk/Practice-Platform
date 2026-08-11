@@ -31,9 +31,9 @@ class NsJailLauncherCommandTest {
         assertThat(command).containsExactly(
                 "/usr/bin/nsjail",
                 "--experimental_mnt", "new",
+                "--rw",
                 "--config", "/run/runner/nsjail.cfg",
                 "--",
                 "/usr/bin/python3", "--experimental_mnt", "old");
-        assertThat(command).doesNotContain("--rw");
     }
 }
