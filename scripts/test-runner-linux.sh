@@ -8,6 +8,8 @@ set -euo pipefail
 readonly ACCEPTANCE_UNIT="oj-sandbox-acceptance.service"
 readonly PRODUCTION_UNIT="oj-sandbox-runner.service"
 readonly ACCEPTANCE_PARENT="/run/oj-sandbox-acceptance"
+readonly ACCEPTANCE_CACHE_PARENT="/var/cache/oj-sandbox-acceptance"
+readonly ACCEPTANCE_MAVEN_REPO="$ACCEPTANCE_CACHE_PARENT/m2"
 readonly ACCEPTANCE_CGROUP="/sys/fs/cgroup/system.slice/$ACCEPTANCE_UNIT"
 readonly PRODUCTION_CGROUP="/sys/fs/cgroup/system.slice/$PRODUCTION_UNIT"
 readonly ACCEPTANCE_WORKSPACE="/run/oj-sandbox-runner/jobs"
@@ -76,10 +78,11 @@ build_systemd_run_args() {
     "--property=KillMode=control-group"
     "--property=TimeoutStopSec=30s"
     "--property=ReadOnlyPaths=$RUNTIME_ROOTFS $SECCOMP_POLICY"
-    "--property=ReadWritePaths=$stage"
+    "--property=ReadWritePaths=$stage $maven_repo"
     "--property=TemporaryFileSystem=$ACCEPTANCE_WORKSPACE:rw,nosuid,nodev,exec,size=256M,mode=0700,uid=10001,gid=10001"
     "--setenv=HOME=$home"
     "--setenv=MAVEN_REPO_LOCAL=$maven_repo"
+    "--setenv=RUNNER_ACCEPTANCE_MAVEN_REPO=$maven_repo"
     "--setenv=RUNNER_ACCEPTANCE_STAGING_ROOT=$stage"
     "--setenv=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     "--setenv=LANG=C.UTF-8"
@@ -100,7 +103,7 @@ print_unit_plan() {
   build_systemd_run_args \
     "$ACCEPTANCE_PARENT/plan" \
     "$ACCEPTANCE_PARENT/plan/repo" \
-    "$ACCEPTANCE_PARENT/plan/m2" \
+    "$ACCEPTANCE_MAVEN_REPO" \
     "$ACCEPTANCE_PARENT/plan/home" \
     "${RUNNER_ACCEPTANCE_PLAN_PROTECT_KERNEL_TUNABLES:-no}" \
     "${RUNNER_ACCEPTANCE_PLAN_PROTECT_KERNEL_LOGS:-no}"
@@ -198,11 +201,13 @@ trap 'exit 130' INT TERM
 [[ "${EUID:-$(id -u)}" -eq 0 ]] \
   || fail "run this orchestrator through sudo; Maven still runs as ojrunner"
 
-for command in git tar systemctl systemd-run getent install mktemp find; do
+for command in git tar systemctl systemd-run getent id install mktemp find stat; do
   command -v "$command" >/dev/null 2>&1 || fail "required host command missing: $command"
 done
 getent passwd ojrunner >/dev/null || fail "ojrunner user is unavailable"
 getent group ojrunner >/dev/null || fail "ojrunner group is unavailable"
+ojrunner_uid="$(id -u ojrunner)"
+ojrunner_gid="$(id -g ojrunner)"
 command -v mvn >/dev/null 2>&1 || fail "Maven is required on the acceptance host"
 [[ -x "$NSJAIL_PATH" ]] || fail "pinned nsjail is unavailable: $NSJAIL_PATH"
 
@@ -232,11 +237,15 @@ for forbidden in .env .env.production .env.staging; do
 done
 
 install -d -o root -g root -m 0755 "$ACCEPTANCE_PARENT"
+prepare_acceptance_maven_cache \
+  "$ACCEPTANCE_CACHE_PARENT" "$ACCEPTANCE_MAVEN_REPO" \
+  0 0 "$ojrunner_uid" "$ojrunner_gid" \
+  || fail "acceptance Maven cache is missing or has unsafe type, ownership, or permissions"
 staging_root="$(mktemp -d "$ACCEPTANCE_PARENT/run.XXXXXX")"
 staged_repo="$staging_root/repo"
-maven_repo="$staging_root/m2"
+maven_repo="$ACCEPTANCE_MAVEN_REPO"
 acceptance_home="$staging_root/home"
-mkdir -p -- "$staged_repo" "$maven_repo" "$acceptance_home"
+mkdir -p -- "$staged_repo" "$acceptance_home"
 
 source_archive="$staging_root/source.tar"
 git -c "safe.directory=$repo_root" -C "$repo_root" archive \
@@ -251,7 +260,7 @@ for forbidden in .git .env .env.production .env.staging; do
     || fail "acceptance staging contains forbidden runtime path: $forbidden_path"
 done
 chown -R ojrunner:ojrunner "$staging_root"
-chmod 0700 "$staging_root" "$maven_repo" "$acceptance_home"
+chmod 0700 "$staging_root" "$acceptance_home"
 
 build_systemd_run_args \
   "$staging_root" "$staged_repo" "$maven_repo" "$acceptance_home" \

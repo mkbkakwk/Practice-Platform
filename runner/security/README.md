@@ -62,16 +62,21 @@ short-lived directory under `/run/oj-sandbox-acceptance`, then starts
 `oj-sandbox-acceptance.service` as a
 transient systemd unit with `User=ojrunner`, the production security properties,
 and its own delegated cgroup root. `ProtectHome=yes` remains enabled. Maven uses
-an isolated repository inside the staging directory and never reads
-`/home/tu/.m2`. The unit receives a private tmpfs workspace at
+the persistent dependency-only repository
+`/var/cache/oj-sandbox-acceptance/m2` and never reads `/home/tu/.m2`. The cache
+parent is `root:root/0755`; the repository is `ojrunner:ojrunner/0700`. Existing
+symlinks, non-directories, or mismatched ownership/modes fail closed rather than
+being repaired silently. Source staging remains ephemeral and cleanup deliberately
+preserves only this dependency cache. The unit receives a private tmpfs workspace at
 `/run/oj-sandbox-runner/jobs`; systemd unmounts it when the unit exits.
 The staging tree intentionally remains on the host's `noexec` `/run` mount.
 Trusted staged shell files are read with the host `/usr/bin/bash` interpreter;
 the harness never disables `noexec` or directly executes a staged script.
 The transient unit does not set `RUNNER_SANDBOX_MODE` for the Maven process:
 ordinary Surefire tests retain their default fail-closed executor semantics, while
-the Failsafe `linux-security` profile and `LinuxSandboxSecurityIT` explicitly select
-Linux mode for the real isolation suite.
+the Failsafe `linux-security` profile exactly includes
+`LinuxSandboxSecurityIT.java`, sets Linux mode, and keeps `failIfNoTests=true` for
+the real isolation suite.
 
 Before checking that the committed tree is clean, the host orchestrator may
 remove only a JVM Attach runtime marker matching the exact regular-file path

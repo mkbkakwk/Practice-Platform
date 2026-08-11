@@ -70,7 +70,7 @@
                                 <configuration>
                                     <failIfNoTests>true</failIfNoTests>
                                     <includes>
-                                        <include>**/*LinuxSecurityIT.java</include>
+                                        <include>**/LinuxSandboxSecurityIT.java</include>
                                     </includes>
                                     <systemPropertyVariables>
                                         <runner.sandbox.mode>linux</runner.sandbox.mode>

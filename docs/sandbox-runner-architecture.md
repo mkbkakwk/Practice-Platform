@@ -329,7 +329,11 @@ committed Runner sources, contract fixtures, and required scripts under `/run`,
 then launches the preflight and Maven Failsafe suite inside the short-lived
 `oj-sandbox-acceptance.service` transient systemd
 unit. That unit runs as `ojrunner`, mirrors the production security properties,
-keeps `ProtectHome=yes`, has a private tmpfs workspace and Maven repository, and
+keeps `ProtectHome=yes`, has a private tmpfs workspace, and uses the dedicated
+dependency cache `/var/cache/oj-sandbox-acceptance/m2`. Only that exact cache path
+and the ephemeral source staging are writable through `ProtectSystem=strict`; the
+cache is validated as a non-symlink `ojrunner:ojrunner/0700` directory and is not
+removed with staging. The unit
 uses its own delegated cgroup root at
 `/sys/fs/cgroup/system.slice/oj-sandbox-acceptance.service`. It never reuses the
 production Runner JVM or `/sys/fs/cgroup/system.slice/oj-sandbox-runner.service`.

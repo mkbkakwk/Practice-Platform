@@ -53,8 +53,10 @@ for expected in \
   '--property=RemoveIPC=yes' \
   '--property=KillMode=control-group' \
   '--property=ReadOnlyPaths=/srv/oj-sandbox-runner/rootfs /etc/oj-sandbox-runner/nsjail-seccomp.policy' \
-  '--property=ReadWritePaths=/run/oj-sandbox-acceptance/plan' \
+  '--property=ReadWritePaths=/run/oj-sandbox-acceptance/plan /var/cache/oj-sandbox-acceptance/m2' \
   '--property=TemporaryFileSystem=/run/oj-sandbox-runner/jobs:rw,nosuid,nodev,exec,size=256M,mode=0700,uid=10001,gid=10001' \
+  '--setenv=MAVEN_REPO_LOCAL=/var/cache/oj-sandbox-acceptance/m2' \
+  '--setenv=RUNNER_ACCEPTANCE_MAVEN_REPO=/var/cache/oj-sandbox-acceptance/m2' \
   '--setenv=RUNNER_NSJAIL_PATH=/opt/oj-sandbox-runner/bin/nsjail' \
   '--setenv=RUNNER_SANDBOX_ROOTFS=/srv/oj-sandbox-runner/rootfs' \
   '--setenv=RUNNER_WORKSPACE_ROOT=/run/oj-sandbox-runner/jobs' \
@@ -71,6 +73,16 @@ fi
 if grep -Fq -- '--property=ProtectHome=no' <<<"$plan"; then
   fail "unit plan disables ProtectHome"
 fi
+if grep -Fq -- '--property=ReadWritePaths=/var/cache' <<<"$plan"; then
+  fail "unit plan grants write access to the broad Maven cache parent"
+fi
+if grep -Fq -- '/run/oj-sandbox-acceptance/plan/m2' <<<"$plan"; then
+  fail "unit plan still uses an ephemeral Maven repository"
+fi
+grep -Fq 'expected_maven_repo="/var/cache/oj-sandbox-acceptance/m2"' "$inner" \
+  || fail "acceptance inner script does not pin the persistent Maven cache identity"
+grep -Fq '"${MAVEN_REPO_LOCAL:-}" == "$RUNNER_ACCEPTANCE_MAVEN_REPO"' "$inner" \
+  || fail "acceptance inner script does not verify Maven cache identity"
 if grep -Fq -- '--setenv=RUNNER_SANDBOX_MODE=linux' <<<"$plan"; then
   fail "unit plan pollutes ordinary Surefire tests with Linux sandbox mode"
 fi
@@ -83,6 +95,9 @@ grep -Fq 'transient acceptance unit was not removed' "$harness" \
   || fail "host orchestrator does not verify transient-unit cleanup"
 grep -Fq 'rm -rf --one-file-system -- "$staging_root"' "$harness" \
   || fail "host orchestrator does not clean its bounded staging directory"
+if grep -Eq 'rm.*(ACCEPTANCE_MAVEN_REPO|oj-sandbox-acceptance/m2)' "$harness"; then
+  fail "host orchestrator deletes the persistent Maven dependency cache"
+fi
 grep -Fq '[[ ! -e "$ACCEPTANCE_CGROUP" ]]' "$harness" \
   || fail "host orchestrator does not verify cgroup cleanup"
 
@@ -109,7 +124,7 @@ fi
 if grep -Eq -- '(-DskipTests|skipTests|maven\.test\.skip)' "$inner"; then
   fail "acceptance inner script skips ordinary or Linux security tests"
 fi
-grep -Fq 'LinuxSandboxSecurityIT.xml' "$inner" \
+grep -Fq 'TEST-com.oj.runner.execution.linux.LinuxSandboxSecurityIT.xml' "$inner" \
   || fail "acceptance unit does not verify the Failsafe report"
 grep -Fq '"$skipped" == "0"' "$inner" \
   || fail "acceptance unit can accept skipped Linux security tests"
@@ -128,10 +143,57 @@ grep -Fq 'find "$staged_repo" -name "$forbidden" -print -quit' "$harness" \
   || fail "acceptance staging does not scan extracted content for forbidden runtime paths"
 grep -Fq '<failIfNoTests>true</failIfNoTests>' "$pom" \
   || fail "Failsafe does not fail when LinuxSecurityIT is absent"
+grep -Fq '<include>**/LinuxSandboxSecurityIT.java</include>' "$pom" \
+  || fail "Failsafe does not exactly include LinuxSandboxSecurityIT"
+if grep -Fq '<include>**/*LinuxSecurityIT.java</include>' "$pom"; then
+  fail "Failsafe still uses the non-matching LinuxSecurityIT suffix pattern"
+fi
 grep -Fq '<runner.sandbox.mode>linux</runner.sandbox.mode>' "$pom" \
   || fail "Failsafe Linux security profile does not force Linux sandbox mode"
 grep -Fq '"runner.sandbox.mode=linux"' "$linux_security_it" \
   || fail "LinuxSandboxSecurityIT does not explicitly force Linux sandbox mode"
+
+cache_parent="$temp_root/maven-cache"
+cache_repo="$cache_parent/m2"
+current_uid="$(id -u)"
+current_gid="$(id -g)"
+prepare_acceptance_maven_cache \
+  "$cache_parent" "$cache_repo" "$current_uid" "$current_gid" "$current_uid" "$current_gid" \
+  || fail "safe acceptance Maven cache could not be created"
+[[ "$(stat -c '%u:%g:%a' -- "$cache_parent")" == "$current_uid:$current_gid:755" ]] \
+  || fail "acceptance Maven cache parent metadata is incorrect"
+[[ "$(stat -c '%u:%g:%a' -- "$cache_repo")" == "$current_uid:$current_gid:700" ]] \
+  || fail "acceptance Maven repository metadata is incorrect"
+
+if prepare_acceptance_maven_cache \
+  "$cache_parent" "$cache_repo" "$((current_uid + 1))" "$current_gid" \
+  "$current_uid" "$current_gid"; then
+  fail "acceptance Maven cache accepted unexpected ownership"
+fi
+
+chmod 0755 "$cache_repo"
+if prepare_acceptance_maven_cache \
+  "$cache_parent" "$cache_repo" "$current_uid" "$current_gid" "$current_uid" "$current_gid"; then
+  fail "acceptance Maven cache accepted broad repository permissions"
+fi
+chmod 0700 "$cache_repo"
+
+symlink_parent="$temp_root/maven-cache-link"
+ln -s -- "$cache_parent" "$symlink_parent"
+if [[ -L "$symlink_parent" ]] && prepare_acceptance_maven_cache \
+  "$symlink_parent" "$symlink_parent/m2" "$current_uid" "$current_gid" \
+  "$current_uid" "$current_gid"; then
+  fail "acceptance Maven cache accepted a symlink parent"
+fi
+
+symlink_cache_parent="$temp_root/maven-cache-with-link"
+mkdir -m 0755 -- "$symlink_cache_parent"
+ln -s -- "$cache_repo" "$symlink_cache_parent/m2"
+if [[ -L "$symlink_cache_parent/m2" ]] && prepare_acceptance_maven_cache \
+  "$symlink_cache_parent" "$symlink_cache_parent/m2" "$current_uid" "$current_gid" \
+  "$current_uid" "$current_gid"; then
+  fail "acceptance Maven cache accepted a symlink repository"
+fi
 
 MOCK_LOAD_STATE=not-found
 systemctl() {

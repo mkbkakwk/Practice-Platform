@@ -6,6 +6,7 @@ set -euo pipefail
 repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 expected_unit="oj-sandbox-acceptance.service"
 expected_cgroup="/sys/fs/cgroup/system.slice/$expected_unit"
+expected_maven_repo="/var/cache/oj-sandbox-acceptance/m2"
 
 fail() {
   printf 'LINUX ACCEPTANCE FAILED: %s\n' "$*" >&2
@@ -22,8 +23,14 @@ fail() {
   || fail "acceptance staging identity is missing"
 [[ "$repo_root" == "$RUNNER_ACCEPTANCE_STAGING_ROOT/repo" ]] \
   || fail "acceptance repository is outside its staging root"
-[[ "${MAVEN_REPO_LOCAL:-}" == "$RUNNER_ACCEPTANCE_STAGING_ROOT/m2" ]] \
-  || fail "dedicated Maven repository must be inside acceptance staging"
+[[ "${RUNNER_ACCEPTANCE_MAVEN_REPO:-}" == "$expected_maven_repo" ]] \
+  || fail "acceptance Maven repository identity is missing or unsafe"
+[[ "${MAVEN_REPO_LOCAL:-}" == "$RUNNER_ACCEPTANCE_MAVEN_REPO" ]] \
+  || fail "Maven local repository does not match the acceptance cache"
+[[ "$MAVEN_REPO_LOCAL" != "$RUNNER_ACCEPTANCE_STAGING_ROOT"* ]] \
+  || fail "persistent Maven cache must be outside source staging"
+[[ "$MAVEN_REPO_LOCAL" != /home/* ]] \
+  || fail "acceptance must not use a home-directory Maven cache"
 [[ "$(id -u)" -eq 10001 ]] || fail "acceptance must run as ojrunner uid 10001"
 [[ "$(id -g)" -eq 10001 ]] || fail "acceptance must run as ojrunner gid 10001"
 

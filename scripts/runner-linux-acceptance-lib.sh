@@ -35,6 +35,50 @@ acceptance_resources_removed() {
   [[ ! -e "$cgroup" ]]
 }
 
+acceptance_directory_metadata_matches() {
+  local path="$1"
+  local expected_uid="$2"
+  local expected_gid="$3"
+  local expected_mode="$4"
+  local metadata
+
+  [[ -d "$path" && ! -L "$path" ]] || return 1
+  metadata="$(stat -c '%u:%g:%a' -- "$path" 2>/dev/null)" || return 1
+  [[ "$metadata" == "$expected_uid:$expected_gid:$expected_mode" ]]
+}
+
+# Create the dedicated dependency cache only when absent. Existing paths must
+# already have the audited type, ownership, and mode; this helper never repairs
+# an unsafe replacement or continues silently.
+prepare_acceptance_maven_cache() {
+  local parent="$1"
+  local cache="$2"
+  local parent_uid="$3"
+  local parent_gid="$4"
+  local cache_uid="$5"
+  local cache_gid="$6"
+
+  [[ "$cache" == "$parent/m2" ]] || return 1
+  if [[ -L "$parent" || ( -e "$parent" && ! -d "$parent" ) ]]; then
+    return 1
+  fi
+  if [[ ! -e "$parent" ]]; then
+    install -d -o "$parent_uid" -g "$parent_gid" -m 0755 -- "$parent" \
+      || return 1
+  fi
+  acceptance_directory_metadata_matches "$parent" "$parent_uid" "$parent_gid" 755 \
+    || return 1
+
+  if [[ -L "$cache" || ( -e "$cache" && ! -d "$cache" ) ]]; then
+    return 1
+  fi
+  if [[ ! -e "$cache" ]]; then
+    install -d -o "$cache_uid" -g "$cache_gid" -m 0700 -- "$cache" \
+      || return 1
+  fi
+  acceptance_directory_metadata_matches "$cache" "$cache_uid" "$cache_gid" 700
+}
+
 remove_safe_jvm_attach_markers() {
   local repo="$1"
   local runner_dir="$repo/runner"
