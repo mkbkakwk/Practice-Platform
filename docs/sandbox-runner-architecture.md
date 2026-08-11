@@ -261,6 +261,15 @@ read-only bind mount at `/`. Startup preflight parses `/proc/self/mountinfo`,
 selects the most specific mount covering the configured runtime rootfs, and
 fails closed unless that real host mount is `ro`.
 
+The Runner service is provisioned with systemd `PrivateDevices=yes`, so the four
+host devices exposed to nsjail come from systemd's private `/dev`. Only
+`/dev/null`, `/dev/zero`, `/dev/random`, and `/dev/urandom` are bind-mounted into
+the sandbox, and those bind mounts remain mount-level read-only. That does not
+block the character-device operations themselves (for example, writing to
+`/dev/null` or reading from the other three), while avoiding an unprivileged
+`mount_setattr()` attempt to clear `MOUNT_ATTR_RDONLY`. The parent sandbox `/dev`
+remains a separate writable, bounded tmpfs with `nosuid` and `noexec` enabled.
+
 nsjail creates an execution cgroup under a systemd-delegated cgroup-v2 root. The
 configuration applies `memory.max`, `memory.swap.max=0`, `pids.max`, and `cpu.max`.
 The outer watchdog enforces the requested wall clock limit, monitors that exact

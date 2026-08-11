@@ -84,7 +84,7 @@ class NsJailConfigWriterTest {
 
     private String deviceMount(String device) {
         return "mount { src: \"" + device + "\" dst: \"" + device
-                + "\" is_bind: true is_dir: false rw: true mandatory: true "
+                + "\" is_bind: true is_dir: false rw: false mandatory: true "
                 + "nosuid: false nodev: false noexec: false }";
     }
 
