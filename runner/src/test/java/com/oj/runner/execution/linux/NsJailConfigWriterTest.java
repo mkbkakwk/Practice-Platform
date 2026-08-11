@@ -22,7 +22,9 @@ class NsJailConfigWriterTest {
         LinuxSandboxProperties properties = properties();
         SandboxWorkspace workspace = workspace();
         var profile = new LanguageProfileRegistry().require(RunnerLanguage.JAVA);
-        Path config = new NsJailConfigWriter(properties).write(workspace, profile, "compile", 2000, 256);
+        Path executionCgroup = executionCgroup(properties, "11111111111111111111111111111111");
+        Path config = new NsJailConfigWriter(properties).write(
+                workspace, profile, "compile", 2000, 256, executionCgroup);
 
         String value = Files.readString(config);
         assertThat(value).contains(
@@ -37,7 +39,8 @@ class NsJailConfigWriterTest {
                 "dst: \"/\" is_bind: true rw: false", "dst: \"/workspace\" is_bind: true rw: true",
                 "dst: \"/dev\" fstype: \"tmpfs\" rw: true", "src: \"/dev/null\"",
                 "dst: \"/tmp\" fstype: \"tmpfs\" rw: true", "noexec: true",
-                "envar: \"JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64\"");
+                "envar: \"JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64\"",
+                "cgroupv2_mount: \"" + executionCgroup + "\"");
         assertThat(value).doesNotContain("mode: EXECVE");
         assertThat(value).doesNotContain("dst: \"/\" is_bind: true rw: true");
         assertThat(value).doesNotContain("RUNNER_TOKEN", "DATABASE_URL", "JWT", "sourceCode");
@@ -53,14 +56,17 @@ class NsJailConfigWriterTest {
         NsJailConfigWriter writer = new NsJailConfigWriter(properties());
         assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> writer.write(
                 workspace(), new LanguageProfileRegistry().require(RunnerLanguage.C),
-                "../escape", 1000, 64))).isInstanceOf(IllegalArgumentException.class);
+                "../escape", 1000, 64,
+                executionCgroup(properties(), "22222222222222222222222222222222"))))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void configUsesExplicitReadOnlySubsetPidProcMount() throws Exception {
         Path config = new NsJailConfigWriter(properties()).write(
                 workspace(), new LanguageProfileRegistry().require(RunnerLanguage.PYTHON),
-                "run-1", 1000, 64);
+                "run-1", 1000, 64,
+                executionCgroup(properties(), "33333333333333333333333333333333"));
 
         String value = Files.readString(config);
         assertThat(value).doesNotContain("mount_proc: true");
@@ -73,7 +79,8 @@ class NsJailConfigWriterTest {
     void configBindsOnlyFourWhitelistedCharacterDevicesWithCompatibleFlags() throws Exception {
         Path config = new NsJailConfigWriter(properties()).write(
                 workspace(), new LanguageProfileRegistry().require(RunnerLanguage.PYTHON),
-                "run-1", 1000, 64);
+                "run-1", 1000, 64,
+                executionCgroup(properties(), "44444444444444444444444444444444"));
 
         String value = Files.readString(config);
         assertThat(value).contains(
@@ -100,7 +107,8 @@ class NsJailConfigWriterTest {
             String phaseId) throws Exception {
         Path config = new NsJailConfigWriter(properties()).write(
                 workspace(), new LanguageProfileRegistry().require(RunnerLanguage.C),
-                phaseId, wallTimeMs, 64);
+                phaseId, wallTimeMs, 64,
+                executionCgroup(properties(), "55555555555555555555555555555555"));
         String value = Files.readString(config);
 
         long timeLimitSeconds = numericValue(value, "time_limit");
@@ -124,6 +132,10 @@ class NsJailConfigWriterTest {
         properties.setSeccompPolicy("/etc/oj-sandbox-runner/nsjail-seccomp.policy");
         properties.setCgroupV2Mount("/sys/fs/cgroup/system.slice/oj-sandbox-runner.service");
         return properties;
+    }
+
+    private Path executionCgroup(LinuxSandboxProperties properties, String id) {
+        return Path.of(properties.getCgroupV2Mount()).resolve("RUNNER." + id);
     }
 
     private SandboxWorkspace workspace() throws Exception {

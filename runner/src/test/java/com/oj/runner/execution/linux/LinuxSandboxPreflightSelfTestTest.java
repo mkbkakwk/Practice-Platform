@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +24,8 @@ class LinuxSandboxPreflightSelfTestTest {
 
     private SandboxWorkspaceManager workspaceManager;
     private NsJailConfigWriter configWriter;
+    private ExecutionCgroupManager cgroupManager;
+    private ExecutionCgroupLease cgroup;
     private SandboxProcessLauncher launcher;
     private NamespaceIsolationVerifier namespaceVerifier;
     private LinuxSandboxPreflight preflight;
@@ -31,6 +34,8 @@ class LinuxSandboxPreflightSelfTestTest {
     void setUp() throws Exception {
         workspaceManager = mock(SandboxWorkspaceManager.class);
         configWriter = mock(NsJailConfigWriter.class);
+        cgroupManager = mock(ExecutionCgroupManager.class);
+        cgroup = mock(ExecutionCgroupLease.class);
         launcher = mock(SandboxProcessLauncher.class);
         namespaceVerifier = mock(NamespaceIsolationVerifier.class);
         SandboxWorkspace workspace = new SandboxWorkspace(
@@ -38,7 +43,11 @@ class LinuxSandboxPreflightSelfTestTest {
                 Path.of("/runner-self-test/workspace"),
                 Path.of("/runner-self-test/metadata"));
         when(workspaceManager.create(anyString())).thenReturn(workspace);
-        when(configWriter.write(any(), any(), anyString(), anyLong(), anyLong()))
+        when(cgroupManager.allocate()).thenReturn(cgroup);
+        Path cgroupPath = Path.of(
+                "/sys/fs/cgroup/runner/RUNNER.11111111111111111111111111111111");
+        when(cgroup.path()).thenReturn(cgroupPath);
+        when(configWriter.write(any(), any(), anyString(), anyLong(), anyLong(), eq(cgroupPath)))
                 .thenReturn(Path.of("/runner-self-test/metadata/nsjail-self-test.cfg"));
         when(configWriter.logPath(any(), anyString()))
                 .thenReturn(Path.of("/runner-self-test/metadata/nsjail-self-test.log"));
@@ -49,6 +58,7 @@ class LinuxSandboxPreflightSelfTestTest {
                 new LanguageProfileRegistry(),
                 workspaceManager,
                 configWriter,
+                cgroupManager,
                 new LanguageCommandResolver(),
                 launcher,
                 namespaceVerifier);

@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class NsJailLauncherCommandTest {
 
@@ -21,6 +22,7 @@ class NsJailLauncherCommandTest {
                 Path.of("/run/runner/nsjail.cfg"),
                 Path.of("/run/runner/nsjail.log"),
                 Path.of("/run/runner/workspace"),
+                mock(ExecutionCgroupLease.class),
                 List.of("/usr/bin/python3", "--experimental_mnt", "old"),
                 new byte[0],
                 1000,

@@ -15,11 +15,16 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class LinuxSandboxExecutorTest {
@@ -29,6 +34,8 @@ class LinuxSandboxExecutorTest {
 
     private LinuxSandboxPreflight preflight;
     private LinuxSandboxProperties properties;
+    private ExecutionCgroupManager cgroupManager;
+    private List<ExecutionCgroupLease> cgroupLeases;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -40,6 +47,16 @@ class LinuxSandboxExecutorTest {
         properties.setRootfs("/srv/oj-sandbox-runner/rootfs");
         properties.setSeccompPolicy("/etc/oj-sandbox-runner/nsjail-seccomp.policy");
         properties.setCgroupV2Mount("/sys/fs/cgroup/system.slice/oj-sandbox-runner.service");
+        cgroupManager = mock(ExecutionCgroupManager.class);
+        cgroupLeases = new ArrayList<>();
+        AtomicInteger sequence = new AtomicInteger();
+        when(cgroupManager.allocate()).thenAnswer(invocation -> {
+            ExecutionCgroupLease lease = mock(ExecutionCgroupLease.class);
+            String id = "%032x".formatted(sequence.incrementAndGet());
+            when(lease.path()).thenReturn(Path.of(properties.getCgroupV2Mount()).resolve("RUNNER." + id));
+            cgroupLeases.add(lease);
+            return lease;
+        });
     }
 
     @Test
@@ -57,6 +74,13 @@ class LinuxSandboxExecutorTest {
         assertThat(response.cases()).extracting(result -> result.stdout())
                 .containsExactly("one\n", "two\n");
         assertThat(launcher.phases).containsExactly(SandboxPhase.COMPILE, SandboxPhase.RUN, SandboxPhase.RUN);
+        assertThat(cgroupLeases).hasSize(3).allSatisfy(lease -> {
+            try {
+                verify(lease).close();
+            } catch (Exception exception) {
+                throw new AssertionError(exception);
+            }
+        });
         assertThat(workspaceRoot()).isEmptyDirectory();
     }
 
@@ -72,6 +96,26 @@ class LinuxSandboxExecutorTest {
                 new NsJailExecutionResult(SandboxTermination.OUTPUT_LIMIT, 137, "bounded", "", 2, 1024, ""));
         assertThat(executor(runtimeOutput).execute(job(oneCase())).cases().getFirst().status())
                 .isEqualTo(RunnerStatus.OUTPUT_LIMIT_EXCEEDED);
+
+        QueueLauncher runtimeError = new QueueLauncher(
+                completed(0, "", "", 1),
+                completed(7, "", "expected runtime error", 2));
+        assertThat(executor(runtimeError).execute(job(oneCase())).cases().getFirst().status())
+                .isEqualTo(RunnerStatus.RUNTIME_ERROR);
+        assertThat(workspaceRoot()).isEmptyDirectory();
+    }
+
+    @Test
+    void executionCgroupCleanupFailureFailsClosed() throws Exception {
+        ExecutionCgroupLease lease = mock(ExecutionCgroupLease.class);
+        when(lease.path()).thenReturn(Path.of(properties.getCgroupV2Mount())
+                .resolve("RUNNER.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        doThrow(new java.io.IOException("simulated cleanup failure")).when(lease).close();
+        when(cgroupManager.allocate()).thenReturn(lease);
+
+        var response = executor(new QueueLauncher(completed(0, "", "", 1))).execute(job(oneCase()));
+
+        assertThat(response.compile().status()).isEqualTo(RunnerStatus.SYSTEM_ERROR);
         assertThat(workspaceRoot()).isEmptyDirectory();
     }
 
@@ -82,6 +126,7 @@ class LinuxSandboxExecutorTest {
         var response = executor(launcher).execute(job(oneCase()));
         assertThat(response.compile().status()).isEqualTo(RunnerStatus.SYSTEM_ERROR);
         assertThat(launcher.phases).isEmpty();
+        verifyNoInteractions(cgroupManager);
     }
 
     private LinuxSandboxExecutor executor(SandboxProcessLauncher launcher) {
@@ -89,6 +134,7 @@ class LinuxSandboxExecutorTest {
                 preflight,
                 new SandboxWorkspaceManager(properties),
                 new NsJailConfigWriter(properties),
+                cgroupManager,
                 new LanguageCommandResolver(),
                 launcher);
     }

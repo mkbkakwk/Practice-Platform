@@ -26,6 +26,7 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
     private final LinuxSandboxPreflight preflight;
     private final SandboxWorkspaceManager workspaceManager;
     private final NsJailConfigWriter configWriter;
+    private final ExecutionCgroupManager cgroupManager;
     private final LanguageCommandResolver commandResolver;
     private final SandboxProcessLauncher launcher;
 
@@ -33,11 +34,13 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
             LinuxSandboxPreflight preflight,
             SandboxWorkspaceManager workspaceManager,
             NsJailConfigWriter configWriter,
+            ExecutionCgroupManager cgroupManager,
             LanguageCommandResolver commandResolver,
             SandboxProcessLauncher launcher) {
         this.preflight = preflight;
         this.workspaceManager = workspaceManager;
         this.configWriter = configWriter;
+        this.cgroupManager = cgroupManager;
         this.commandResolver = commandResolver;
         this.launcher = launcher;
     }
@@ -79,18 +82,14 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
 
     private RunnerJobResponse executeInWorkspace(RunnerJob job, SandboxWorkspace workspace) throws IOException {
         var limits = job.request().limits();
-        Path compileConfig = configWriter.write(
-                workspace, job.profile(), "compile", limits.compileTimeMs(), limits.memoryMb());
-        NsJailExecutionResult compileExecution = launcher.launch(new NsJailInvocation(
+        NsJailExecutionResult compileExecution = executePhase(
+                workspace,
+                job,
+                "compile",
                 SandboxPhase.COMPILE,
-                compileConfig,
-                configWriter.logPath(workspace, "compile"),
-                workspace.files(),
                 commandResolver.compile(job.profile(), limits.memoryMb()),
                 new byte[0],
-                limits.compileTimeMs(),
-                limits.memoryMb(),
-                limits.outputLimitBytes()));
+                limits.compileTimeMs());
         RunnerCompileResult compile = compileResult(compileExecution);
         if (compile.status() != RunnerStatus.OK) {
             return new RunnerJobResponse(job.request().requestId(), compile, List.of(), compile.message());
@@ -100,18 +99,14 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
         for (int index = 0; index < job.request().cases().size(); index++) {
             RunnerCaseRequest requestCase = job.request().cases().get(index);
             String phaseId = "case-" + index;
-            Path runConfig = configWriter.write(
-                    workspace, job.profile(), phaseId, limits.runTimeMs(), limits.memoryMb());
-            NsJailExecutionResult execution = launcher.launch(new NsJailInvocation(
+            NsJailExecutionResult execution = executePhase(
+                    workspace,
+                    job,
+                    phaseId,
                     SandboxPhase.RUN,
-                    runConfig,
-                    configWriter.logPath(workspace, phaseId),
-                    workspace.files(),
                     commandResolver.run(job.profile(), limits.memoryMb()),
                     requestCase.stdin().getBytes(StandardCharsets.UTF_8),
-                    limits.runTimeMs(),
-                    limits.memoryMb(),
-                    limits.outputLimitBytes()));
+                    limits.runTimeMs());
             RunnerCaseResult result = caseResult(requestCase.caseId(), execution);
             cases.add(result);
             if (result.status() != RunnerStatus.OK) {
@@ -119,6 +114,32 @@ public class LinuxSandboxExecutor implements SandboxExecutor {
             }
         }
         return new RunnerJobResponse(job.request().requestId(), compile, List.copyOf(cases), "");
+    }
+
+    private NsJailExecutionResult executePhase(
+            SandboxWorkspace workspace,
+            RunnerJob job,
+            String phaseId,
+            SandboxPhase phase,
+            List<String> argv,
+            byte[] stdin,
+            long wallTimeMs) throws IOException {
+        var limits = job.request().limits();
+        try (ExecutionCgroupLease cgroup = cgroupManager.allocate()) {
+            Path config = configWriter.write(
+                    workspace, job.profile(), phaseId, wallTimeMs, limits.memoryMb(), cgroup.path());
+            return launcher.launch(new NsJailInvocation(
+                    phase,
+                    config,
+                    configWriter.logPath(workspace, phaseId),
+                    workspace.files(),
+                    cgroup,
+                    argv,
+                    stdin,
+                    wallTimeMs,
+                    limits.memoryMb(),
+                    limits.outputLimitBytes()));
+        }
     }
 
     private RunnerCompileResult compileResult(NsJailExecutionResult execution) {

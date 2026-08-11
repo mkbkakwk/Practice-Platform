@@ -42,6 +42,7 @@ public class LinuxSandboxPreflight {
     private final LanguageProfileRegistry profileRegistry;
     private final SandboxWorkspaceManager workspaceManager;
     private final NsJailConfigWriter configWriter;
+    private final ExecutionCgroupManager cgroupManager;
     private final LanguageCommandResolver commandResolver;
     private final SandboxProcessLauncher launcher;
     private final NamespaceIsolationVerifier namespaceVerifier;
@@ -52,6 +53,7 @@ public class LinuxSandboxPreflight {
             LanguageProfileRegistry profileRegistry,
             SandboxWorkspaceManager workspaceManager,
             NsJailConfigWriter configWriter,
+            ExecutionCgroupManager cgroupManager,
             LanguageCommandResolver commandResolver,
             SandboxProcessLauncher launcher,
             NamespaceIsolationVerifier namespaceVerifier) {
@@ -59,6 +61,7 @@ public class LinuxSandboxPreflight {
         this.profileRegistry = profileRegistry;
         this.workspaceManager = workspaceManager;
         this.configWriter = configWriter;
+        this.cgroupManager = cgroupManager;
         this.commandResolver = commandResolver;
         this.launcher = launcher;
         this.namespaceVerifier = namespaceVerifier;
@@ -116,17 +119,21 @@ public class LinuxSandboxPreflight {
             workspace = workspaceManager.create("00000000-0000-4000-8000-000000000000");
             workspaceManager.writeSource(
                     workspace, profile.sourceFilename(), NamespaceIsolationVerifier.pythonProbeSource());
-            Path config = configWriter.write(workspace, profile, "self-test", 2000, 128);
-            NsJailExecutionResult result = launcher.launch(new NsJailInvocation(
-                    SandboxPhase.RUN,
-                    config,
-                    configWriter.logPath(workspace, "self-test"),
-                    workspace.files(),
-                    commandResolver.run(profile, 128),
-                    new byte[0],
-                    2000,
-                    128,
-                    4096));
+            NsJailExecutionResult result;
+            try (ExecutionCgroupLease cgroup = cgroupManager.allocate()) {
+                Path config = configWriter.write(workspace, profile, "self-test", 2000, 128, cgroup.path());
+                result = launcher.launch(new NsJailInvocation(
+                        SandboxPhase.RUN,
+                        config,
+                        configWriter.logPath(workspace, "self-test"),
+                        workspace.files(),
+                        cgroup,
+                        commandResolver.run(profile, 128),
+                        new byte[0],
+                        2000,
+                        128,
+                        4096));
+            }
             boolean executionSucceeded = result.termination() == SandboxTermination.COMPLETED
                     && result.exitCode() == 0;
             if (!executionSucceeded) {

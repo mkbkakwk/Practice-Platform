@@ -8,6 +8,7 @@ public record NsJailInvocation(
         Path config,
         Path log,
         Path workspace,
+        ExecutionCgroupLease executionCgroup,
         List<String> argv,
         byte[] stdin,
         long wallTimeMs,

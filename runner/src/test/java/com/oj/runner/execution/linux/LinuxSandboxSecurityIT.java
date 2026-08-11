@@ -311,7 +311,10 @@ class LinuxSandboxSecurityIT {
         Path cgroup = Path.of(properties.getCgroupV2Mount());
         try (var jobs = Files.list(workspace); var cgroups = Files.list(cgroup)) {
             assertThat(jobs.filter(path -> path.getFileName().toString().startsWith("job-"))).isEmpty();
-            assertThat(cgroups.filter(path -> path.getFileName().toString().startsWith("NSJAIL."))).isEmpty();
+            assertThat(cgroups.filter(path -> {
+                String name = path.getFileName().toString();
+                return name.startsWith("NSJAIL.") || name.startsWith("RUNNER.");
+            })).isEmpty();
         } catch (IOException exception) {
             throw new AssertionError("Unable to verify sandbox cleanup", exception);
         }

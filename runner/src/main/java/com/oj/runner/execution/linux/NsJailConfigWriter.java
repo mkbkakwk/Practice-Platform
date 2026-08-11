@@ -28,7 +28,8 @@ public class NsJailConfigWriter {
             LanguageProfile profile,
             String phaseId,
             long wallTimeMs,
-            long memoryMb) throws IOException {
+            long memoryMb,
+            Path executionCgroup) throws IOException {
         validatePhaseId(phaseId);
         Path config = workspace.metadata().resolve("nsjail-" + phaseId + ".cfg");
         Path log = workspace.metadata().resolve("nsjail-" + phaseId + ".log");
@@ -81,7 +82,7 @@ public class NsJailConfigWriter {
                 .append("cgroup_mem_swap_max: 0\n")
                 .append("cgroup_pids_max: ").append(properties.getPidsMax()).append('\n')
                 .append("cgroup_cpu_ms_per_sec: ").append(properties.getCpuMsPerSecond()).append('\n');
-        line(value, "cgroupv2_mount", properties.getCgroupV2Mount());
+        line(value, "cgroupv2_mount", trustedExecutionCgroup(executionCgroup).toString());
         line(value, "seccomp_policy_file", properties.getSeccompPolicy());
         line(value, "log_file", log.toString());
         value.append("log_level: WARNING\n");
@@ -149,5 +150,15 @@ public class NsJailConfigWriter {
         if (phaseId == null || !phaseId.matches("[a-z0-9-]{1,32}")) {
             throw new IllegalArgumentException("Sandbox phase id is invalid");
         }
+    }
+
+    private Path trustedExecutionCgroup(Path executionCgroup) {
+        Path delegatedRoot = Path.of(properties.getCgroupV2Mount()).toAbsolutePath().normalize();
+        Path candidate = executionCgroup.toAbsolutePath().normalize();
+        if (!delegatedRoot.equals(candidate.getParent())
+                || !candidate.getFileName().toString().matches("RUNNER\\.[0-9a-f]{32}")) {
+            throw new IllegalArgumentException("Execution cgroup must be a trusted direct child");
+        }
+        return candidate;
     }
 }

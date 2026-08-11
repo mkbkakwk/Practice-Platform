@@ -280,12 +280,21 @@ fails closed unless every sandbox inode differs from the Runner JVM and the
 sandbox process reports PID 1. The Linux-only security suite repeats the same
 kernel-observed validation.
 
-nsjail creates an execution cgroup under a systemd-delegated cgroup-v2 root. The
-configuration applies `memory.max`, `memory.swap.max=0`, `pids.max`, and `cpu.max`.
-The outer watchdog enforces the requested wall clock limit, monitors that exact
-execution cgroup, bounds stdout+stderr while streaming, bounds workspace bytes and
-file count, and kills the whole nsjail process tree on TLE/MLE/OLE or infrastructure
-failure. A cleanup failure becomes `SYSTEM_ERROR`, never a successful result.
+For every compile or case invocation, the Runner creates a fresh direct child named
+`RUNNER.<trusted-random-id>` below the systemd-delegated cgroup-v2 root. nsjail uses
+that path as its `cgroupv2_mount` and creates its short-lived `NSJAIL.<pid>` child
+inside it. The configuration applies `memory.max`, `memory.swap.max=0`, `pids.max`,
+and `cpu.max`. The Runner-owned parent survives child reaping long enough to read
+hierarchical `memory.peak`, `memory.events` (`max`, `oom`, and `oom_kill`), and
+`pids.events` without cross-talk between concurrent invocations.
+
+The outer watchdog enforces the requested wall clock limit, bounds stdout+stderr
+while streaming, bounds workspace bytes and file count, and kills the whole nsjail
+process tree on TLE/OLE or infrastructure failure. Forced output, workspace, and
+time classifications remain authoritative; otherwise cgroup OOM evidence produces
+MLE and an ordinary non-zero exit remains RE. Before removing its parent cgroup,
+the Runner requires empty `cgroup.procs` and no residual descendants. Observation
+or cleanup failure becomes `SYSTEM_ERROR`, never a successful result.
 
 Java heap, metaspace, direct-memory, stack, and active-processor flags are derived
 from the already validated request limit and remain below the cgroup ceiling. Node

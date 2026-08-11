@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The only production component permitted to start an operating-system process.
@@ -44,12 +43,10 @@ public class NsJailLauncher implements SandboxProcessLauncher {
 
     private final LinuxSandboxProperties properties;
     private final Path nsjailPath;
-    private final Path cgroupRoot;
 
     public NsJailLauncher(LinuxSandboxProperties properties) {
         this.properties = properties;
         this.nsjailPath = Path.of(properties.getNsjailPath()).toAbsolutePath().normalize();
-        this.cgroupRoot = Path.of(properties.getCgroupV2Mount()).toAbsolutePath().normalize();
     }
 
     public static boolean probeHelp(Path nsjail) {
@@ -92,9 +89,6 @@ public class NsJailLauncher implements SandboxProcessLauncher {
         long startedAt = System.nanoTime();
         AtomicLong capturedBytes = new AtomicLong();
         AtomicBoolean outputExceeded = new AtomicBoolean();
-        AtomicLong peakMemoryBytes = new AtomicLong();
-        AtomicBoolean oomKilled = new AtomicBoolean();
-        AtomicReference<Path> ownCgroup = new AtomicReference<>();
         Process process = null;
 
         try (ExecutorService io = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -117,11 +111,6 @@ public class NsJailLauncher implements SandboxProcessLauncher {
             long deadline = System.nanoTime() + Duration.ofMillis(invocation.wallTimeMs()).toNanos();
             SandboxTermination forced = null;
             while (process.isAlive()) {
-                locateOwnCgroup(process).ifPresent(path -> ownCgroup.compareAndSet(null, path));
-                Path cgroup = ownCgroup.get();
-                if (cgroup != null) {
-                    sampleCgroup(cgroup, peakMemoryBytes, oomKilled);
-                }
                 if (outputExceeded.get()) {
                     forced = SandboxTermination.OUTPUT_LIMIT;
                     break;
@@ -146,38 +135,23 @@ public class NsJailLauncher implements SandboxProcessLauncher {
                 return NsJailExecutionResult.sandboxError("nsjail process tree did not terminate");
             }
 
-            Path cgroup = ownCgroup.get();
-            if (cgroup != null) {
-                sampleCgroup(cgroup, peakMemoryBytes, oomKilled);
-            }
+            ExecutionCgroupSnapshot cgroup = invocation.executionCgroup().snapshot();
             await(stdinFuture);
             byte[] stdoutBytes = await(stdoutFuture);
             byte[] stderrBytes = await(stderrFuture);
-            if (cgroup != null && !cleanupOwnCgroup(cgroup)) {
-                return NsJailExecutionResult.sandboxError("nsjail cgroup cleanup failed");
-            }
 
             long elapsedMs = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
             int exitCode = process.exitValue();
-            SandboxTermination termination = forced;
-            if (termination == null && outputExceeded.get()) {
-                termination = SandboxTermination.OUTPUT_LIMIT;
-            }
             long memoryLimitBytes = invocation.memoryLimitMb() * 1024L * 1024L;
-            boolean reachedMemoryLimit = peakMemoryBytes.get() >= memoryLimitBytes * 95 / 100;
-            if (termination == null && (oomKilled.get() || (exitCode == 137 && reachedMemoryLimit))) {
-                termination = SandboxTermination.MEMORY_LIMIT;
-            }
-            if (termination == null) {
-                termination = SandboxTermination.COMPLETED;
-            }
+            SandboxTermination termination = classifyTermination(
+                    forced, outputExceeded.get(), exitCode, cgroup, memoryLimitBytes);
             return new NsJailExecutionResult(
                     termination,
                     exitCode,
                     new String(stdoutBytes, StandardCharsets.UTF_8),
                     new String(stderrBytes, StandardCharsets.UTF_8),
                     elapsedMs,
-                    peakMemoryBytes.get() / 1024,
+                    cgroup.memoryPeakBytes() / 1024,
                     readDiagnostic(invocation.log()));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -206,39 +180,30 @@ public class NsJailLauncher implements SandboxProcessLauncher {
         return List.copyOf(command);
     }
 
+    static SandboxTermination classifyTermination(
+            SandboxTermination forced,
+            boolean outputExceeded,
+            int exitCode,
+            ExecutionCgroupSnapshot cgroup,
+            long memoryLimitBytes) {
+        if (forced != null) {
+            return forced;
+        }
+        if (outputExceeded) {
+            return SandboxTermination.OUTPUT_LIMIT;
+        }
+        if (cgroup.indicatesMemoryLimit(exitCode, memoryLimitBytes)) {
+            return SandboxTermination.MEMORY_LIMIT;
+        }
+        return SandboxTermination.COMPLETED;
+    }
+
     private static void writeInput(OutputStream destination, byte[] input) {
         try (destination) {
             destination.write(input);
         } catch (IOException ignored) {
             // A sandbox may exit before consuming all input. Its exit status remains authoritative.
         }
-    }
-
-    private void sampleCgroup(Path cgroup, AtomicLong peakMemory, AtomicBoolean oomKilled) {
-        if (!Files.isDirectory(cgroup, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(cgroup)) {
-            return;
-        }
-        readLong(cgroup.resolve("memory.peak")).ifPresent(value -> peakMemory.accumulateAndGet(value, Math::max));
-        try {
-            Files.readAllLines(cgroup.resolve("memory.events")).stream()
-                    .filter(line -> line.startsWith("oom_kill "))
-                    .map(line -> line.substring("oom_kill ".length()).trim())
-                    .mapToLong(Long::parseLong)
-                    .filter(value -> value > 0)
-                    .findFirst()
-                    .ifPresent(value -> oomKilled.set(true));
-        } catch (IOException | NumberFormatException ignored) {
-            // A short-lived cgroup can disappear between observations.
-        }
-    }
-
-    private java.util.Optional<Path> locateOwnCgroup(Process process) {
-        return process.toHandle().descendants()
-                .map(ProcessHandle::pid)
-                .map(pid -> cgroupRoot.resolve("NSJAIL." + pid).normalize())
-                .filter(path -> path.getParent().equals(cgroupRoot))
-                .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
-                .findFirst();
     }
 
     private WorkspaceUsage workspaceUsage(Path workspace) throws IOException {
@@ -270,38 +235,11 @@ public class NsJailLauncher implements SandboxProcessLauncher {
                         || excessiveFile.get());
     }
 
-    private boolean cleanupOwnCgroup(Path cgroup) {
-        try {
-            if (!Files.exists(cgroup, LinkOption.NOFOLLOW_LINKS)) {
-                return true;
-            }
-            if (Files.isSymbolicLink(cgroup) || !cgroup.getParent().equals(cgroupRoot)) {
-                return false;
-            }
-            String procs = Files.readString(cgroup.resolve("cgroup.procs"));
-            if (!procs.isBlank()) {
-                return false;
-            }
-            Files.delete(cgroup);
-            return true;
-        } catch (IOException exception) {
-            return false;
-        }
-    }
-
     private String readDiagnostic(Path log) {
         try (InputStream input = Files.newInputStream(log)) {
             return new String(input.readNBytes(MAX_DIAGNOSTIC_BYTES), StandardCharsets.UTF_8);
         } catch (IOException exception) {
             return "";
-        }
-    }
-
-    private java.util.OptionalLong readLong(Path path) {
-        try {
-            return java.util.OptionalLong.of(Long.parseLong(Files.readString(path).trim()));
-        } catch (IOException | NumberFormatException exception) {
-            return java.util.OptionalLong.empty();
         }
     }
 
