@@ -23,9 +23,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 /**
  * The only production component permitted to start an operating-system process.
@@ -38,6 +40,8 @@ public class NsJailLauncher implements SandboxProcessLauncher {
 
     private static final int BUFFER_SIZE = 8192;
     private static final int MAX_DIAGNOSTIC_BYTES = 65_536;
+    private static final int MAX_HELP_BYTES = 65_536;
+    private static final Pattern NEW_MOUNT_API_HELP = Pattern.compile("(?m)^\\s*new\\s*$");
 
     private final LinuxSandboxProperties properties;
     private final Path nsjailPath;
@@ -55,10 +59,21 @@ public class NsJailLauncher implements SandboxProcessLauncher {
             ProcessBuilder builder = new ProcessBuilder(nsjail.toString(), "--help");
             builder.environment().clear();
             builder.redirectErrorStream(true);
-            builder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
             process = builder.start();
-            return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
-        } catch (IOException exception) {
+            Process runningProcess = process;
+            try (ExecutorService io = Executors.newVirtualThreadPerTaskExecutor()) {
+                Future<byte[]> helpFuture = io.submit(
+                        () -> runningProcess.getInputStream().readNBytes(MAX_HELP_BYTES));
+                if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                    terminateTree(process);
+                    return false;
+                }
+                String help = new String(helpFuture.get(1, TimeUnit.SECONDS), StandardCharsets.UTF_8);
+                return process.exitValue() == 0
+                        && help.contains("--experimental_mnt")
+                        && NEW_MOUNT_API_HELP.matcher(help).find();
+            }
+        } catch (IOException | ExecutionException | TimeoutException exception) {
             return false;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -81,14 +96,7 @@ public class NsJailLauncher implements SandboxProcessLauncher {
         Process process = null;
 
         try (ExecutorService io = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<String> command = new ArrayList<>();
-            command.add(nsjailPath.toString());
-            command.add("--config");
-            command.add(invocation.config().toString());
-            command.add("--");
-            command.addAll(invocation.argv());
-
-            ProcessBuilder builder = new ProcessBuilder(command);
+            ProcessBuilder builder = new ProcessBuilder(buildCommand(invocation));
             builder.environment().clear();
             builder.directory(invocation.workspace().toFile());
             process = builder.start();
@@ -181,6 +189,18 @@ public class NsJailLauncher implements SandboxProcessLauncher {
             }
             return NsJailExecutionResult.sandboxError("nsjail launch failed");
         }
+    }
+
+    List<String> buildCommand(NsJailInvocation invocation) {
+        List<String> command = new ArrayList<>();
+        command.add(nsjailPath.toString());
+        command.add("--experimental_mnt");
+        command.add("new");
+        command.add("--config");
+        command.add(invocation.config().toString());
+        command.add("--");
+        command.addAll(invocation.argv());
+        return List.copyOf(command);
     }
 
     private static void writeInput(OutputStream destination, byte[] input) {

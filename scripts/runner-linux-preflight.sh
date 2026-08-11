@@ -138,10 +138,20 @@ else
   fail "unprivileged namespace creation"
 fi
 
-if [[ -x "$nsjail_path" ]] && "$nsjail_path" --help >/dev/null 2>&1; then
+nsjail_help=""
+nsjail_help_ok=false
+if [[ -x "$nsjail_path" ]] && nsjail_help="$("$nsjail_path" --help 2>&1)"; then
   pass "nsjail executable"
+  nsjail_help_ok=true
 else
   fail "nsjail executable"
+fi
+if [[ "$nsjail_help_ok" == true ]] \
+  && [[ "$nsjail_help" == *"--experimental_mnt"* ]] \
+  && grep -Eq '(^|[[:space:]])new([[:space:]]|$)' <<<"$nsjail_help"; then
+  pass "nsjail new mount API support"
+else
+  fail "nsjail new mount API support"
 fi
 
 if [[ "$(stat -fc %T /sys/fs/cgroup 2>/dev/null || true)" == "cgroup2fs" ]]; then

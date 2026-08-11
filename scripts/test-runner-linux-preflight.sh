@@ -77,6 +77,16 @@ run_preflight "$output" \
   MOCK_NSJAIL_RC=0 \
   MOCK_UNSHARE_RC=0 || true
 assert_contains "$output" "PASS  nsjail executable"
+assert_contains "$output" "PASS  nsjail new mount API support"
+
+output="$temp_root/nsjail-new-mount-missing.out"
+run_preflight "$output" \
+  PATH="$base_bin:$system_path" \
+  RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
+  MOCK_NSJAIL_RC=0 \
+  MOCK_NSJAIL_NEW_MOUNT_API=0 \
+  MOCK_UNSHARE_RC=0 || true
+assert_contains "$output" "FAIL  nsjail new mount API support"
 
 output="$temp_root/nsjail-missing.out"
 run_preflight "$output" \

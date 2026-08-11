@@ -16,10 +16,21 @@ class NsJailLauncherProbeTest {
     Path tempDir;
 
     @Test
-    void acceptsExecutableWhoseHelpCommandSucceeds() throws IOException {
-        Path nsjail = executable("nsjail-ok", "#!/bin/sh\n[ \"$1\" = \"--help\" ]\n");
+    void acceptsExecutableWhoseHelpSupportsNewMountApi() throws IOException {
+        Path nsjail = executable("nsjail-ok", """
+                #!/bin/sh
+                [ "$1" = "--help" ] || exit 64
+                printf '%s\\n' '--experimental_mnt VALUE' 'Mount API to use:' '  new' '  old' '  auto'
+                """);
 
         assertThat(NsJailLauncher.probeHelp(nsjail)).isTrue();
+    }
+
+    @Test
+    void rejectsExecutableWhoseHelpDoesNotSupportNewMountApi() throws IOException {
+        Path nsjail = executable("nsjail-old-mount", "#!/bin/sh\necho 'legacy mount only'\n");
+
+        assertThat(NsJailLauncher.probeHelp(nsjail)).isFalse();
     }
 
     @Test

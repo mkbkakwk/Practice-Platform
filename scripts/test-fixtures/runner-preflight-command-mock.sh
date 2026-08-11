@@ -10,6 +10,9 @@ fi
 case "$command_name" in
   nsjail)
     [[ "${1:-}" == "--help" ]] || exit 64
+    if [[ "${MOCK_NSJAIL_NEW_MOUNT_API:-1}" == "1" ]]; then
+      printf '%s\n' '--experimental_mnt VALUE' 'Mount API to use:' '  new' '  old' '  auto'
+    fi
     exit "${MOCK_NSJAIL_RC:-0}"
     ;;
   unshare)
