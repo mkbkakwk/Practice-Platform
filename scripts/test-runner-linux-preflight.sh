@@ -101,7 +101,8 @@ run_preflight "$output" \
   RUNNER_NSJAIL_PATH="$base_bin/nsjail" \
   MOCK_NSJAIL_RC=9 \
   MOCK_UNSHARE_RC=0 || true
-assert_contains "$output" "FAIL  nsjail executable"
+assert_contains "$output" "PASS  nsjail executable"
+assert_contains "$output" "FAIL  nsjail new mount API support"
 
 direct_log="$temp_root/direct.log"
 output="$temp_root/direct.out"
@@ -113,6 +114,8 @@ run_preflight "$output" \
   MOCK_UNSHARE_RC=0 || true
 assert_contains "$output" "PASS  unprivileged namespace creation"
 assert_contains "$direct_log" "unshare"
+assert_contains "$direct_log" "--experimental_mnt"
+assert_contains "$direct_log" "new"
 assert_contains "$direct_log" "--help"
 if grep -Fq -- "aa-exec" "$direct_log"; then
   fail "default namespace probe unexpectedly used aa-exec"

@@ -19,8 +19,12 @@ class NsJailLauncherProbeTest {
     void acceptsExecutableWhoseHelpSupportsNewMountApi() throws IOException {
         Path nsjail = executable("nsjail-ok", """
                 #!/bin/sh
-                [ "$1" = "--help" ] || exit 64
-                printf '%s\\n' '--experimental_mnt VALUE' 'Mount API to use:' '  new' '  old' '  auto'
+                [ "$1" = "--experimental_mnt" ] || exit 64
+                [ "$2" = "new" ] || exit 64
+                [ "$3" = "--help" ] || exit 64
+                [ "$#" = "3" ] || exit 64
+                printf '%s\\n' "Mount API to use: 'new' (fsopen/fsmount), 'old' (mount syscall), or" \
+                    "'auto' (auto-detect based on kernel version). Default: 'old'"
                 """);
 
         assertThat(NsJailLauncher.probeHelp(nsjail)).isTrue();
@@ -28,16 +32,33 @@ class NsJailLauncherProbeTest {
 
     @Test
     void rejectsExecutableWhoseHelpDoesNotSupportNewMountApi() throws IOException {
-        Path nsjail = executable("nsjail-old-mount", "#!/bin/sh\necho 'legacy mount only'\n");
+        Path nsjail = executable("nsjail-old-mount", """
+                #!/bin/sh
+                [ "$1" = "--help" ] && exit 0
+                exit 64
+                """);
 
         assertThat(NsJailLauncher.probeHelp(nsjail)).isFalse();
     }
 
     @Test
     void rejectsExecutableWhoseHelpCommandFails() throws IOException {
-        Path nsjail = executable("nsjail-fail", "#!/bin/sh\nexit 9\n");
+        Path nsjail = executable("nsjail-fail", """
+                #!/bin/sh
+                [ "$1" = "--experimental_mnt" ] || exit 64
+                [ "$2" = "new" ] || exit 64
+                [ "$3" = "--help" ] || exit 64
+                exit 9
+                """);
 
         assertThat(NsJailLauncher.probeHelp(nsjail)).isFalse();
+    }
+
+    @Test
+    void rejectsExecutableWhoseProbeTimesOut() throws IOException {
+        Path nsjail = executable("nsjail-timeout", "#!/bin/sh\nsleep 10\n");
+
+        assertThat(NsJailLauncher.probeHelp(nsjail, 100)).isFalse();
     }
 
     @Test

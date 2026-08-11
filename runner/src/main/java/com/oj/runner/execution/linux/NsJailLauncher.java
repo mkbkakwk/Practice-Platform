@@ -27,7 +27,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 /**
  * The only production component permitted to start an operating-system process.
@@ -41,7 +40,7 @@ public class NsJailLauncher implements SandboxProcessLauncher {
     private static final int BUFFER_SIZE = 8192;
     private static final int MAX_DIAGNOSTIC_BYTES = 65_536;
     private static final int MAX_HELP_BYTES = 65_536;
-    private static final Pattern NEW_MOUNT_API_HELP = Pattern.compile("(?m)^\\s*new\\s*$");
+    private static final long HELP_PROBE_TIMEOUT_MS = 5_000;
 
     private final LinuxSandboxProperties properties;
     private final Path nsjailPath;
@@ -54,9 +53,14 @@ public class NsJailLauncher implements SandboxProcessLauncher {
     }
 
     public static boolean probeHelp(Path nsjail) {
+        return probeHelp(nsjail, HELP_PROBE_TIMEOUT_MS);
+    }
+
+    static boolean probeHelp(Path nsjail, long timeoutMs) {
         Process process = null;
         try {
-            ProcessBuilder builder = new ProcessBuilder(nsjail.toString(), "--help");
+            ProcessBuilder builder = new ProcessBuilder(
+                    nsjail.toString(), "--experimental_mnt", "new", "--help");
             builder.environment().clear();
             builder.redirectErrorStream(true);
             process = builder.start();
@@ -64,14 +68,12 @@ public class NsJailLauncher implements SandboxProcessLauncher {
             try (ExecutorService io = Executors.newVirtualThreadPerTaskExecutor()) {
                 Future<byte[]> helpFuture = io.submit(
                         () -> runningProcess.getInputStream().readNBytes(MAX_HELP_BYTES));
-                if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
                     terminateTree(process);
                     return false;
                 }
-                String help = new String(helpFuture.get(1, TimeUnit.SECONDS), StandardCharsets.UTF_8);
-                return process.exitValue() == 0
-                        && help.contains("--experimental_mnt")
-                        && NEW_MOUNT_API_HELP.matcher(help).find();
+                helpFuture.get(1, TimeUnit.SECONDS);
+                return process.exitValue() == 0;
             }
         } catch (IOException | ExecutionException | TimeoutException exception) {
             return false;

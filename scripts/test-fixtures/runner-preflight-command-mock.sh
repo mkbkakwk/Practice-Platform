@@ -9,10 +9,13 @@ fi
 
 case "$command_name" in
   nsjail)
-    [[ "${1:-}" == "--help" ]] || exit 64
-    if [[ "${MOCK_NSJAIL_NEW_MOUNT_API:-1}" == "1" ]]; then
-      printf '%s\n' '--experimental_mnt VALUE' 'Mount API to use:' '  new' '  old' '  auto'
-    fi
+    [[ "${1:-}" == "--experimental_mnt" ]] || exit 64
+    [[ "${2:-}" == "new" ]] || exit 64
+    [[ "${3:-}" == "--help" ]] || exit 64
+    [[ "$#" == "3" ]] || exit 64
+    [[ "${MOCK_NSJAIL_NEW_MOUNT_API:-1}" == "1" ]] || exit 64
+    printf '%s\n' "Mount API to use: 'new' (fsopen/fsmount), 'old' (mount syscall), or" \
+      "'auto' (auto-detect based on kernel version). Default: 'old'"
     exit "${MOCK_NSJAIL_RC:-0}"
     ;;
   unshare)
