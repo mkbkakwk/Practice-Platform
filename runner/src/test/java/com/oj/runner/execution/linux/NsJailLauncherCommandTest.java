@@ -30,6 +30,7 @@ class NsJailLauncherCommandTest {
         assertThat(launcher.buildCommand(invocation)).containsExactly(
                 "/usr/bin/nsjail",
                 "--experimental_mnt", "new",
+                "--rw",
                 "--config", "/run/runner/nsjail.cfg",
                 "--",
                 "/usr/bin/python3", "--experimental_mnt", "old");

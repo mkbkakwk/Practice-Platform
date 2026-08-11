@@ -36,6 +36,7 @@ class NsJailConfigWriterTest {
                 "dst: \"/dev\" fstype: \"tmpfs\" rw: true", "src: \"/dev/null\"",
                 "dst: \"/tmp\" fstype: \"tmpfs\" rw: true", "noexec: true",
                 "envar: \"JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64\"");
+        assertThat(value).doesNotContain("dst: \"/\" is_bind: true rw: true");
         assertThat(value).doesNotContain("RUNNER_TOKEN", "DATABASE_URL", "JWT", "sourceCode");
     }
 
