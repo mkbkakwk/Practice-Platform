@@ -33,7 +33,11 @@ public class NsJailConfigWriter {
         Path config = workspace.metadata().resolve("nsjail-" + phaseId + ".cfg");
         Path log = workspace.metadata().resolve("nsjail-" + phaseId + ".log");
         long memoryBytes = Math.multiplyExact(memoryMb, BYTES_PER_MIB);
-        long wallSeconds = Math.max(1, Math.ceilDiv(wallTimeMs, 1000));
+        long outerWallSeconds = Math.max(1, Math.ceilDiv(wallTimeMs, 1000));
+        // The launcher enforces wallTimeMs exactly. Keep nsjail's wall/CPU limits as
+        // strictly later defense-in-depth kill switches so they cannot win the race
+        // and turn an authoritative outer TIME_LIMIT into a non-zero completed exit.
+        long nsjailBackupSeconds = Math.addExact(outerWallSeconds, 1);
         long maxFileMib = Math.max(1, Math.ceilDiv(properties.getMaxFileBytes(), BYTES_PER_MIB));
 
         StringBuilder value = new StringBuilder();
@@ -41,7 +45,7 @@ public class NsJailConfigWriter {
         value.append("mode: ONCE\n")
                 .append("hostname: \"student-sandbox\"\n")
                 .append("cwd: \"/workspace\"\n")
-                .append("time_limit: ").append(wallSeconds).append('\n')
+                .append("time_limit: ").append(nsjailBackupSeconds).append('\n')
                 .append("max_cpus: 1\n")
                 .append("nice_level: 19\n")
                 .append("keep_env: false\n")
@@ -52,7 +56,7 @@ public class NsJailConfigWriter {
                 .append("rlimit_as_type: INF\n")
                 .append("rlimit_core: 0\n")
                 .append("rlimit_core_type: VALUE\n")
-                .append("rlimit_cpu: ").append(wallSeconds).append('\n')
+                .append("rlimit_cpu: ").append(nsjailBackupSeconds).append('\n')
                 .append("rlimit_cpu_type: VALUE\n")
                 .append("rlimit_fsize: ").append(maxFileMib).append('\n')
                 .append("rlimit_fsize_type: VALUE\n")

@@ -41,6 +41,11 @@ class NsJailConfigWriterTest {
         assertThat(value).doesNotContain("mode: EXECVE");
         assertThat(value).doesNotContain("dst: \"/\" is_bind: true rw: true");
         assertThat(value).doesNotContain("RUNNER_TOKEN", "DATABASE_URL", "JWT", "sourceCode");
+
+        assertBackupDeadlinesAreStrictlyLaterThanOuterDeadline(500, "timeout-500");
+        assertBackupDeadlinesAreStrictlyLaterThanOuterDeadline(1000, "timeout-1000");
+        assertBackupDeadlinesAreStrictlyLaterThanOuterDeadline(1001, "timeout-1001");
+        assertBackupDeadlinesAreStrictlyLaterThanOuterDeadline(60_000, "timeout-large");
     }
 
     @Test
@@ -88,6 +93,29 @@ class NsJailConfigWriterTest {
         return "mount { src: \"" + device + "\" dst: \"" + device
                 + "\" is_bind: true is_dir: false rw: false mandatory: true "
                 + "nosuid: false nodev: false noexec: false }";
+    }
+
+    private void assertBackupDeadlinesAreStrictlyLaterThanOuterDeadline(
+            long wallTimeMs,
+            String phaseId) throws Exception {
+        Path config = new NsJailConfigWriter(properties()).write(
+                workspace(), new LanguageProfileRegistry().require(RunnerLanguage.C),
+                phaseId, wallTimeMs, 64);
+        String value = Files.readString(config);
+
+        long timeLimitSeconds = numericValue(value, "time_limit");
+        long cpuLimitSeconds = numericValue(value, "rlimit_cpu");
+        assertThat(Math.multiplyExact(timeLimitSeconds, 1000L)).isGreaterThan(wallTimeMs);
+        assertThat(Math.multiplyExact(cpuLimitSeconds, 1000L)).isGreaterThan(wallTimeMs);
+    }
+
+    private long numericValue(String config, String key) {
+        return config.lines()
+                .filter(line -> line.startsWith(key + ": "))
+                .map(line -> line.substring((key + ": ").length()))
+                .mapToLong(Long::parseLong)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing nsjail config key: " + key));
     }
 
     private LinuxSandboxProperties properties() {
