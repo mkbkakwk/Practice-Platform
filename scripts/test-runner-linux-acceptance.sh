@@ -92,8 +92,11 @@ pass_line="$(grep -n "^printf 'Linux isolation tests: PASSED" "$harness" | cut -
 [[ "$(grep -c 'Linux isolation tests: PASSED' "$harness")" -eq 1 ]] \
   || fail "PASSED must have one guarded output site"
 
-grep -Fq 'runner-linux-preflight.sh' "$inner" \
-  || fail "acceptance unit does not execute preflight"
+grep -Fq 'if ! /usr/bin/bash "$repo_root/scripts/runner-linux-preflight.sh"; then' "$inner" \
+  || fail "acceptance unit does not read staged preflight through trusted system Bash"
+if grep -Eq '^[[:space:]]*(if ! )?"\$repo_root/scripts/[^\"]+\.sh"' "$inner"; then
+  fail "acceptance unit directly executes a staged shell script from noexec /run"
+fi
 grep -Fq -- '-Plinux-security verify' "$inner" \
   || fail "acceptance unit does not execute the Linux security Maven profile"
 grep -Fq 'LinuxSandboxSecurityIT.xml' "$inner" \
@@ -189,5 +192,11 @@ if prepare_acceptance_source_tree "$dirty_tree"; then
 fi
 [[ -f "$dirty_tree/runner/unrelated.tmp" ]] \
   || fail "unrelated untracked file was unexpectedly removed"
+
+non_executable_script="$temp_root/non-executable-staged-script.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'printf staged-script-read-ok' > "$non_executable_script"
+chmod 0600 "$non_executable_script"
+[[ "$(bash "$non_executable_script")" == "staged-script-read-ok" ]] \
+  || fail "trusted Bash cannot read a non-executable staged script"
 
 printf 'Runner Linux acceptance harness static checks passed.\n'

@@ -54,6 +54,9 @@ and its own delegated cgroup root. `ProtectHome=yes` remains enabled. Maven uses
 an isolated repository inside the staging directory and never reads
 `/home/tu/.m2`. The unit receives a private tmpfs workspace at
 `/run/oj-sandbox-runner/jobs`; systemd unmounts it when the unit exits.
+The staging tree intentionally remains on the host's `noexec` `/run` mount.
+Trusted staged shell files are read with the host `/usr/bin/bash` interpreter;
+the harness never disables `noexec` or directly executes a staged script.
 
 Before checking that the committed tree is clean, the host orchestrator may
 remove only a JVM Attach runtime marker matching the exact regular-file path

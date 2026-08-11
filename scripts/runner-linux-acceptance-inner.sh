@@ -29,7 +29,7 @@ fail() {
 [[ "$(id -u)" -eq 10001 ]] || fail "acceptance must run as ojrunner uid 10001"
 [[ "$(id -g)" -eq 10001 ]] || fail "acceptance must run as ojrunner gid 10001"
 
-if ! "$repo_root/scripts/runner-linux-preflight.sh"; then
+if ! /usr/bin/bash "$repo_root/scripts/runner-linux-preflight.sh"; then
   fail "Runner Linux preflight did not return SUPPORTED"
 fi
 
