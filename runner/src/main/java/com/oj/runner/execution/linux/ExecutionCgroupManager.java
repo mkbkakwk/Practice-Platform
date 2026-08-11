@@ -1,6 +1,7 @@
 package com.oj.runner.execution.linux;
 
 import com.oj.runner.config.LinuxSandboxProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,7 @@ public class ExecutionCgroupManager {
     private final CgroupFileAccess files;
     private final Supplier<String> ids;
 
+    @Autowired
     public ExecutionCgroupManager(LinuxSandboxProperties properties) {
         this(properties, new NioCgroupFileAccess(),
                 () -> UUID.randomUUID().toString().replace("-", ""));
