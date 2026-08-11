@@ -198,9 +198,6 @@ public class NsJailLauncher implements SandboxProcessLauncher {
         command.add(nsjailPath.toString());
         command.add("--experimental_mnt");
         command.add("new");
-        // Keep nsjail's synthetic mount tree mutable while applying the per-mount policy.
-        // The configured runtime root remains an explicit read-only bind mount.
-        command.add("--rw");
         command.add("--config");
         command.add(invocation.config().toString());
         command.add("--");

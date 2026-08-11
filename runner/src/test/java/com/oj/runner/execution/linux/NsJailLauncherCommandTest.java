@@ -27,12 +27,13 @@ class NsJailLauncherCommandTest {
                 128,
                 4096);
 
-        assertThat(launcher.buildCommand(invocation)).containsExactly(
+        List<String> command = launcher.buildCommand(invocation);
+        assertThat(command).containsExactly(
                 "/usr/bin/nsjail",
                 "--experimental_mnt", "new",
-                "--rw",
                 "--config", "/run/runner/nsjail.cfg",
                 "--",
                 "/usr/bin/python3", "--experimental_mnt", "old");
+        assertThat(command).doesNotContain("--rw");
     }
 }

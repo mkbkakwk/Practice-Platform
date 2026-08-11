@@ -234,7 +234,7 @@ RunnerJobService
   -> LinuxSandboxExecutor
        -> LanguageCommandResolver (fixed argv only)
        -> NsJailConfigWriter
-       -> NsJailLauncher -> /usr/bin/nsjail --config ... -- <fixed argv>
+       -> NsJailLauncher -> <pinned nsjail> --experimental_mnt new --config ... -- <fixed argv>
 ```
 
 `NsJailLauncher` is the only production class that uses `ProcessBuilder`. It can
@@ -280,6 +280,16 @@ The example systemd service uses `Delegate=cpu memory pids` and
 `DelegateSubgroup=runner` (systemd 254+) so the service remains unprivileged while
 the delegated root is empty. Hosts that require root, `privileged`, host cgroups,
 host namespaces, or a Docker socket are unsupported.
+
+The Stage 3B-2 Linux acceptance host requires the mount-backend compatibility
+fix from [google/nsjail PR #287](https://github.com/google/nsjail/pull/287).
+Acceptance is pinned to upstream commit
+[`898e7e042e1bb3a10e54817d71c9eabdcc8e7089`](https://github.com/google/nsjail/commit/898e7e042e1bb3a10e54817d71c9eabdcc8e7089),
+not to a moving PR branch or a distribution package. Host provisioning must build
+and install that exact revision, record the resulting binary checksum, and set
+`RUNNER_NSJAIL_PATH` to the pinned binary. Practice-Platform does not vendor
+nsjail, and Linux acceptance must not rely on the distribution
+`/usr/bin/nsjail` unless it can be proven to contain the same fix.
 
 ## Linux security acceptance
 
