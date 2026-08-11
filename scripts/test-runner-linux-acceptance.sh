@@ -6,7 +6,12 @@ set -euo pipefail
 repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 harness="$repo_root/scripts/test-runner-linux.sh"
 inner="$repo_root/scripts/runner-linux-acceptance-inner.sh"
+library="$repo_root/scripts/runner-linux-acceptance-lib.sh"
 pom="$repo_root/runner/pom.xml"
+temp_root="$(mktemp -d)"
+trap 'rm -rf -- "$temp_root"' EXIT INT TERM
+
+source "$library"
 
 fail() {
   printf 'RUNNER ACCEPTANCE HARNESS TEST FAILED: %s\n' "$*" >&2
@@ -101,5 +106,88 @@ grep -Fq 'runner scripts/runner-linux-preflight.sh scripts/runner-linux-acceptan
   || fail "acceptance staging scope is not minimal and explicit"
 grep -Fq '<failIfNoTests>true</failIfNoTests>' "$pom" \
   || fail "Failsafe does not fail when LinuxSecurityIT is absent"
+
+MOCK_LOAD_STATE=not-found
+systemctl() {
+  case "${1:-}" in
+    show) printf '%s\n' "$MOCK_LOAD_STATE" ;;
+    *) return 0 ;;
+  esac
+}
+
+set +e
+acceptance_unit_exists oj-sandbox-acceptance.service
+unit_rc=$?
+set -e
+[[ $unit_rc -eq 1 ]] || fail "LoadState=not-found was treated as an existing unit"
+
+for existing_state in loaded masked error; do
+  MOCK_LOAD_STATE="$existing_state"
+  acceptance_unit_exists oj-sandbox-acceptance.service \
+    || fail "LoadState=$existing_state was treated as a missing unit"
+done
+
+MOCK_LOAD_STATE=not-found
+missing_cgroup="$temp_root/missing-cgroup"
+acceptance_resources_removed oj-sandbox-acceptance.service "$missing_cgroup" \
+  || fail "not-found unit with no cgroup did not satisfy cleanup"
+mkdir -p -- "$temp_root/existing-cgroup"
+if acceptance_resources_removed oj-sandbox-acceptance.service "$temp_root/existing-cgroup"; then
+  fail "existing acceptance cgroup was accepted as cleaned"
+fi
+
+git() {
+  printf '%s' "${MOCK_GIT_STATUS:-}"
+}
+
+make_source_tree() {
+  local root="$1"
+  mkdir -p -- "$root/runner"
+  : > "$root/runner/tracked.txt"
+}
+
+safe_tree="$temp_root/safe-tree"
+make_source_tree "$safe_tree"
+: > "$safe_tree/runner/.attach_pid123"
+MOCK_GIT_STATUS=
+prepare_acceptance_source_tree "$safe_tree" \
+  || fail "safe numeric JVM attach marker was rejected"
+[[ ! -e "$safe_tree/runner/.attach_pid123" ]] \
+  || fail "safe numeric JVM attach marker was not removed"
+
+malformed_tree="$temp_root/malformed-tree"
+make_source_tree "$malformed_tree"
+: > "$malformed_tree/runner/.attach_pidabc"
+MOCK_GIT_STATUS='?? runner/.attach_pidabc'
+if prepare_acceptance_source_tree "$malformed_tree"; then
+  fail "malformed JVM attach marker was accepted"
+fi
+[[ -f "$malformed_tree/runner/.attach_pidabc" ]] \
+  || fail "malformed JVM attach marker was unexpectedly removed"
+
+symlink_tree="$temp_root/symlink-tree"
+make_source_tree "$symlink_tree"
+ln -s -- tracked.txt "$symlink_tree/runner/.attach_pid123"
+if [[ -L "$symlink_tree/runner/.attach_pid123" ]]; then
+  MOCK_GIT_STATUS='?? runner/.attach_pid123'
+  if prepare_acceptance_source_tree "$symlink_tree"; then
+    fail "symlink JVM attach marker was accepted"
+  fi
+  [[ -L "$symlink_tree/runner/.attach_pid123" ]] \
+    || fail "symlink JVM attach marker was unexpectedly removed"
+else
+  rm -f -- "$symlink_tree/runner/.attach_pid123"
+  printf 'Symlink marker regression requires a POSIX symlink-capable test filesystem.\n'
+fi
+
+dirty_tree="$temp_root/dirty-tree"
+make_source_tree "$dirty_tree"
+: > "$dirty_tree/runner/unrelated.tmp"
+MOCK_GIT_STATUS='?? runner/unrelated.tmp'
+if prepare_acceptance_source_tree "$dirty_tree"; then
+  fail "unrelated untracked file was accepted"
+fi
+[[ -f "$dirty_tree/runner/unrelated.tmp" ]] \
+  || fail "unrelated untracked file was unexpectedly removed"
 
 printf 'Runner Linux acceptance harness static checks passed.\n'

@@ -32,6 +32,8 @@ bash -n scripts/test-runner-linux.sh \
   || fail "invalid Bash syntax in scripts/test-runner-linux.sh"
 bash -n scripts/runner-linux-acceptance-inner.sh \
   || fail "invalid Bash syntax in scripts/runner-linux-acceptance-inner.sh"
+bash -n scripts/runner-linux-acceptance-lib.sh \
+  || fail "invalid Bash syntax in scripts/runner-linux-acceptance-lib.sh"
 bash -n scripts/test-runner-linux-acceptance.sh \
   || fail "invalid Bash syntax in scripts/test-runner-linux-acceptance.sh"
 bash scripts/test-runner-linux-preflight.sh \

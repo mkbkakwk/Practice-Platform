@@ -55,11 +55,20 @@ an isolated repository inside the staging directory and never reads
 `/home/tu/.m2`. The unit receives a private tmpfs workspace at
 `/run/oj-sandbox-runner/jobs`; systemd unmounts it when the unit exits.
 
+Before checking that the committed tree is clean, the host orchestrator may
+remove only a JVM Attach runtime marker matching the exact regular-file path
+`runner/.attach_pid[0-9]+`. Symlinks, non-numeric names, markers outside that
+directory, and every other tracked or untracked change still reject acceptance.
+
 `ProtectKernelTunables` and `ProtectKernelLogs` are read from the effective
 `oj-sandbox-runner.service` configuration so host-specific proc compatibility
 drop-ins are reproduced without changing them. The acceptance unit never uses
 the production service cgroup or JVM. Success is printed only after the unit,
 staging tree, workspace mount, and acceptance cgroup have been cleaned.
+Cleanup determines transient-unit existence from the explicit systemd
+`LoadState`; only `not-found` means the unit has already been collected. A
+successful `systemctl show` process exit by itself is not treated as evidence
+that a unit still exists.
 
 The project seccomp policy is a small explicit deny layer over namespace, cgroup,
 filesystem, no-capability, and no-network isolation. Changes to it require the

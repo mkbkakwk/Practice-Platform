@@ -16,6 +16,7 @@ readonly SECCOMP_POLICY="/etc/oj-sandbox-runner/nsjail-seccomp.policy"
 readonly NSJAIL_PATH="/opt/oj-sandbox-runner/bin/nsjail"
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$repo_root/scripts/runner-linux-acceptance-lib.sh"
 staging_root=""
 cleanup_complete=0
 result_state="NOT RUN"
@@ -112,34 +113,41 @@ print_unit_plan() {
 acceptance_cleanup() {
   local cleanup_rc=0
   local attempt
+  local state
+  local unit_rc
 
-  if command -v systemctl >/dev/null 2>&1 \
-    && systemctl show "$ACCEPTANCE_UNIT" >/dev/null 2>&1; then
-    if ! systemctl stop "$ACCEPTANCE_UNIT" >/dev/null 2>&1 \
-      && systemctl show "$ACCEPTANCE_UNIT" >/dev/null 2>&1; then
-      cleanup_rc=1
-    fi
-    if systemctl show "$ACCEPTANCE_UNIT" >/dev/null 2>&1 \
-      && ! systemctl reset-failed "$ACCEPTANCE_UNIT" >/dev/null 2>&1 \
-      && systemctl show "$ACCEPTANCE_UNIT" >/dev/null 2>&1; then
-      cleanup_rc=1
+  if command -v systemctl >/dev/null 2>&1; then
+    if acceptance_unit_exists "$ACCEPTANCE_UNIT"; then
+      if ! systemctl stop "$ACCEPTANCE_UNIT" >/dev/null 2>&1 \
+        && acceptance_unit_exists "$ACCEPTANCE_UNIT"; then
+        cleanup_rc=1
+      fi
+      if acceptance_unit_exists "$ACCEPTANCE_UNIT" \
+        && ! systemctl reset-failed "$ACCEPTANCE_UNIT" >/dev/null 2>&1 \
+        && acceptance_unit_exists "$ACCEPTANCE_UNIT"; then
+        cleanup_rc=1
+      fi
+    else
+      unit_rc=$?
+      [[ $unit_rc -eq 1 ]] || cleanup_rc=1
     fi
   fi
 
   for attempt in {1..50}; do
-    if [[ ! -e "$ACCEPTANCE_CGROUP" ]] \
-      && ! systemctl show "$ACCEPTANCE_UNIT" >/dev/null 2>&1; then
+    if acceptance_resources_removed "$ACCEPTANCE_UNIT" "$ACCEPTANCE_CGROUP"; then
       break
     fi
     sleep 0.1
   done
-  if systemctl show "$ACCEPTANCE_UNIT" >/dev/null 2>&1; then
-    printf 'ERROR: transient acceptance unit was not removed: %s\n' \
-      "$ACCEPTANCE_UNIT" >&2
-    cleanup_rc=1
-  fi
-  if [[ -e "$ACCEPTANCE_CGROUP" ]]; then
-    printf 'ERROR: acceptance cgroup was not removed: %s\n' "$ACCEPTANCE_CGROUP" >&2
+  if ! acceptance_resources_removed "$ACCEPTANCE_UNIT" "$ACCEPTANCE_CGROUP"; then
+    state="$(acceptance_unit_load_state "$ACCEPTANCE_UNIT" 2>/dev/null || true)"
+    if [[ "$state" != "not-found" ]]; then
+      printf 'ERROR: transient acceptance unit was not removed: %s LoadState=%s\n' \
+        "$ACCEPTANCE_UNIT" "${state:-unknown}" >&2
+    fi
+    if [[ -e "$ACCEPTANCE_CGROUP" ]]; then
+      printf 'ERROR: acceptance cgroup was not removed: %s\n' "$ACCEPTANCE_CGROUP" >&2
+    fi
     cleanup_rc=1
   fi
 
@@ -191,7 +199,7 @@ trap 'exit 130' INT TERM
 [[ "${EUID:-$(id -u)}" -eq 0 ]] \
   || fail "run this orchestrator through sudo; Maven still runs as ojrunner"
 
-for command in git tar systemctl systemd-run getent install mktemp; do
+for command in git tar systemctl systemd-run getent install mktemp find; do
   command -v "$command" >/dev/null 2>&1 || fail "required host command missing: $command"
 done
 getent passwd ojrunner >/dev/null || fail "ojrunner user is unavailable"
@@ -204,20 +212,20 @@ load_state="$(systemctl show "$PRODUCTION_UNIT" --property=LoadState --value 2>/
 protect_kernel_tunables="$(effective_protection_value ProtectKernelTunables)"
 protect_kernel_logs="$(effective_protection_value ProtectKernelLogs)"
 
-acceptance_state="$(systemctl show "$ACCEPTANCE_UNIT" \
-  --property=ActiveState --value 2>/dev/null || true)"
-case "$acceptance_state" in
-  active|activating|reloading|deactivating)
-    fail "$ACCEPTANCE_UNIT is already running"
-    ;;
-esac
+if acceptance_unit_exists "$ACCEPTANCE_UNIT"; then
+  acceptance_state="$(acceptance_unit_load_state "$ACCEPTANCE_UNIT")"
+  fail "$ACCEPTANCE_UNIT already exists with LoadState=$acceptance_state"
+else
+  unit_rc=$?
+  [[ $unit_rc -eq 1 ]] || fail "cannot determine acceptance unit LoadState"
+fi
 [[ ! -e "$ACCEPTANCE_CGROUP" ]] \
   || fail "stale acceptance cgroup exists: $ACCEPTANCE_CGROUP"
 [[ "$ACCEPTANCE_CGROUP" != "$PRODUCTION_CGROUP" ]] \
   || fail "acceptance must not use the production cgroup"
 
-git_status="$(git -c "safe.directory=$repo_root" -C "$repo_root" status --porcelain)"
-[[ -z "$git_status" ]] || fail "acceptance requires a clean committed working tree"
+prepare_acceptance_source_tree "$repo_root" \
+  || fail "acceptance requires a clean committed working tree"
 for forbidden in .env .env.production .env.staging; do
   if git -c "safe.directory=$repo_root" -C "$repo_root" cat-file -e "HEAD:$forbidden" 2>/dev/null; then
     fail "refusing to stage tracked runtime environment file: $forbidden"

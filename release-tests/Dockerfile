@@ -17,6 +17,7 @@ COPY scripts/runner-linux-preflight.sh scripts/runner-linux-preflight.sh
 COPY scripts/test-runner-linux-preflight.sh scripts/test-runner-linux-preflight.sh
 COPY scripts/test-runner-linux.sh scripts/test-runner-linux.sh
 COPY scripts/runner-linux-acceptance-inner.sh scripts/runner-linux-acceptance-inner.sh
+COPY scripts/runner-linux-acceptance-lib.sh scripts/runner-linux-acceptance-lib.sh
 COPY scripts/test-runner-linux-acceptance.sh scripts/test-runner-linux-acceptance.sh
 COPY scripts/test-fixtures/runner-preflight-command-mock.sh scripts/test-fixtures/runner-preflight-command-mock.sh
 COPY runner/pom.xml runner/pom.xml
