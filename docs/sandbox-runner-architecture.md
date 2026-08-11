@@ -318,9 +318,16 @@ nsjail, and Linux acceptance must not rely on the distribution
 ## Linux security acceptance
 
 `scripts/runner-linux-preflight.sh` is read-only and prints exactly `SUPPORTED` or
-`UNSUPPORTED`. `scripts/test-runner-linux.sh` stages only committed Runner sources
-and required scripts under `/run`, then launches the preflight and Maven Failsafe
-suite inside the short-lived `oj-sandbox-acceptance.service` transient systemd
+`UNSUPPORTED`. Before the Spring context exists, it verifies that the required
+controllers are available and that the empty delegated root can be managed by the
+Runner identity; it does not require controllers to have already been enabled.
+Java's `DelegatedCgroupControllerInitializer` then enables any missing
+`cpu`/`memory`/`pids` controllers and fails closed unless a read-back verifies all
+three. `LinuxSandboxPreflight` explicitly depends on that initializer and validates
+the post-initialization sandbox state. `scripts/test-runner-linux.sh` stages only
+committed Runner sources and required scripts under `/run`, then launches the
+preflight and Maven Failsafe suite inside the short-lived
+`oj-sandbox-acceptance.service` transient systemd
 unit. That unit runs as `ojrunner`, mirrors the production security properties,
 keeps `ProtectHome=yes`, has a private tmpfs workspace and Maven repository, and
 uses its own delegated cgroup root at

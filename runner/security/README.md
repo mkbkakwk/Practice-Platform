@@ -39,6 +39,16 @@ The project does not create or modify AppArmor profiles. Supplying and auditing
 the dedicated host profile is a deployment responsibility. Globally disabling
 Ubuntu's unprivileged-user-namespace restriction is not recommended or supported.
 
+The shell preflight is a read-only, pre-initialization host and delegation
+capability check. It requires `cpu`, `memory`, and `pids` to be available, the
+delegated root and `cgroup.subtree_control` to be writable by the Runner identity,
+and the delegated root to contain no processes. Controllers may still be disabled
+at this point. In Linux mode, Java's `DelegatedCgroupControllerInitializer` enables
+missing controllers and verifies them by reading `cgroup.subtree_control` back;
+`LinuxSandboxPreflight` runs afterwards via `@DependsOn` and requires the verified
+post-initialization state. Neither the shell preflight nor the acceptance shell
+orchestrator manually writes to the cgroup hierarchy.
+
 Only a `SUPPORTED` result permits the Linux-only acceptance suite:
 
 ```bash

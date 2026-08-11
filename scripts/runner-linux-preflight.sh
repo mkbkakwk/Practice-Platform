@@ -21,6 +21,46 @@ pass() {
   printf 'PASS  %s\n' "$1"
 }
 
+# This is a pre-initialization, read-only capability check. The Java Runner
+# enables missing controllers and verifies the resulting state before its
+# Linux sandbox preflight runs.
+check_delegated_cgroup_capability() {
+  local controllers="$1"
+  local enabled_controllers="$2"
+  local delegated_writable="$3"
+  local delegated_root_empty="$4"
+  local controller
+
+  for controller in cpu memory pids; do
+    if [[ " $controllers " == *" $controller "* ]]; then
+      pass "cgroup controller delegated: $controller"
+    else
+      fail "cgroup controller missing: $controller"
+      continue
+    fi
+
+    if [[ " $enabled_controllers " == *" $controller "* ]]; then
+      pass "cgroup controller enabled: $controller"
+    elif [[ "$delegated_writable" == "1" ]]; then
+      pass "cgroup controller ready for Runner initializer: $controller"
+    else
+      fail "cgroup controller cannot be enabled: $controller"
+    fi
+  done
+
+  if [[ "$delegated_writable" == "1" ]]; then
+    pass "cgroup root is delegated writable"
+  else
+    fail "cgroup root is not delegated writable"
+  fi
+
+  if [[ "$delegated_root_empty" == "1" ]]; then
+    pass "delegated cgroup root has no processes"
+  else
+    fail "delegated cgroup root must be empty (use DelegateSubgroup)"
+  fi
+}
+
 # Resolve a guest path one component at a time without allowing the host kernel
 # to interpret absolute symlink targets outside the configured runtime root.
 rootfs_path_exists() {
@@ -82,6 +122,12 @@ rootfs_path_exists() {
 
   return 0
 }
+
+# Allow the regression test to source the pure capability helpers without
+# executing host probes. Direct execution always continues into the preflight.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
 
 echo "Runner Linux security preflight (read-only)"
 
@@ -159,28 +205,19 @@ fi
 if [[ -d "$cgroup_root" && ! -L "$cgroup_root" ]]; then
   controllers="$(cat "$cgroup_root/cgroup.controllers" 2>/dev/null || true)"
   enabled_controllers="$(cat "$cgroup_root/cgroup.subtree_control" 2>/dev/null || true)"
-  for controller in cpu memory pids; do
-    if [[ " $controllers " == *" $controller "* ]]; then
-      pass "cgroup controller delegated: $controller"
-    else
-      fail "cgroup controller missing: $controller"
-    fi
-    if [[ " $enabled_controllers " == *" $controller "* ]]; then
-      pass "cgroup controller enabled: $controller"
-    else
-      fail "cgroup controller not enabled: $controller"
-    fi
-  done
+  delegated_writable=0
   if [[ -w "$cgroup_root" && -w "$cgroup_root/cgroup.subtree_control" ]]; then
-    pass "cgroup root is delegated writable"
-  else
-    fail "cgroup root is not delegated writable"
+    delegated_writable=1
   fi
-  if [[ -r "$cgroup_root/cgroup.procs" && ! -s "$cgroup_root/cgroup.procs" ]]; then
-    pass "delegated cgroup root has no processes"
-  else
-    fail "delegated cgroup root must be empty (use DelegateSubgroup)"
+  delegated_root_empty=0
+  if [[ -r "$cgroup_root/cgroup.procs" ]]; then
+    cgroup_root_procs="$(cat "$cgroup_root/cgroup.procs" 2>/dev/null || printf 'unreadable')"
+    if [[ -z "$cgroup_root_procs" ]]; then
+      delegated_root_empty=1
+    fi
   fi
+  check_delegated_cgroup_capability \
+    "$controllers" "$enabled_controllers" "$delegated_writable" "$delegated_root_empty"
 else
   fail "delegated cgroup root is unavailable or a symlink"
 fi

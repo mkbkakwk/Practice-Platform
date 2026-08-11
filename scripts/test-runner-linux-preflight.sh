@@ -67,6 +67,64 @@ run_preflight() {
   return "$rc"
 }
 
+run_cgroup_capability_case() {
+  local output="$1"
+  local controllers="$2"
+  local enabled_controllers="$3"
+  local delegated_writable="$4"
+  local delegated_root_empty="$5"
+  local expected_rc="$6"
+  local rc
+
+  set +e
+  (
+    source "$preflight"
+    failures=()
+    check_delegated_cgroup_capability \
+      "$controllers" "$enabled_controllers" "$delegated_writable" "$delegated_root_empty"
+    [[ ${#failures[@]} -eq 0 ]]
+  ) >"$output" 2>&1
+  rc=$?
+  set -e
+  [[ $rc -eq $expected_rc ]] \
+    || fail "unexpected cgroup capability result: expected $expected_rc, got $rc"
+}
+
+cgroup_output="$temp_root/cgroup-enabled.out"
+run_cgroup_capability_case \
+  "$cgroup_output" "cpu memory pids" "cpu memory pids" 1 1 0
+for controller in cpu memory pids; do
+  assert_contains "$cgroup_output" "PASS  cgroup controller enabled: $controller"
+done
+
+cgroup_output="$temp_root/cgroup-ready-for-initializer.out"
+run_cgroup_capability_case \
+  "$cgroup_output" "cpu memory pids" "" 1 1 0
+for controller in cpu memory pids; do
+  assert_contains "$cgroup_output" \
+    "PASS  cgroup controller ready for Runner initializer: $controller"
+done
+
+for missing_controller in cpu memory pids; do
+  available_controllers="cpu memory pids"
+  available_controllers="${available_controllers//$missing_controller/}"
+  cgroup_output="$temp_root/cgroup-missing-$missing_controller.out"
+  run_cgroup_capability_case \
+    "$cgroup_output" "$available_controllers" "" 1 1 1
+  assert_contains "$cgroup_output" "FAIL  cgroup controller missing: $missing_controller"
+done
+
+cgroup_output="$temp_root/cgroup-not-writable.out"
+run_cgroup_capability_case \
+  "$cgroup_output" "cpu memory pids" "" 0 1 1
+assert_contains "$cgroup_output" "FAIL  cgroup root is not delegated writable"
+
+cgroup_output="$temp_root/cgroup-root-occupied.out"
+run_cgroup_capability_case \
+  "$cgroup_output" "cpu memory pids" "cpu memory pids" 1 0 1
+assert_contains "$cgroup_output" \
+  "FAIL  delegated cgroup root must be empty (use DelegateSubgroup)"
+
 base_bin="$temp_root/base-bin"
 prepare_mock_bin "$base_bin" nsjail unshare aa-exec
 
