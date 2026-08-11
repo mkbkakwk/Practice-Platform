@@ -57,8 +57,9 @@ sudo --preserve-env=RUNNER_APPARMOR_PREFLIGHT_PROFILE \
 ```
 
 The host-side script does not run Maven as root. It archives only the committed
-`runner/` sources and required scripts into a short-lived directory under
-`/run/oj-sandbox-acceptance`, then starts `oj-sandbox-acceptance.service` as a
+`runner/` sources, Runner contract fixtures, and required scripts into a
+short-lived directory under `/run/oj-sandbox-acceptance`, then starts
+`oj-sandbox-acceptance.service` as a
 transient systemd unit with `User=ojrunner`, the production security properties,
 and its own delegated cgroup root. `ProtectHome=yes` remains enabled. Maven uses
 an isolated repository inside the staging directory and never reads
@@ -67,6 +68,10 @@ an isolated repository inside the staging directory and never reads
 The staging tree intentionally remains on the host's `noexec` `/run` mount.
 Trusted staged shell files are read with the host `/usr/bin/bash` interpreter;
 the harness never disables `noexec` or directly executes a staged script.
+The transient unit does not set `RUNNER_SANDBOX_MODE` for the Maven process:
+ordinary Surefire tests retain their default fail-closed executor semantics, while
+the Failsafe `linux-security` profile and `LinuxSandboxSecurityIT` explicitly select
+Linux mode for the real isolation suite.
 
 Before checking that the committed tree is clean, the host orchestrator may
 remove only a JVM Attach runtime marker matching the exact regular-file path

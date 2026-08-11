@@ -325,8 +325,8 @@ Java's `DelegatedCgroupControllerInitializer` then enables any missing
 `cpu`/`memory`/`pids` controllers and fails closed unless a read-back verifies all
 three. `LinuxSandboxPreflight` explicitly depends on that initializer and validates
 the post-initialization sandbox state. `scripts/test-runner-linux.sh` stages only
-committed Runner sources and required scripts under `/run`, then launches the
-preflight and Maven Failsafe suite inside the short-lived
+committed Runner sources, contract fixtures, and required scripts under `/run`,
+then launches the preflight and Maven Failsafe suite inside the short-lived
 `oj-sandbox-acceptance.service` transient systemd
 unit. That unit runs as `ojrunner`, mirrors the production security properties,
 keeps `ProtectHome=yes`, has a private tmpfs workspace and Maven repository, and
@@ -337,6 +337,11 @@ The host orchestrator requires sudo only to create this unit; Maven and all test
 remain unprivileged. It reads the production unit's effective
 `ProtectKernelTunables` and `ProtectKernelLogs` values to preserve the audited
 host proc-compatibility setting without modifying systemd.
+The transient unit deliberately does not export `RUNNER_SANDBOX_MODE=linux` to the
+whole Maven lifecycle. Surefire therefore exercises the ordinary default executor
+and its fail-closed tests, while the Failsafe profile and
+`LinuxSandboxSecurityIT` explicitly enable Linux mode only for adversarial
+acceptance.
 
 An unsupported host reports `Linux isolation tests: NOT RUN`; a preflight,
 transient-unit, Failsafe, test, or cleanup failure reports failure and returns

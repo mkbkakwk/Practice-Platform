@@ -8,6 +8,7 @@ harness="$repo_root/scripts/test-runner-linux.sh"
 inner="$repo_root/scripts/runner-linux-acceptance-inner.sh"
 library="$repo_root/scripts/runner-linux-acceptance-lib.sh"
 pom="$repo_root/runner/pom.xml"
+linux_security_it="$repo_root/runner/src/test/java/com/oj/runner/execution/linux/LinuxSandboxSecurityIT.java"
 temp_root="$(mktemp -d)"
 trap 'rm -rf -- "$temp_root"' EXIT INT TERM
 
@@ -70,6 +71,9 @@ fi
 if grep -Fq -- '--property=ProtectHome=no' <<<"$plan"; then
   fail "unit plan disables ProtectHome"
 fi
+if grep -Fq -- '--setenv=RUNNER_SANDBOX_MODE=linux' <<<"$plan"; then
+  fail "unit plan pollutes ordinary Surefire tests with Linux sandbox mode"
+fi
 
 grep -Fq 'trap acceptance_exit EXIT' "$harness" \
   || fail "host orchestrator has no cleanup exit trap"
@@ -99,16 +103,35 @@ if grep -Eq '^[[:space:]]*(if ! )?"\$repo_root/scripts/[^\"]+\.sh"' "$inner"; th
 fi
 grep -Fq -- '-Plinux-security verify' "$inner" \
   || fail "acceptance unit does not execute the Linux security Maven profile"
+if grep -Fq 'RUNNER_SANDBOX_MODE' "$inner"; then
+  fail "acceptance inner script requires a Maven-process-wide sandbox mode"
+fi
+if grep -Eq -- '(-DskipTests|skipTests|maven\.test\.skip)' "$inner"; then
+  fail "acceptance inner script skips ordinary or Linux security tests"
+fi
 grep -Fq 'LinuxSandboxSecurityIT.xml' "$inner" \
   || fail "acceptance unit does not verify the Failsafe report"
 grep -Fq '"$skipped" == "0"' "$inner" \
   || fail "acceptance unit can accept skipped Linux security tests"
 grep -Fq 'git -c "safe.directory=$repo_root" -C "$repo_root" archive' "$harness" \
   || fail "acceptance sources are not staged from committed Git content"
-grep -Fq 'runner scripts/runner-linux-preflight.sh scripts/runner-linux-acceptance-inner.sh' "$harness" \
-  || fail "acceptance staging scope is not minimal and explicit"
+grep -Fq 'runner test/fixtures/runner \' "$harness" \
+  || fail "acceptance staging omits the committed Runner contract fixtures"
+archive_block="$(sed -n \
+  '/git -c "safe.directory=\$repo_root" -C "\$repo_root" archive/,/tar -xf/p' "$harness")"
+for forbidden in .git .env .env.production .env.staging; do
+  if grep -Eq "(^|[[:space:]/])${forbidden//./\\.}([[:space:]\\]|$)" <<<"$archive_block"; then
+    fail "acceptance archive includes forbidden path: $forbidden"
+  fi
+done
+grep -Fq 'find "$staged_repo" -name "$forbidden" -print -quit' "$harness" \
+  || fail "acceptance staging does not scan extracted content for forbidden runtime paths"
 grep -Fq '<failIfNoTests>true</failIfNoTests>' "$pom" \
   || fail "Failsafe does not fail when LinuxSecurityIT is absent"
+grep -Fq '<runner.sandbox.mode>linux</runner.sandbox.mode>' "$pom" \
+  || fail "Failsafe Linux security profile does not force Linux sandbox mode"
+grep -Fq '"runner.sandbox.mode=linux"' "$linux_security_it" \
+  || fail "LinuxSandboxSecurityIT does not explicitly force Linux sandbox mode"
 
 MOCK_LOAD_STATE=not-found
 systemctl() {

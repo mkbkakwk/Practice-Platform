@@ -18,8 +18,6 @@ fail() {
   || fail "acceptance cgroup override is missing or unsafe"
 [[ "${RUNNER_CGROUP_V2_MOUNT}" != "/sys/fs/cgroup/system.slice/oj-sandbox-runner.service" ]] \
   || fail "production cgroup must never be used by acceptance"
-[[ "${RUNNER_SANDBOX_MODE:-}" == "linux" ]] \
-  || fail "Linux sandbox mode is required"
 [[ -n "${RUNNER_ACCEPTANCE_STAGING_ROOT:-}" ]] \
   || fail "acceptance staging identity is missing"
 [[ "$repo_root" == "$RUNNER_ACCEPTANCE_STAGING_ROOT/repo" ]] \

@@ -22,6 +22,7 @@ COPY scripts/test-runner-linux-acceptance.sh scripts/test-runner-linux-acceptanc
 COPY scripts/test-fixtures/runner-preflight-command-mock.sh scripts/test-fixtures/runner-preflight-command-mock.sh
 COPY runner/pom.xml runner/pom.xml
 COPY runner/security/nsjail-seccomp.policy runner/security/nsjail-seccomp.policy
+COPY runner/src/test/java/com/oj/runner/execution/linux/LinuxSandboxSecurityIT.java runner/src/test/java/com/oj/runner/execution/linux/LinuxSandboxSecurityIT.java
 COPY frontend/src/components/Navbar.tsx frontend/src/components/Navbar.tsx
 COPY .github/workflows .github/workflows
 

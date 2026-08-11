@@ -83,7 +83,6 @@ build_systemd_run_args() {
     "--setenv=RUNNER_ACCEPTANCE_STAGING_ROOT=$stage"
     "--setenv=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     "--setenv=LANG=C.UTF-8"
-    "--setenv=RUNNER_SANDBOX_MODE=linux"
     "--setenv=RUNNER_NSJAIL_PATH=$NSJAIL_PATH"
     "--setenv=RUNNER_SANDBOX_ROOTFS=$RUNTIME_ROOTFS"
     "--setenv=RUNNER_WORKSPACE_ROOT=$ACCEPTANCE_WORKSPACE"
@@ -242,9 +241,15 @@ mkdir -p -- "$staged_repo" "$maven_repo" "$acceptance_home"
 source_archive="$staging_root/source.tar"
 git -c "safe.directory=$repo_root" -C "$repo_root" archive \
   --format=tar --output="$source_archive" HEAD -- \
-  runner scripts/runner-linux-preflight.sh scripts/runner-linux-acceptance-inner.sh
+  runner test/fixtures/runner \
+  scripts/runner-linux-preflight.sh scripts/runner-linux-acceptance-inner.sh
 tar -xf "$source_archive" -C "$staged_repo"
 rm -f -- "$source_archive"
+for forbidden in .git .env .env.production .env.staging; do
+  forbidden_path="$(find "$staged_repo" -name "$forbidden" -print -quit)"
+  [[ -z "$forbidden_path" ]] \
+    || fail "acceptance staging contains forbidden runtime path: $forbidden_path"
+done
 chown -R ojrunner:ojrunner "$staging_root"
 chmod 0700 "$staging_root" "$maven_repo" "$acceptance_home"
 
