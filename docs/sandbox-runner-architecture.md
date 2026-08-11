@@ -318,9 +318,24 @@ nsjail, and Linux acceptance must not rely on the distribution
 ## Linux security acceptance
 
 `scripts/runner-linux-preflight.sh` is read-only and prints exactly `SUPPORTED` or
-`UNSUPPORTED`. `scripts/test-runner-linux.sh` refuses to run the security suite
-unless preflight succeeds; an unsupported host reports `Linux isolation tests: NOT
-RUN` and returns non-zero instead of silently skipping.
+`UNSUPPORTED`. `scripts/test-runner-linux.sh` stages only committed Runner sources
+and required scripts under `/run`, then launches the preflight and Maven Failsafe
+suite inside the short-lived `oj-sandbox-acceptance.service` transient systemd
+unit. That unit runs as `ojrunner`, mirrors the production security properties,
+keeps `ProtectHome=yes`, has a private tmpfs workspace and Maven repository, and
+uses its own delegated cgroup root at
+`/sys/fs/cgroup/system.slice/oj-sandbox-acceptance.service`. It never reuses the
+production Runner JVM or `/sys/fs/cgroup/system.slice/oj-sandbox-runner.service`.
+The host orchestrator requires sudo only to create this unit; Maven and all tests
+remain unprivileged. It reads the production unit's effective
+`ProtectKernelTunables` and `ProtectKernelLogs` values to preserve the audited
+host proc-compatibility setting without modifying systemd.
+
+An unsupported host reports `Linux isolation tests: NOT RUN`; a preflight,
+transient-unit, Failsafe, test, or cleanup failure reports failure and returns
+non-zero. `Linux isolation tests: PASSED` is emitted only after the real
+`LinuxSandboxSecurityIT` report proves tests ran with zero skips and systemd has
+removed the acceptance workspace mount and delegated cgroup.
 
 Ubuntu 24.04 hosts should retain AppArmor's global unprivileged-user-namespace
 restriction. A provisioned and audited per-service profile can be selected for the

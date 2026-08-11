@@ -68,6 +68,7 @@
                                     <goal>verify</goal>
                                 </goals>
                                 <configuration>
+                                    <failIfNoTests>true</failIfNoTests>
                                     <includes>
                                         <include>**/*LinuxSecurityIT.java</include>
                                     </includes>

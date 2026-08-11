@@ -28,8 +28,16 @@ bash -n scripts/runner-linux-preflight.sh \
   || fail "invalid Bash syntax in scripts/runner-linux-preflight.sh"
 bash -n scripts/test-runner-linux-preflight.sh \
   || fail "invalid Bash syntax in scripts/test-runner-linux-preflight.sh"
+bash -n scripts/test-runner-linux.sh \
+  || fail "invalid Bash syntax in scripts/test-runner-linux.sh"
+bash -n scripts/runner-linux-acceptance-inner.sh \
+  || fail "invalid Bash syntax in scripts/runner-linux-acceptance-inner.sh"
+bash -n scripts/test-runner-linux-acceptance.sh \
+  || fail "invalid Bash syntax in scripts/test-runner-linux-acceptance.sh"
 bash scripts/test-runner-linux-preflight.sh \
   || fail "Runner Linux preflight compatibility checks failed"
+bash scripts/test-runner-linux-acceptance.sh \
+  || fail "Runner Linux acceptance harness checks failed"
 
 if grep -Eq '^[[:space:]]+build:' "$compose_file"; then
   fail "release Compose must not contain build directives"

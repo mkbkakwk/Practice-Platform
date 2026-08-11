@@ -42,8 +42,24 @@ Ubuntu's unprivileged-user-namespace restriction is not recommended or supported
 Only a `SUPPORTED` result permits the Linux-only acceptance suite:
 
 ```bash
-./scripts/test-runner-linux.sh
+sudo --preserve-env=RUNNER_APPARMOR_PREFLIGHT_PROFILE \
+  ./scripts/test-runner-linux.sh
 ```
+
+The host-side script does not run Maven as root. It archives only the committed
+`runner/` sources and required scripts into a short-lived directory under
+`/run/oj-sandbox-acceptance`, then starts `oj-sandbox-acceptance.service` as a
+transient systemd unit with `User=ojrunner`, the production security properties,
+and its own delegated cgroup root. `ProtectHome=yes` remains enabled. Maven uses
+an isolated repository inside the staging directory and never reads
+`/home/tu/.m2`. The unit receives a private tmpfs workspace at
+`/run/oj-sandbox-runner/jobs`; systemd unmounts it when the unit exits.
+
+`ProtectKernelTunables` and `ProtectKernelLogs` are read from the effective
+`oj-sandbox-runner.service` configuration so host-specific proc compatibility
+drop-ins are reproduced without changing them. The acceptance unit never uses
+the production service cgroup or JVM. Success is printed only after the unit,
+staging tree, workspace mount, and acceptance cgroup have been cleaned.
 
 The project seccomp policy is a small explicit deny layer over namespace, cgroup,
 filesystem, no-capability, and no-network isolation. Changes to it require the
