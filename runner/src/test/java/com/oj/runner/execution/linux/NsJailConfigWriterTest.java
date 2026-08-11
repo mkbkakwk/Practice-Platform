@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,6 +60,32 @@ class NsJailConfigWriterTest {
         assertThat(value).contains(
                 "mount { dst: \"/proc\" fstype: \"proc\" options: \"subset=pid\" "
                         + "rw: false mandatory: true nosuid: true nodev: true noexec: true }");
+    }
+
+    @Test
+    void configBindsOnlyFourWhitelistedCharacterDevicesWithCompatibleFlags() throws Exception {
+        Path config = new NsJailConfigWriter(properties()).write(
+                workspace(), new LanguageProfileRegistry().require(RunnerLanguage.PYTHON),
+                "run-1", 1000, 64);
+
+        String value = Files.readString(config);
+        assertThat(value).contains(
+                "mount { dst: \"/dev\" fstype: \"tmpfs\" rw: true mandatory: true "
+                        + "nosuid: true nodev: false noexec: true options: \"size=65536,mode=0755\" }");
+        List<String> deviceMounts = value.lines()
+                .filter(line -> line.startsWith("mount { src: \"/dev/"))
+                .toList();
+        assertThat(deviceMounts).containsExactly(
+                deviceMount("/dev/null"),
+                deviceMount("/dev/zero"),
+                deviceMount("/dev/random"),
+                deviceMount("/dev/urandom"));
+    }
+
+    private String deviceMount(String device) {
+        return "mount { src: \"" + device + "\" dst: \"" + device
+                + "\" is_bind: true is_dir: false rw: true mandatory: true "
+                + "nosuid: false nodev: false noexec: false }";
     }
 
     private LinuxSandboxProperties properties() {

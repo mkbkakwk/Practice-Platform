@@ -96,7 +96,7 @@ public class NsJailConfigWriter {
         for (String device : java.util.List.of("/dev/null", "/dev/zero", "/dev/random", "/dev/urandom")) {
             value.append("mount { src: \"").append(device).append("\" dst: \"").append(device)
                     .append("\" is_bind: true is_dir: false rw: true mandatory: true ")
-                    .append("nosuid: true nodev: false noexec: true }\n");
+                    .append("nosuid: false nodev: false noexec: false }\n");
         }
         value.append("mount { dst: \"/tmp\" fstype: \"tmpfs\" rw: true mandatory: true ")
                 .append("nosuid: true nodev: true noexec: true options: \"")
