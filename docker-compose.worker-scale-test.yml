@@ -43,7 +43,7 @@ services:
     read_only: true
     user: "10001:10001"
     group_add:
-      - "${DOCKER_SOCKET_GID:-0}"
+      - "${DOCKER_SOCKET_GID:?DOCKER_SOCKET_GID is required}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     tmpfs:
@@ -60,7 +60,7 @@ services:
       RUNNER_DOCKER_JAVA_IMAGE: practice-sandbox-java:local
       RUNNER_DOCKER_PIDS_LIMIT: 64
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/health | grep -Fq '\"ok\":true,\"sandboxAvailable\":true'"]
       interval: 2s
       timeout: 5s
       retries: 30

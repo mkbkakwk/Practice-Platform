@@ -6,12 +6,15 @@ export COMPOSE_DISABLE_ENV_FILE=1
 project_name="${SANDBOX_TEST_PROJECT:-practice-platform-docker-sandbox-security}"
 compose=(docker compose -p "$project_name" -f docker-compose.sandbox-test.yml)
 instance_id="docker-security-it"
+socket_gid_configured=false
 
 cleanup() {
   local original_rc=$?
   local cleanup_rc=0
   trap - EXIT INT TERM
-  "${compose[@]}" down --remove-orphans || cleanup_rc=$?
+  if [[ "$socket_gid_configured" == "true" ]]; then
+    "${compose[@]}" down --remove-orphans || cleanup_rc=$?
+  fi
 
   mapfile -t containers < <(docker container ls -aq \
     --filter "label=com.practice-platform.runner-instance=$instance_id")
@@ -38,6 +41,10 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
   echo "ERROR: Docker Engine with Compose v2 is required" >&2
   exit 127
 fi
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-socket-gid.sh"
+configure_docker_socket_gid
+socket_gid_configured=true
 
 echo "==> Building the five fixed sandbox images and Docker security test"
 for service in sandbox-python-image sandbox-javascript-image sandbox-c-image \

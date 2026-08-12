@@ -6,12 +6,22 @@ export COMPOSE_DISABLE_ENV_FILE=1
 project_name="${WORKER_SCALE_TEST_PROJECT:-practice-platform-worker-scale-test}"
 compose=(docker compose -p "$project_name" -f docker-compose.worker-scale-test.yml)
 runner_instance="worker-scale-runner"
+socket_gid_configured=false
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-socket-gid.sh"
+
+print_worker_scale_diagnostics() {
+  print_docker_socket_diagnostics
+  "${compose[@]}" logs --no-color runner worker >&2 || true
+}
 
 cleanup() {
   local original_rc=$?
   local cleanup_rc=0
   trap - EXIT INT TERM
-  "${compose[@]}" down --remove-orphans || cleanup_rc=$?
+  if [[ "$socket_gid_configured" == "true" ]]; then
+    "${compose[@]}" down --remove-orphans || cleanup_rc=$?
+  fi
 
   mapfile -t containers < <(docker container ls -aq \
     --filter "label=com.practice-platform.runner-instance=$runner_instance")
@@ -38,6 +48,9 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
   exit 127
 fi
 
+configure_docker_socket_gid
+socket_gid_configured=true
+
 echo "==> Building fixed sandbox images for the disposable Runner"
 docker compose -p practice-platform-worker-scale-images \
   -f docker-compose.sandbox-test.yml --profile images build \
@@ -45,11 +58,16 @@ docker compose -p practice-platform-worker-scale-images \
   sandbox-cpp-image sandbox-java-image
 
 echo "==> Starting three competing Worker consumers"
-"${compose[@]}" up -d --build --wait --scale worker=3
+if ! "${compose[@]}" up -d --build --wait --scale worker=3; then
+  echo "ERROR: Worker scale services did not become healthy" >&2
+  print_worker_scale_diagnostics
+  exit 1
+fi
 
 mapfile -t worker_ids < <("${compose[@]}" ps -q worker)
 if [[ ${#worker_ids[@]} -ne 3 ]]; then
   echo "ERROR: expected exactly three Worker containers, got ${#worker_ids[@]}" >&2
+  print_worker_scale_diagnostics
   exit 1
 fi
 
@@ -65,7 +83,7 @@ while (( SECONDS < deadline )); do
 done
 if [[ "$queue_declared" != "true" ]]; then
   echo "ERROR: Workers did not declare the judge queue" >&2
-  "${compose[@]}" logs --no-color worker >&2
+  print_worker_scale_diagnostics
   exit 1
 fi
 
@@ -92,7 +110,7 @@ while (( SECONDS < deadline )); do
 done
 if [[ "$verdict" != "AC" ]]; then
   echo "ERROR: submission did not reach AC; final verdict=$verdict" >&2
-  "${compose[@]}" logs --no-color worker >&2
+  print_worker_scale_diagnostics
   exit 1
 fi
 
@@ -101,6 +119,7 @@ judging_count=$(grep -c '\[worker\] judging submission #1 ' <<<"$logs" || true)
 result_count=$(grep -c '\[worker\] submission #1 requestId=.* verdict=AC ' <<<"$logs" || true)
 if [[ "$judging_count" -ne 1 || "$result_count" -ne 1 ]]; then
   echo "ERROR: expected exactly one judge and one AC result log; judging=$judging_count result=$result_count" >&2
+  print_worker_scale_diagnostics
   exit 1
 fi
 
@@ -108,6 +127,7 @@ queue_state=$("${compose[@]}" exec -T rabbitmq rabbitmqctl list_queues -q \
   name messages_ready messages_unacknowledged consumers | awk '$1 == "oj.judge.queue" {print $2 " " $3 " " $4}')
 if [[ "$queue_state" != "0 0 3" ]]; then
   echo "ERROR: unexpected queue state: $queue_state" >&2
+  print_worker_scale_diagnostics
   exit 1
 fi
 

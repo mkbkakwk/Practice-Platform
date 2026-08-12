@@ -146,7 +146,7 @@ services:
       RUNNER_DOCKER_WORKSPACE_BYTES: ${RUNNER_DOCKER_WORKSPACE_BYTES:-67108864}
       RUNNER_DOCKER_TMP_BYTES: ${RUNNER_DOCKER_TMP_BYTES:-33554432}
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/api/health | grep -Fq '\"sandboxAvailable\":true'"]
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/api/health | grep -Fq '\"ok\":true,\"sandboxAvailable\":true'"]
       interval: 5s
       timeout: 3s
       retries: 20

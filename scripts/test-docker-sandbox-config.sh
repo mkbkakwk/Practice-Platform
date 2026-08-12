@@ -21,7 +21,9 @@ service_block() {
 }
 
 export RUNNER_TOKEN=formal-compose-config-test-token
-export DOCKER_SOCKET_GID=0
+export DOCKER_SOCKET_GID=4242
+
+bash ./scripts/test-docker-socket-gid.sh
 
 docker compose -f docker-compose.yml config --quiet
 
@@ -43,12 +45,34 @@ done
 runner="$(service_block runner)"
 worker="$(service_block worker)"
 
+for compose_file in docker-compose.sandbox-test.yml docker-compose.worker-scale-test.yml; do
+  rendered_runner="$(docker compose -f "$compose_file" config | awk '
+    $0 == "  runner:" {inside = 1}
+    inside && $0 ~ /^  [a-zA-Z0-9_-]+:$/ && $0 != "  runner:" {exit}
+    inside {print}
+  ')"
+  grep -Fq '      - "4242"' <<<"$rendered_runner" \
+    || fail "non-zero Docker socket GID was not rendered for $compose_file"
+done
+
+if grep -Fq 'DOCKER_SOCKET_GID:-0' \
+    docker-compose.sandbox-test.yml docker-compose.worker-scale-test.yml; then
+  fail "test Runner Compose must not fall back to Docker socket GID zero"
+fi
+
 grep -Fq '/var/run/docker.sock:/var/run/docker.sock' <<<"$runner" \
   || fail "Runner must receive the Docker socket"
 grep -Fq 'RUNNER_SANDBOX_MODE: docker' <<<"$runner" \
   || fail "Runner must use the Docker sandbox executor"
 grep -Fq 'RUNNER_MAX_CONCURRENT_JOBS: ${RUNNER_MAX_CONCURRENCY:-4}' <<<"$runner" \
   || fail "Runner concurrency must default to four"
+grep -Fq '\"ok\":true,\"sandboxAvailable\":true' <<<"$runner" \
+  || fail "Runner healthcheck must require ok and sandbox availability"
+
+for compose_file in docker-compose.sandbox-test.yml docker-compose.worker-scale-test.yml; do
+  grep -Fq '\"ok\":true,\"sandboxAvailable\":true' "$compose_file" \
+    || fail "test Runner healthcheck must require ok and sandbox availability: $compose_file"
+done
 
 if grep -Fq '/var/run/docker.sock' <<<"$worker"; then
   fail "Worker must not receive the Docker socket"
