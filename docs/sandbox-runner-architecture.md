@@ -1,155 +1,66 @@
 # Sandbox Runner architecture
 
-## Delivery stages
+## Current architecture
 
-- **Stage 3A — complete:** Worker execution abstraction and versioned remote
-  protocol.
-- **Stage 3B-1 — current:** independent Runner HTTP service, authentication,
-  validation, bounded job orchestration, and the `SandboxExecutor` boundary.
-- **Stage 3B-2 — not started:** dedicated Linux isolation using namespaces,
-  cgroup v2, syscall filtering, non-root execution, a read-only filesystem, and
-  network isolation.
-- **Stage 3C — not started:** end-to-end integration and adversarial validation.
-
-Stage 3A established this Worker-side path:
+Student submissions follow one fail-closed path:
 
 ```text
 RabbitMQ
-  -> JudgeConsumer
-  -> JudgeService (business verdicts and answer comparison)
-  -> SandboxClient
-       -> LegacyLocalSandboxClient
-       -> RemoteSandboxClient -> POST /api/v1/jobs
+  -> Worker pool (judge business rules; no Docker socket or language toolchains)
+  -> RemoteSandboxClient
+  -> POST /api/v1/jobs
+  -> Runner (trusted Docker control plane)
+  -> disposable compile/run containers
 ```
 
-`JudgeService` no longer knows compiler names, runtime commands, temporary-directory
-layout, or process APIs. It sends source code and inputs to a `SandboxClient`, then
-maps execution statuses to platform verdicts. Expected answers stay in the Worker;
-the Runner is an execution engine, not the owner of judging rules.
+The Worker compares actual output with expected output and owns AC/WA. The Runner
+only returns execution statuses and bounded output. Remote failures become `SE`;
+the Worker never falls back to local execution.
 
-## Security status
+The prior nsjail Stage 3B-2 implementation and its Ubuntu 15/15 evidence are
+preserved at Git ref `archive/nsjail-stage3b2-15of15`. The experimental
+Dockerized-nsjail work remains on its feature branch for reference. The formal
+deployment path uses per-submission Docker containers.
 
-`LegacyLocalSandboxClient` is **not a security sandbox**. It preserves the existing
-in-Worker execution behaviour while the remote boundary is introduced. It must not
-be treated as isolation for hostile code.
+## Trust boundaries
 
-The remote protocol alone also does not provide isolation. A dedicated Linux Runner
-with namespaces, cgroups, syscall filtering, a read-only filesystem, no network, and
-non-root execution is a Stage 3B-2 requirement. Docker Desktop is not used as a
-substitute for that security boundary.
+The Runner is a trusted control-plane service. It has access to the Docker socket,
+which is equivalent to control of the Docker daemon. It must be isolated from
+untrusted clients and protected by a random `RUNNER_TOKEN`. Neither the Worker nor
+any student container receives the socket.
 
-Stages 3A and 3B-1 do not use a Docker socket, a privileged container, a host
-PID/network namespace, nsjail, isolate, or host cgroup mounts.
+Each student container is created with a fixed, reviewed `HostConfig`:
 
-## Independent Runner service (Stage 3B-1)
+- `Privileged=false`, no host PID/IPC/network namespace, and network mode `none`;
+- all Linux capabilities dropped and `no-new-privileges` enabled;
+- Docker's default seccomp policy remains active;
+- non-root UID/GID `10001:10001` and a read-only root filesystem;
+- memory plus swap, CPU, PID, workspace and `/tmp` limits;
+- only a per-submission artifact volume and per-case input are mounted;
+- fixed language image and fixed argv selected by a closed language enum.
 
-The Java 21/Spring Boot service in `runner/` is an independent process with no
-PostgreSQL, RabbitMQ, Flyway, user JWT, or business-data dependency:
+Student source, stdin, expected output, compiler paths, shell commands and Docker
+options cannot alter the control-plane command. The helper reads stdin from a
+fixed `O_NOFOLLOW` path and then uses `execv`; no shell interpolation is involved.
 
-```text
-RunnerController
-  -> RunnerJobService
-       -> RunnerRequestValidator
-       -> JobConcurrencyLimiter
-       -> SandboxExecutor
-```
+## Execution lifecycle
 
-`POST /api/v1/jobs` implements the Stage 3A contract. `GET /api/health` reports
-HTTP liveness separately from `sandboxAvailable`; `ok=true` does not mean that a
-secure execution boundary exists.
+One submission receives a unique Runner-owned label and artifact volume. C, C++
+and Java compile once in a disposable compile container; Python and JavaScript use
+the same validation boundary without a native artifact. Every testcase then runs
+in a fresh container, so `/workspace`, `/tmp`, processes and output are isolated
+between cases. The Runner streams bounded stdout/stderr and enforces wall time by
+killing the disposable container.
 
-The default `UnavailableSandboxExecutor` never starts student code. It returns a
-controlled `SYSTEM_ERROR` and reports `sandboxAvailable=false`. The deterministic
-fake executor is selected only by the disposable `runner-contract-test` profile.
-It exists to exercise Worker-to-Runner HTTP compatibility and is not a deployment
-executor. A real `LinuxSandboxExecutor` is deliberately deferred to Stage 3B-2.
+Cleanup is mandatory on success, CE, RE, TLE, MLE, OLE and internal failure. The
+Runner removes testcase/compile containers and the submission volume, retries
+bounded cleanup operations, verifies no matching resources remain and returns
+`SYSTEM_ERROR` if cleanup cannot be proven. Startup stale cleanup is restricted to
+resources bearing the exact configured Runner-instance label.
 
-**Runner Service != Sandbox Security Boundary.** A Runner Docker container alone
-does not make execution of hostile code safe.
+## Resource and status handling
 
-The Stage 3B-1 service image itself runs as the unprivileged UID/GID 10001 and has
-no shell-based entrypoint. This limits the HTTP service process but is not a
-substitute for the per-job isolation that Stage 3B-2 must provide.
-
-## Execution modes
-
-The Worker supports two explicit modes:
-
-- `legacy-local` (default): compatibility behaviour; no Runner configuration needed.
-- `remote`: only the remote client is created. `RUNNER_BASE_URL` and `RUNNER_TOKEN`
-  are mandatory at startup.
-
-Remote mode never falls back to local execution. If the Runner is unavailable or
-violates the protocol, the submission receives a controlled system error (`SE`).
-This fail-closed rule prevents an isolation outage from silently becoming direct
-execution inside the Worker.
-
-Production and Staging remain on the default `legacy-local` mode until a dedicated
-Runner has passed Stage 3B/3C acceptance. Merging Stage 3A alone does not switch a
-running environment.
-
-## Versioned protocol
-
-The Worker sends one compile-once job to:
-
-```text
-POST /api/v1/jobs
-Authorization: Bearer <RUNNER_TOKEN>
-Content-Type: application/json
-```
-
-The request contains:
-
-```json
-{
-  "requestId": "UUID",
-  "language": "CPP17",
-  "sourceCode": "...",
-  "limits": {
-    "compileTimeMs": 10000,
-    "runTimeMs": 2000,
-    "memoryMb": 256,
-    "outputLimitBytes": 1048576
-  },
-  "cases": [
-    { "caseId": "1", "stdin": "..." }
-  ]
-}
-```
-
-The language is a closed enum: `PYTHON`, `JAVASCRIPT`, `C`, `CPP17`, or `JAVA`.
-The request has no command, shell, compiler argument, executable path, or expected
-answer fields. A future Runner maps the enum to a trusted execution profile.
-
-The response contains a compile result and an ordered prefix of case results:
-
-```json
-{
-  "requestId": "UUID",
-  "compile": {
-    "status": "OK",
-    "exitCode": 0,
-    "stderr": "",
-    "timeMs": 25,
-    "message": ""
-  },
-  "cases": [
-    {
-      "caseId": "1",
-      "status": "OK",
-      "exitCode": 0,
-      "stdout": "...",
-      "stderr": "",
-      "timeMs": 12,
-      "memoryKb": 8192,
-      "message": ""
-    }
-  ],
-  "message": ""
-}
-```
-
-Execution statuses are independent of platform verdicts:
+Runner status values are independent from platform verdicts:
 
 - `OK`
 - `COMPILE_ERROR`
@@ -159,69 +70,55 @@ Execution statuses are independent of platform verdicts:
 - `OUTPUT_LIMIT_EXCEEDED`
 - `SYSTEM_ERROR`
 
-For example, Runner `OK` is compared with the expected output by the Worker to
-produce `AC` or `WA`; `COMPILE_ERROR` maps to `CE`; and an unavailable Runner maps
-to `SE`.
+TLE and OLE are authoritative forced terminations. MLE is classified using Docker
+OOM state and post-mortem memory statistics; exit code 137 alone is not treated as
+memory evidence. Ordinary non-zero exits remain RE. Result messages are bounded
+metadata and do not consume the student's stdout/stderr allowance.
 
-## Protocol validation and limits
+A fair semaphore bounds accepted Runner jobs. Formal Compose defaults to four.
+Saturation returns HTTP 429; callers wait/retry rather than creating unbounded
+threads or silently bypassing isolation. Worker replicas are competing RabbitMQ
+consumers of the same queue, with prefetch one and manual acknowledgement.
 
-Both clients validate UUID request IDs, the language whitelist, positive limits,
-case IDs, source size, input size, and case count. The remote client additionally
-enforces:
+## Protocol and authentication
 
-- connect and request/read timeouts;
-- encoded request and streamed response byte limits;
-- per-case combined stdout/stderr limits;
-- compile stderr limits;
-- exact request ID matching;
-- ordered, unique case IDs;
-- known statuses and structurally complete results;
-- no HTTP redirects.
+The versioned endpoint is `POST /api/v1/jobs` with `Authorization: Bearer
+<RUNNER_TOKEN>`. A request contains UUID `requestId`, a closed language enum,
+source, limits, and ordered testcase inputs. It never contains command, shell,
+argv, executable path or expected answers. Runner and Worker share contract JSON
+fixtures under `test/fixtures/runner/`.
 
-Connection failures, timeout, non-2xx status, invalid JSON, missing fields, unknown
-status, request ID mismatch, and oversized output all fail closed as `SE`.
+Both sides enforce request IDs, field completeness, order, size limits, timeouts,
+known statuses and bounded responses. Tokens, source, stdin, stdout and stderr are
+not written to normal logs.
 
-The Runner independently validates the same contract instead of trusting the
-Worker. Its initial server-side ceilings are centrally configurable:
+## Validation
 
-- request body: 4 MiB (`RUNNER_MAX_REQUEST_BYTES`), enforced while reading HTTP;
-- source: 1 MiB (`RUNNER_MAX_SOURCE_BYTES`);
-- each stdin: 1 MiB (`RUNNER_MAX_STDIN_BYTES`);
-- cases: 1,000 (`RUNNER_MAX_CASES`);
-- compile wall limit requested by a job: at most 60 seconds;
-- run wall limit requested by a job: at most 10 seconds;
-- memory requested by a job: at most 2,048 MiB;
-- per-result output requested by a job: at most 16 MiB.
+The complete Docker test entrypoint is:
 
-The service rejects non-positive or excessive limits, duplicate/invalid case IDs,
-unknown JSON fields, non-whitelisted languages, and executor responses that exceed
-the job's output limit. A fair semaphore limits concurrent jobs; the default is 2
-and saturation returns HTTP 429 without creating another execution thread.
+```bash
+./scripts/test-docker.sh
+```
 
-## Authentication and logging
+It includes ordinary Backend/Worker/Runner/Frontend tests, release/config checks,
+the real Docker security suite, and a three-Worker competing-consumer test. The
+security suite exercises five languages, CE/RE/TLE/MLE/OLE, fork/PID limits,
+network and raw-socket isolation, capabilities, namespace and `/proc` isolation,
+read-only filesystems, bounded `/tmp`, secret isolation, concurrency, and cleanup.
+Test Compose projects are disposable and use exact labels; no global prune is used.
 
-`RUNNER_TOKEN` is read from the environment and sent only in the `Authorization`
-header. Real tokens must never be committed. Logs correlate `submissionId`,
-`requestId`, language, status, and duration, but do not log source code, test input,
-the Bearer token, passwords, or other secrets.
+## Deployment
 
-Private networking and the Bearer token are only the Stage 3A transport boundary.
-mTLS can be evaluated when the dedicated Runner is deployed.
+Build the five fixed sandbox images before starting the application services:
 
-The Runner refuses to start without a non-blank `RUNNER_TOKEN`. Token comparison
-uses a constant-time digest comparison. Missing or incorrect credentials return a
-minimal 401 response; the token and Authorization header are never logged or
-returned in an error body.
+```bash
+docker compose --profile sandbox-images build \
+  sandbox-python-image sandbox-javascript-image sandbox-c-image \
+  sandbox-cpp-image sandbox-java-image
+docker compose up -d --build --scale worker=3
+```
 
-## Testing
-
-All tests run in disposable Docker test services. Shared JSON fixtures in
-`test/fixtures/runner/` are parsed and re-serialized by both Worker and Runner.
-The HTTP contract test starts a temporary Runner with the test-only fake executor,
-sends a real authenticated request through `RemoteSandboxClient`, then removes the
-container and network. No long-running Runner is added to Production or Staging.
-Regression tests retain Python, JavaScript, C, C++17, and Java behaviour through
-the legacy adapter.
-
-Stage 4 still owns RabbitMQ acknowledgement reliability, retries, Outbox, and DLQ;
-this refactor intentionally does not change those semantics.
+Set `RUNNER_TOKEN` and `DOCKER_SOCKET_GID` in an ignored local environment file.
+Only the Runner joins the Docker control plane. Student containers use network
+mode `none`, so Worker-to-Runner HTTP is allowed while student-to-Runner, Backend,
+database, RabbitMQ and Internet access is denied.

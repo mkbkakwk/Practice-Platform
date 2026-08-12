@@ -90,9 +90,9 @@ services:
     build:
       context: ./runner
       target: test
-      additional_contexts:
-        fixtures: ./test/fixtures/runner
     restart: "no"
+    volumes:
+      - ./test/fixtures/runner:/contracts/runner:ro
     environment:
       SPRING_PROFILES_ACTIVE: test
       RUNNER_TOKEN: test-runner-token
@@ -103,8 +103,6 @@ services:
     build:
       context: ./runner
       target: runtime
-      additional_contexts:
-        fixtures: ./test/fixtures/runner
     restart: "no"
     read_only: true
     tmpfs:

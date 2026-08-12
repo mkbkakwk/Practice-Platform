@@ -31,8 +31,8 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 
 ### 为什么选择它
 
-- 🚀 **一键部署** —— 一条 `docker compose up -d --build` 启动数据库、消息队列、后端、评测 Worker、前端
-- 🛡️ **受限评测进程** —— Java `ProcessBuilder` 起子进程 + ulimit 资源限制，`exec` 对准真实程序并在超时后强制终止
+- 🚀 **Compose 部署** —— 启动数据库、消息队列、后端、Worker 池、Runner 和前端
+- 🛡️ **独立评测边界** —— Worker 只处理判题业务，Runner 在受限、一次性的 Docker 容器中执行学生代码
 - 🌐 **多语言支持** —— Python 3、JavaScript (Node)、C、C++17、Java 开箱即用
 - 📝 **现代化编辑器** —— 内置 CodeMirror，语法高亮、多语言模板切换
 - ⚡ **异步评测 + 高并发** —— 提交经 RabbitMQ 入队，Worker 池水平扩展，轻松扛 300+ 并发
@@ -80,32 +80,21 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 
 ## 🏗️ 系统架构
 
-```
-┌──────────────┐    POST /submissions    ┌──────────────┐    publish     ┌──────────────┐
-│   Frontend   │ ──────────────────────▶ │   Backend    │ ────────────▶ │   RabbitMQ   │
-│  React SPA   │     (返回 submissionId)  │ Spring Boot  │               │    队列      │
-│  + 轮询结果  │ ◀────────────────────── │              │               └──────┬───────┘
-└──────────────┘    GET /submissions/:id  └──────┬───────┘                      │ consume
-      │                                          │ JDBC                         ▼
-      │ 上传 .docx                               ▼                    ┌──────────────────┐
-      │ POST /office/docs/.../submit     ┌──────────────┐             │  Worker 池       │
-      └─────────────────────────────────▶│  PostgreSQL  │ ◀──写入结果──│  (ProcessBuilder │
-                                         │              │             │   评测沙箱)      │
-              ┌──────────────┐           │ · User       │             │  可水平扩展      │
-              │ Apache POI   │           │ · Problem    │             └──────────────────┘
-              │ .docx 解析   │           │ · Submission │
-              │ 格式提取     │           │ · OfficeQ    │
-              └──────────────┘           │ · OfficeEx   │
-                     │                   │ · OfficeDoc  │
-                     ▼                   │   Submission │
-              逐段比对判分                └──────────────┘
+```text
+Frontend -> Backend -> PostgreSQL
+               |
+               +-> RabbitMQ -> Worker pool -> Runner HTTP API
+                                               |
+                                               +-> disposable student containers
+                                                    (network none, read-only,
+                                                     non-root, bounded resources)
 ```
 
 **异步评测流程**：
 1. 学生提交代码 → 后端写入 `PENDING` 记录 → 发送到 RabbitMQ → 立即返回 `submissionId`
-2. Worker 从队列消费 → 用 `ProcessBuilder` 起子进程运行代码 → ulimit 限制资源 → 超时 `destroyForcibly`
-3. 评测完成 → Worker 写回结果到 PostgreSQL → 更新排行榜
-4. 前端轮询 `GET /submissions/:id` → 拿到非 PENDING 结果即展示
+2. 多个 Worker 竞争消费同一队列，将代码和测试输入通过认证的 Runner API 送入执行层
+3. Runner 按固定语言配置 compile once，再为每个测试点创建独立、无网络的一次性容器
+4. Worker 比较实际输出与预期输出并写回 PostgreSQL；前端轮询最终结果
 
 **文档排版比对流程**：
 1. 老师创建排版练习 → 写 Markdown 排版要求 → 上传参考 .docx
@@ -119,22 +108,24 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 | :--- | :--- | :--- |
 | **前端** | React 19 · Vite · TypeScript · Tailwind CSS · shadcn/ui · CodeMirror · marked · KaTeX | SPA + ErrorBoundary + 统一日志 |
 | **后端** | Spring Boot 3.3 · Java 21 · MyBatis-Plus · JWT · Spring AMQP · Apache POI | REST API + 异步提交 + .docx 解析 |
-| **评测 Worker** | Spring Boot · ProcessBuilder · Spring AMQP 消费者 | 独立服务，可 `--scale worker=N` 水平扩展 |
+| **评测 Worker** | Spring Boot · Spring AMQP · RemoteSandboxClient | 判题业务与竞争消费者，可 `--scale worker=N` 水平扩展 |
+| **Sandbox Runner** | Spring Boot · Docker Engine API | 可信控制面；创建并清理一次性学生容器 |
 | **数据库** | PostgreSQL 16 | 用户、题目、提交、Office 题库与记录 |
 | **消息队列** | RabbitMQ 3.13 | 提交任务解耦与削峰 |
-| **部署** | Docker · docker-compose | 多阶段构建，五容器编排 |
+| **部署** | Docker · Docker Compose | 六类长期服务 + 五个只构建的固定语言镜像 |
 
 ### 评测安全机制
 
-用户提交的代码在 Worker 容器内以**受限子进程**方式执行：
+学生代码不会在 Worker 或 Runner JVM 进程内直接执行。每次编译/运行使用固定语言镜像和固定 argv，并应用：
 
-- 🧱 **独立进程组** —— 超时可通过 `destroyForcibly` 清理整个进程树
-- ⏱️ **时间限制** —— 墙钟超时 + `ulimit -t` CPU 时间双重限制
-- 💾 **内存限制** —— `ulimit -v` 虚拟内存上限
-- 📄 **输出限制** —— `ulimit -f` 防止输出爆炸
-- 🔒 **容器隔离** —— Worker 容器本身提供网络与文件系统隔离
+- 非 root、只读 rootfs、capabilities 全部移除、`no-new-privileges`；
+- `network=none`、私有 PID/IPC，且不挂载 Docker socket；
+- CPU、内存/交换分区、PID、墙钟时间、输出、workspace 与 `/tmp` 上限；
+- 每个 testcase 独立容器，compile once 的 artifact 只在同一 submission 内共享；
+- 任意失败均清理容器/卷，无法证明清理完成时 fail closed 为 `SE`；
+- Runner 失败或协议错误绝不回退到 Worker 本地执行。
 
-> ⚠️ **生产环境建议**：当前沙箱适合教学/练习场景。若要公开到互联网，建议额外使用 `nsjail`、`firejail` 或 Docker-in-Docker 提供更强隔离。
+Runner 是可信 Docker 控制面，Docker socket 权限非常高；只有 Runner 可以访问。完整威胁模型见 [SECURITY.md](SECURITY.md)，实现细节见 [Sandbox Runner architecture](docs/sandbox-runner-architecture.md)。
 
 ---
 
@@ -144,15 +135,20 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 
 只需安装 [Docker](https://www.docker.com/) 与 Docker Compose（Docker Desktop 已包含）。
 
-### 一键部署
+### 构建并启动
 
 ```bash
 git clone https://github.com/mkbkakwk/Practice-Platform.git
 cd Practice-Platform
-docker compose up -d --build
+cp .env.example .env
+# 修改 RUNNER_TOKEN；Linux 同时把 DOCKER_SOCKET_GID 设为 `stat -c %g /var/run/docker.sock`
+docker compose --profile sandbox-images build \
+  sandbox-python-image sandbox-javascript-image sandbox-c-image \
+  sandbox-cpp-image sandbox-java-image
+docker compose up -d --build --scale worker=3
 ```
 
-首次构建约 5–10 分钟（需拉取镜像、编译 Java 应用、安装语言运行时）。之后启动只需几秒。
+首次构建需拉取镜像、编译 Java 应用并构建五个固定语言镜像。Runner 必须健康且返回 `sandboxAvailable=true` 后 Worker 才会开始消费判题消息。
 Backend 启动时由 Flyway 创建或升级数据库结构；Worker 会等待 Backend
 健康检查通过后才开始消费判题消息。全新数据库默认不插入演示题目或账号。
 
@@ -216,9 +212,13 @@ Flyway 不保证任意 PostgreSQL DDL 都能自动回滚，恢复仍依赖经过
 ### 常用命令
 
 ```bash
-docker compose up -d --build          # 构建并后台启动
+docker compose --profile sandbox-images build \
+  sandbox-python-image sandbox-javascript-image sandbox-c-image \
+  sandbox-cpp-image sandbox-java-image # 构建固定语言镜像
+docker compose up -d --build --scale worker=3 # 构建应用并启动
 docker compose logs -f backend        # 查看后端日志
 docker compose logs -f worker         # 查看 Worker 评测日志
+docker compose logs -f runner         # 查看 Runner 控制面日志
 docker compose ps                     # 查看容器状态
 docker compose up -d --scale worker=3 # 水平扩展到 3 个 Worker（扛并发）
 docker compose down                   # 停止并移除容器
@@ -229,7 +229,7 @@ docker compose down                   # 停止并移除容器
 评测是 CPU 密集型任务，单 Worker 串行评测。通过 `--scale` 起多个 Worker 并行消费队列：
 
 ```bash
-# 3 个 Worker，每个最多 2 并发 = 6 路并行评测
+# 3 个竞争消费者；Runner 全局最多同时接受 4 个 job
 docker compose up -d --scale worker=3
 ```
 
@@ -289,8 +289,11 @@ practice-platform/
 ├── scripts/dev-seed.sql        # 可选演示题；仅手动加载到开发数据库
 │
 ├── worker/                     # Java 评测 Worker（独立服务）
-│   ├── Dockerfile              # 含 Python/Node.js/GCC/G++/Temurin JDK 运行时
-│   └── src/main/java/com/oj/   # Runner(ProcessBuilder沙箱) / JudgeService
+│   ├── Dockerfile              # JRE-only；不包含学生语言工具链
+│   └── src/main/java/com/oj/   # JudgeService / RemoteSandboxClient
+│
+├── runner/                     # 可信 Docker Sandbox 控制面
+├── sandbox-images/             # 五种固定、非 root 学生运行镜像
 │
 └── frontend/                   # React 前端
     ├── Dockerfile              # 多阶段构建（build + nginx）
@@ -382,8 +385,12 @@ practice-platform/
 | `POSTGRES_DB` | `oj` | 数据库名 |
 | `RABBITMQ_USER` | `oj` | RabbitMQ 用户 |
 | `RABBITMQ_PASSWORD` | `oj` | RabbitMQ 密码 |
-| `WORKER_REPLICAS` | `1` | Worker 容器数量 |
+| `WORKER_REPLICAS` | `3` | Worker 竞争消费者数量 |
 | `WORKER_CONCURRENCY` | `1` | 单 Worker 并发消费数 |
+| `RUNNER_TOKEN` | 无 | Worker/Runner 内部 Bearer Token（**必须配置**） |
+| `DOCKER_SOCKET_GID` | 无 | Docker socket 的宿主 GID（**必须配置**） |
+| `RUNNER_MAX_CONCURRENCY` | `4` | Runner 同时接受的 submission job 上限 |
+| `RUNNER_DOCKER_PIDS_LIMIT` | `64` | 单学生容器 PID 上限 |
 | `JWT_SECRET` | `please-change-...` | JWT 签名密钥（**生产必改**） |
 | `JWT_EXPIRES_IN` | `7d` | Token 有效期 |
 | `CORS_ORIGIN` | `*` | 跨域来源 |
@@ -472,7 +479,7 @@ Staging 使用独立 Compose 项目 `practice-platform-staging`，并固定使�
 ./scripts/test-docker.sh
 ```
 
-脚本默认使用独立 Compose 项目 `practice-platform-test`（CI 覆盖为 `practice-platform-ci`），依次构建测试镜像、启动临时 PostgreSQL/RabbitMQ、运行三个测试服务并汇总退出码；无论成功或失败都会执行 `down --remove-orphans` 清理测试容器和网络。
+脚本使用隔离的 Compose 项目完成普通模块回归、Runner HTTP contract、正式配置检查、真实 Docker sandbox 安全验收及 Worker×3 竞争消费验证。成功或失败都会按精确项目/Runner 标签清理测试容器、卷和网络，不使用全局 prune。
 
 | 服务 | 作用 |
 | :--- | :--- |
@@ -480,8 +487,12 @@ Staging 使用独立 Compose 项目 `practice-platform-staging`，并固定使�
 | `test-rabbitmq` | RabbitMQ 3.13 测试实例，不映射宿主机端口 |
 | `backend-test` | 容器内执行 Spring Boot/MockMvc/PostgreSQL/Flyway 回归测试 |
 | `worker-test` | 容器内执行判题核心与消息消费回归测试 |
+| `runner-test` | Runner API、验证、并发与执行层普通单元测试 |
+| `worker-runner-contract-test` | Worker → HTTP → Runner 的真实协议兼容测试 |
 | `frontend-test` | 容器内执行 `npm ci`、`npm run lint`、`npm run test`、`npm run build` |
 | `release-config-test` | 校验正式 Compose 只使用不可变镜像、外部数据资源且不包含秘密或 Staging 配置 |
+| Docker sandbox security | 五语言、CE/RE/TLE/MLE/OLE、fork/network/fs/cap/proc/secret/concurrency/cleanup |
+| Worker scale | 3 个竞争消费者处理同一条消息，观察一次判题结果与队列清空 |
 
 隔离保证：
 
@@ -535,7 +546,7 @@ docker compose build
 
 前端语言下拉由后端元数据提供，后端允许列表与 Worker `LanguageDef` 保持以下五种语言一致：
 
-| 语言 | 提交 ID | Worker 命令 |
+| 语言 | 提交 ID | 固定 Sandbox profile |
 | :--- | :--- | :--- |
 | Python 3 | `python` | `python3` |
 | JavaScript (Node.js 22 LTS) | `javascript` | `node` |
@@ -543,7 +554,7 @@ docker compose build
 | C++17 | `cpp` | `g++ -std=c++17` |
 | Java 21 | `java` | `javac` / `java` |
 
-测试与正式 Worker 镜像共用固定的 Node.js `22.22.3` 运行时。编译和运行命令使用参数列表传递，工作目录由 `ProcessBuilder.directory(...)` 设置，bash 包装层只负责 ulimit 并通过 `exec "$@"` 切换到真实编译器或运行时。
+正式 Worker 是 JRE-only 的判题协调器，不包含这些语言工具链。Runner 根据关闭的语言枚举选择固定镜像和结构化 argv；学生容器不能提供命令、shell、可执行路径或 Docker 参数。
 
 算法题创建和更新都会在后端拒绝缺失、空或结构错误的测试点；Worker 对历史空测试点返回 `SE`（`No test cases configured`），不会判为 AC 或增加 `solved_count`。
 

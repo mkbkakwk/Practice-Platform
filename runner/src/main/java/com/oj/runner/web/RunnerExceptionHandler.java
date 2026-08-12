@@ -6,11 +6,15 @@ import com.oj.runner.service.RunnerSaturatedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class RunnerExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(RunnerExceptionHandler.class);
 
     @ExceptionHandler(RunnerRequestValidationException.class)
     public ResponseEntity<RunnerErrorResponse> invalidRequest(RunnerRequestValidationException exception) {
@@ -36,9 +40,39 @@ public class RunnerExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<RunnerErrorResponse> unexpected() {
+    public ResponseEntity<RunnerErrorResponse> unexpected(Exception exception) {
+        log.warn("Runner request failed types={} linkage={}", causeTypes(exception), linkageSignature(exception));
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new RunnerErrorResponse("INTERNAL_ERROR", "Runner request failed"));
+    }
+
+    private String causeTypes(Throwable throwable) {
+        StringBuilder types = new StringBuilder();
+        Throwable current = throwable;
+        for (int depth = 0; current != null && depth < 8; depth++) {
+            if (!types.isEmpty()) {
+                types.append(" -> ");
+            }
+            types.append(current.getClass().getSimpleName());
+            current = current.getCause();
+        }
+        return types.toString();
+    }
+
+    private String linkageSignature(Throwable throwable) {
+        Throwable current = throwable;
+        for (int depth = 0; current != null && depth < 8; depth++) {
+            if (current instanceof LinkageError) {
+                String message = current.getMessage();
+                if (message == null) {
+                    return "";
+                }
+                String singleLine = message.replace('\r', ' ').replace('\n', ' ');
+                return singleLine.substring(0, Math.min(singleLine.length(), 512));
+            }
+            current = current.getCause();
+        }
+        return "";
     }
 
     private boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {

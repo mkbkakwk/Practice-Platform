@@ -57,8 +57,20 @@ class RunnerFailClosedTest {
                     })
                     .reduce("", String::concat);
             assertThat(allSources).doesNotContain(
-                    "ProcessBuilder", "docker.sock", "privileged: true", "seccomp=unconfined", "nsjail");
+                    "ProcessBuilder", "withPrivileged(true)", "seccomp=unconfined", "nsjail");
         }
+    }
+
+    @Test
+    void dockerControlPlaneNeverPassesItsSocketOrHostNamespacesToStudents() throws Exception {
+        String source = Files.readString(Path.of("src", "main", "java", "com", "oj", "runner",
+                "execution", "docker", "DockerSandboxExecutor.java"));
+        assertThat(source)
+                .contains("withNetworkMode(\"none\")", "withReadonlyRootfs(true)",
+                        "withPrivileged(false)", "withCapDrop(Capability.values())",
+                        "withPidsLimit(properties.getPidsLimit())", "withUser(SANDBOX_USER)")
+                .doesNotContain("docker.sock", "withPidMode(\"host\")", "withIpcMode(\"host\")",
+                        "withNetworkMode(\"host\")", "withCapAdd", "seccomp=unconfined");
     }
 
     private String validRequest() {

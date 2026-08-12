@@ -1,0 +1,109 @@
+name: practice-platform-worker-scale-test
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      POSTGRES_USER: scale_test
+      POSTGRES_PASSWORD: scale_test_password
+      POSTGRES_DB: scale_test
+    tmpfs:
+      - /var/lib/postgresql/data:rw,nosuid,nodev,size=268435456
+    volumes:
+      - ./backend-spring/src/main/resources/db/migration/V1__baseline_schema.sql:/docker-entrypoint-initdb.d/001.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scale_test -d scale_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [scale-test]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: "no"
+    environment:
+      RABBITMQ_DEFAULT_USER: scale_test
+      RABBITMQ_DEFAULT_PASS: scale_test_password
+    tmpfs:
+      - /var/lib/rabbitmq:rw,nosuid,nodev,size=134217728
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [scale-test]
+
+  runner:
+    image: practice-platform-worker-scale-runner:local
+    build:
+      context: ./runner
+      target: runtime
+    restart: "no"
+    read_only: true
+    user: "10001:10001"
+    group_add:
+      - "${DOCKER_SOCKET_GID:?DOCKER_SOCKET_GID is required}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=33554432
+    environment:
+      RUNNER_TOKEN: worker-scale-test-token
+      RUNNER_SANDBOX_MODE: docker
+      RUNNER_INSTANCE_ID: worker-scale-runner
+      RUNNER_MAX_CONCURRENT_JOBS: 4
+      RUNNER_DOCKER_PYTHON_IMAGE: practice-sandbox-python:local
+      RUNNER_DOCKER_JAVASCRIPT_IMAGE: practice-sandbox-javascript:local
+      RUNNER_DOCKER_C_IMAGE: practice-sandbox-c:local
+      RUNNER_DOCKER_CPP_IMAGE: practice-sandbox-cpp17:local
+      RUNNER_DOCKER_JAVA_IMAGE: practice-sandbox-java:local
+      RUNNER_DOCKER_PIDS_LIMIT: 64
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/health | grep -Fq '\"ok\":true,\"sandboxAvailable\":true'"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [scale-test]
+
+  worker:
+    image: practice-platform-worker-scale-worker:local
+    build:
+      context: ./worker
+      target: runtime
+    restart: "no"
+    read_only: true
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/scale_test
+      POSTGRES_USER: scale_test
+      POSTGRES_PASSWORD: scale_test_password
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: scale_test
+      RABBITMQ_PASSWORD: scale_test_password
+      JUDGE_EXECUTION_MODE: remote
+      RUNNER_BASE_URL: http://runner:8080
+      RUNNER_TOKEN: worker-scale-test-token
+      RUNNER_CONNECT_TIMEOUT_MS: 1000
+      RUNNER_READ_TIMEOUT_MS: 15000
+      WORKER_CONCURRENCY: 1
+      WORKER_MAX_CONCURRENCY: 1
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=33554432
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [scale-test]
+
+networks:
+  scale-test:
+    driver: bridge

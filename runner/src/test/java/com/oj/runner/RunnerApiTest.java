@@ -218,6 +218,38 @@ class RunnerApiTest {
     }
 
     @Test
+    void boundedOutputCanUseTheFullLimitWithoutCountingControlledMetadata() throws Exception {
+        RunnerJobResponse bounded = new RunnerJobResponse(
+                "11111111-1111-4111-8111-111111111111",
+                new RunnerCompileResult(RunnerStatus.OK, 0, "", 1, ""),
+                List.of(new RunnerCaseResult(
+                        "1", RunnerStatus.OUTPUT_LIMIT_EXCEEDED, -1,
+                        "x".repeat(1_024), "", 1, 0, "Output limit exceeded")),
+                "");
+        doReturn(bounded).when(sandboxExecutor).execute(ArgumentMatchers.any());
+
+        perform(validRequest())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cases[0].status").value("OUTPUT_LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    void oversizedExecutorMetadataBecomesControlledSystemError() throws Exception {
+        RunnerJobResponse oversized = new RunnerJobResponse(
+                "11111111-1111-4111-8111-111111111111",
+                new RunnerCompileResult(RunnerStatus.OK, 0, "", 1, ""),
+                List.of(new RunnerCaseResult(
+                        "1", RunnerStatus.RUNTIME_ERROR, 1, "", "", 1, 0,
+                        "x".repeat(1_025))),
+                "");
+        doReturn(oversized).when(sandboxExecutor).execute(ArgumentMatchers.any());
+
+        perform(validRequest())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.compile.status").value("SYSTEM_ERROR"));
+    }
+
+    @Test
     void concurrentJobBeyondTheConfiguredLimitReturns429() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
