@@ -25,6 +25,22 @@ runner:
   max-run-time-ms: ${RUNNER_MAX_RUN_TIME_MS:10000}
   max-memory-mb: ${RUNNER_MAX_MEMORY_MB:2048}
   max-output-limit-bytes: ${RUNNER_MAX_OUTPUT_LIMIT_BYTES:16777216}
+  sandbox:
+    mode: ${RUNNER_SANDBOX_MODE:unavailable}
+    docker:
+      host: ${RUNNER_DOCKER_HOST:unix:///var/run/docker.sock}
+      instance-id: ${RUNNER_INSTANCE_ID:runner-local}
+      python-image: ${RUNNER_DOCKER_PYTHON_IMAGE:practice-sandbox-python:local}
+      javascript-image: ${RUNNER_DOCKER_JAVASCRIPT_IMAGE:practice-sandbox-javascript:local}
+      c-image: ${RUNNER_DOCKER_C_IMAGE:practice-sandbox-c:local}
+      cpp-image: ${RUNNER_DOCKER_CPP_IMAGE:practice-sandbox-cpp17:local}
+      java-image: ${RUNNER_DOCKER_JAVA_IMAGE:practice-sandbox-java:local}
+      pids-limit: ${RUNNER_DOCKER_PIDS_LIMIT:64}
+      nano-cpus: ${RUNNER_DOCKER_NANO_CPUS:1000000000}
+      workspace-bytes: ${RUNNER_DOCKER_WORKSPACE_BYTES:67108864}
+      tmp-bytes: ${RUNNER_DOCKER_TMP_BYTES:33554432}
+      cleanup-retries: ${RUNNER_DOCKER_CLEANUP_RETRIES:3}
+      control-timeout-ms: ${RUNNER_DOCKER_CONTROL_TIMEOUT_MS:10000}
 
 logging:
   level:

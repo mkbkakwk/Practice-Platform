@@ -1,0 +1,73 @@
+name: practice-platform-sandbox-test
+
+services:
+  sandbox-python-image:
+    image: practice-sandbox-python:local
+    build:
+      context: ./sandbox-images/python
+    profiles: [images]
+
+  sandbox-javascript-image:
+    image: practice-sandbox-javascript:local
+    build:
+      context: ./sandbox-images/javascript
+    profiles: [images]
+
+  sandbox-c-image:
+    image: practice-sandbox-c:local
+    build:
+      context: ./sandbox-images/native
+    profiles: [images]
+
+  sandbox-cpp-image:
+    image: practice-sandbox-cpp17:local
+    build:
+      context: ./sandbox-images/native
+    profiles: [images]
+
+  sandbox-java-image:
+    image: practice-sandbox-java:local
+    build:
+      context: ./sandbox-images/java
+    profiles: [images]
+
+  runner:
+    image: practice-platform-docker-sandbox-runner:local
+    build:
+      context: ./runner
+      target: runtime
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=33554432
+    user: "10001:10001"
+    group_add:
+      - "${DOCKER_SOCKET_GID:-0}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-docker-sandbox-test-token}
+      RUNNER_SANDBOX_MODE: docker
+      RUNNER_INSTANCE_ID: docker-sandbox-test-runner
+      RUNNER_MAX_CONCURRENT_JOBS: ${RUNNER_MAX_CONCURRENT_JOBS:-4}
+      RUNNER_DOCKER_PYTHON_IMAGE: practice-sandbox-python:local
+      RUNNER_DOCKER_JAVASCRIPT_IMAGE: practice-sandbox-javascript:local
+      RUNNER_DOCKER_C_IMAGE: practice-sandbox-c:local
+      RUNNER_DOCKER_CPP_IMAGE: practice-sandbox-cpp17:local
+      RUNNER_DOCKER_JAVA_IMAGE: practice-sandbox-java:local
+      RUNNER_DOCKER_PIDS_LIMIT: ${RUNNER_DOCKER_PIDS_LIMIT:-64}
+    ports:
+      - "127.0.0.1:${RUNNER_SANDBOX_TEST_PORT:-28080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      - runner-control
+
+networks:
+  runner-control:
+    driver: bridge
