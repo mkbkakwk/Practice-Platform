@@ -23,13 +23,18 @@ final class DockerLanguageCommands {
     }
 
     static List<String> run(RunnerLanguage language, long memoryMb) {
-        return switch (language) {
+        List<String> languageCommand = switch (language) {
             case PYTHON -> List.of("/usr/local/bin/python3", "-B", "/artifacts/Main.py");
             case JAVASCRIPT -> List.of("/usr/local/bin/node", "/artifacts/Main.js");
             case C, CPP17 -> List.of("/artifacts/Main");
             case JAVA -> List.of("/opt/java/openjdk/bin/java", javaHeapFlag("-Xmx", memoryMb),
                     "-XX:ActiveProcessorCount=1", "-cp", "/artifacts", "Main");
         };
+        java.util.ArrayList<String> command = new java.util.ArrayList<>();
+        command.add("/usr/local/bin/sandbox-exec");
+        command.add("/input/stdin");
+        command.addAll(languageCommand);
+        return List.copyOf(command);
     }
 
     private static String javaHeapFlag(String prefix, long memoryMb) {

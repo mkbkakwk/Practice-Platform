@@ -105,11 +105,11 @@ public class DockerSandboxExecutor implements SandboxExecutor {
         RunnerLanguage language = job.request().language();
         String sourceFilename = job.profile().sourceFilename();
         byte[] sourceArchive = SandboxArtifactArchive.source(sourceFilename, job.request().sourceCode());
-        String artifactVolume = createArtifactVolume(job);
+        String artifactVolume = createSandboxVolume(job, "artifacts");
         try {
             stageSource(job, artifactVolume, sourceArchive);
             ExecutionOutcome compilation;
-            String compileContainer = createExecutionContainer(job, "compile", artifactVolume, true);
+            String compileContainer = createExecutionContainer(job, "compile", artifactVolume, null, true);
             try {
                 compilation = executeCommand(
                         compileContainer,
@@ -131,24 +131,32 @@ public class DockerSandboxExecutor implements SandboxExecutor {
             List<RunnerCaseResult> results = new ArrayList<>();
             for (int index = 0; index < job.request().cases().size(); index++) {
                 var testCase = job.request().cases().get(index);
-                String runContainer = createExecutionContainer(job, "run-" + index, artifactVolume, false);
-                ExecutionOutcome outcome;
+                String inputVolume = createSandboxVolume(job, "input-" + index);
                 try {
-                    outcome = executeCommand(
-                            runContainer,
-                            DockerLanguageCommands.run(language, job.request().limits().memoryMb()),
-                            testCase.stdin().getBytes(StandardCharsets.UTF_8),
-                            job.request().limits().runTimeMs(),
-                            job.request().limits().outputLimitBytes());
+                    stageSource(job, inputVolume,
+                            SandboxArtifactArchive.stdin(testCase.stdin().getBytes(StandardCharsets.UTF_8)));
+                    String runContainer = createExecutionContainer(
+                            job, "run-" + index, artifactVolume, inputVolume, false);
+                    ExecutionOutcome outcome;
+                    try {
+                        outcome = executeCommand(
+                                runContainer,
+                                DockerLanguageCommands.run(language, job.request().limits().memoryMb()),
+                                new byte[0],
+                                job.request().limits().runTimeMs(),
+                                job.request().limits().outputLimitBytes());
+                    } finally {
+                        removeContainerFailClosed(runContainer);
+                    }
+                    RunnerStatus status = runStatus(outcome);
+                    results.add(new RunnerCaseResult(
+                            testCase.caseId(), status, outcome.exitCode(), outcome.stdout(), outcome.stderr(),
+                            outcome.timeMs(), 0, status == RunnerStatus.OK ? "" : statusMessage(status)));
+                    if (status != RunnerStatus.OK) {
+                        break;
+                    }
                 } finally {
-                    removeContainerFailClosed(runContainer);
-                }
-                RunnerStatus status = runStatus(outcome);
-                results.add(new RunnerCaseResult(
-                        testCase.caseId(), status, outcome.exitCode(), outcome.stdout(), outcome.stderr(),
-                        outcome.timeMs(), 0, status == RunnerStatus.OK ? "" : statusMessage(status)));
-                if (status != RunnerStatus.OK) {
-                    break;
+                    removeVolumeFailClosed(inputVolume);
                 }
             }
             return new RunnerJobResponse(job.request().requestId(), compileResult, List.copyOf(results), "");
@@ -157,9 +165,22 @@ public class DockerSandboxExecutor implements SandboxExecutor {
         }
     }
 
-    private String createExecutionContainer(RunnerJob job, String phase, String artifactVolume, boolean compile) {
+    private String createExecutionContainer(
+            RunnerJob job,
+            String phase,
+            String artifactVolume,
+            String inputVolume,
+            boolean compile) {
         String name = containerName(job.request().requestId(), phase);
         long memoryBytes = Math.multiplyExact(job.request().limits().memoryMb(), 1024L * 1024L);
+        List<Bind> binds = new ArrayList<>();
+        binds.add(new Bind(
+                artifactVolume,
+                new Volume(compile ? "/workspace" : "/artifacts"),
+                compile ? AccessMode.rw : AccessMode.ro));
+        if (!compile) {
+            binds.add(new Bind(inputVolume, new Volume("/input"), AccessMode.ro));
+        }
         HostConfig hostConfig = HostConfig.newHostConfig()
                 .withNetworkMode("none")
                 .withIpcMode("private")
@@ -171,10 +192,7 @@ public class DockerSandboxExecutor implements SandboxExecutor {
                 .withNanoCPUs(properties.getNanoCpus())
                 .withPidsLimit(properties.getPidsLimit())
                 .withSecurityOpts(List.of("no-new-privileges=true"))
-                .withBinds(new Bind(
-                        artifactVolume,
-                        new Volume(compile ? "/workspace" : "/artifacts"),
-                        compile ? AccessMode.rw : AccessMode.ro))
+                .withBinds(binds)
                 .withTmpFs(compile
                         ? Map.of("/tmp", tmpfs(properties.getTmpBytes(), false))
                         : Map.of(
@@ -199,9 +217,9 @@ public class DockerSandboxExecutor implements SandboxExecutor {
         }
     }
 
-    private String createArtifactVolume(RunnerJob job) {
-        String volumeName = containerName(job.request().requestId(), "artifacts");
-        Map<String, String> labels = sandboxLabels(job, "artifacts");
+    private String createSandboxVolume(RunnerJob job, String phase) {
+        String volumeName = containerName(job.request().requestId(), phase);
+        Map<String, String> labels = sandboxLabels(job, phase);
         labels.put(ARTIFACT_VOLUME_LABEL, "true");
         docker.createVolumeCmd().withName(volumeName).withLabels(labels).exec();
         return volumeName;

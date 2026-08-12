@@ -4,31 +4,36 @@ services:
   sandbox-python-image:
     image: practice-sandbox-python:local
     build:
-      context: ./sandbox-images/python
+      context: .
+      dockerfile: sandbox-images/python/Dockerfile
     profiles: [images]
 
   sandbox-javascript-image:
     image: practice-sandbox-javascript:local
     build:
-      context: ./sandbox-images/javascript
+      context: .
+      dockerfile: sandbox-images/javascript/Dockerfile
     profiles: [images]
 
   sandbox-c-image:
     image: practice-sandbox-c:local
     build:
-      context: ./sandbox-images/native
+      context: .
+      dockerfile: sandbox-images/native/Dockerfile
     profiles: [images]
 
   sandbox-cpp-image:
     image: practice-sandbox-cpp17:local
     build:
-      context: ./sandbox-images/native
+      context: .
+      dockerfile: sandbox-images/native/Dockerfile
     profiles: [images]
 
   sandbox-java-image:
     image: practice-sandbox-java:local
     build:
-      context: ./sandbox-images/java
+      context: .
+      dockerfile: sandbox-images/java/Dockerfile
     profiles: [images]
 
   runner:

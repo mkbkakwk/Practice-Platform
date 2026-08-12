@@ -17,6 +17,10 @@ final class SandboxArtifactArchive {
         return archive(Map.of(filename, new Artifact(sourceCode.getBytes(StandardCharsets.UTF_8), 0400)));
     }
 
+    static byte[] stdin(byte[] bytes) {
+        return archive(Map.of("stdin", new Artifact(bytes, 0400)));
+    }
+
     private static byte[] archive(Map<String, Artifact> files) {
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
              TarArchiveOutputStream output = new TarArchiveOutputStream(bytes)) {

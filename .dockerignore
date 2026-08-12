@@ -23,3 +23,5 @@
 !.github/workflows/**
 !release-tests/
 !release-tests/Dockerfile
+!sandbox-images/
+!sandbox-images/**

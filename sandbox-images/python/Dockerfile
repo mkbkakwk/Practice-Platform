@@ -1,3 +1,7 @@
+FROM gcc:13-bookworm AS helper
+COPY sandbox-images/common/sandbox-exec.c /src/sandbox-exec.c
+RUN gcc -static -Os -s -o /sandbox-exec /src/sandbox-exec.c
+
 FROM python:3.12-slim-bookworm
 
 RUN groupadd --gid 10001 sandbox \
@@ -6,5 +10,6 @@ RUN groupadd --gid 10001 sandbox \
     && chown 10001:10001 /workspace
 
 WORKDIR /workspace
+COPY --from=helper --chown=10001:10001 --chmod=0555 /sandbox-exec /usr/local/bin/sandbox-exec
 USER 10001:10001
 CMD ["/usr/bin/tail", "-f", "/dev/null"]

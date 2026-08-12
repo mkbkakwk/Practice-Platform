@@ -16,6 +16,7 @@ class DockerLanguageCommandsTest {
             List<String> run = DockerLanguageCommands.run(language, 256);
             assertThat(compile).isNotEmpty().allMatch(value -> value != null && !value.isBlank());
             assertThat(run).isNotEmpty().allMatch(value -> value != null && !value.isBlank());
+            assertThat(run).startsWith("/usr/local/bin/sandbox-exec", "/input/stdin");
             assertThat(compile).noneMatch(value -> value.equals("sh") || value.equals("bash")
                     || value.equals("-c") || value.contains("${"));
             assertThat(run).noneMatch(value -> value.equals("sh") || value.equals("bash")
