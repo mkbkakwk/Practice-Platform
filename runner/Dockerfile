@@ -72,12 +72,10 @@ RUN apt-get update \
         ca-certificates curl openjdk-21-jre-headless \
         libnl-route-3-200 libprotobuf32t64 \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 1000 runner \
-    && useradd --uid 1000 --gid runner --create-home --shell /usr/sbin/nologin runner \
-    && mkdir -p /app /run/oj-sandbox-runner/jobs /run/oj-sandbox-runner/cgroup \
+    && mkdir -p /app /home/runner /run/oj-sandbox-runner/jobs /run/oj-sandbox-runner/cgroup \
         /etc/oj-sandbox-runner /opt/oj-sandbox-runner/bin \
         /srv/oj-sandbox-runner/rootfs \
-    && chown -R runner:runner /app /run/oj-sandbox-runner
+    && chown -R 1000:1000 /app /home/runner /run/oj-sandbox-runner
 COPY --from=nsjail-build /src/nsjail/nsjail /opt/oj-sandbox-runner/bin/nsjail
 COPY --from=sandbox-rootfs / /srv/oj-sandbox-runner/rootfs
 COPY security/nsjail-seccomp.policy /etc/oj-sandbox-runner/nsjail-seccomp.policy
@@ -89,7 +87,7 @@ EXPOSE 8080
 
 # ---------- Dockerized Runner service ----------
 FROM linux-runtime-base AS linux-runtime
-COPY --from=build --chown=runner:runner /app/target/oj-sandbox-runner.jar /app/app.jar
+COPY --from=build --chown=1000:1000 /app/target/oj-sandbox-runner.jar /app/app.jar
 WORKDIR /app
 USER 1000:1000
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
@@ -100,9 +98,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends maven \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --chown=runner:runner pom.xml ./
-COPY --chown=runner:runner src ./src
-COPY --from=fixtures --chown=runner:runner . /contracts/runner
+COPY --chown=1000:1000 pom.xml ./
+COPY --chown=1000:1000 src ./src
+COPY --from=fixtures --chown=1000:1000 . /contracts/runner
 ENV RUNNER_CONTRACT_FIXTURE_DIR=/contracts/runner
 USER 1000:1000
 CMD ["mvn", "-B", "-Plinux-security", "verify"]
