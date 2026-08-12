@@ -41,8 +41,6 @@ services:
     build:
       context: ./runner
       target: runtime
-      additional_contexts:
-        fixtures: ./test/fixtures/runner
     restart: "no"
     read_only: true
     tmpfs:
@@ -72,6 +70,18 @@ services:
       retries: 30
     networks:
       - runner-control
+
+  runner-docker-security-test:
+    build:
+      context: ./runner
+      target: test
+    restart: "no"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./test/fixtures/runner:/contracts/runner:ro
+    environment:
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
+    command: ["mvn", "-B", "-Pdocker-security", "verify"]
 
 networks:
   runner-control:

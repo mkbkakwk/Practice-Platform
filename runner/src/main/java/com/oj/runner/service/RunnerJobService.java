@@ -22,6 +22,7 @@ import java.util.Set;
 public class RunnerJobService {
 
     private static final Logger log = LoggerFactory.getLogger(RunnerJobService.class);
+    private static final int MAX_EXECUTOR_MESSAGE_BYTES = 1_024;
 
     private final RunnerRequestValidator requestValidator;
     private final JobConcurrencyLimiter concurrencyLimiter;
@@ -75,11 +76,11 @@ public class RunnerJobService {
         }
         RunnerCompileResult compile = response.compile();
         long outputLimit = job.request().limits().outputLimitBytes();
-        if (utf8Length(compile.stderr()) > outputLimit
-                || utf8Length(compile.message()) > outputLimit
-                || utf8Length(response.message()) > outputLimit) {
+        if (utf8Length(compile.stderr()) > outputLimit) {
             throw new IllegalStateException("Sandbox executor exceeded the output limit");
         }
+        validateMessageSize(compile.message());
+        validateMessageSize(response.message());
         if (compile.status() == RunnerStatus.OK && compile.exitCode() != 0) {
             throw new IllegalStateException("Sandbox executor returned an invalid compile result");
         }
@@ -108,12 +109,11 @@ public class RunnerJobService {
                     || (result.status() == RunnerStatus.OK && result.exitCode() != 0)) {
                 throw new IllegalStateException("Sandbox executor returned an invalid case result");
             }
-            long outputBytes = utf8Length(result.stdout())
-                    + utf8Length(result.stderr())
-                    + utf8Length(result.message());
+            long outputBytes = utf8Length(result.stdout()) + utf8Length(result.stderr());
             if (outputBytes > job.request().limits().outputLimitBytes()) {
                 throw new IllegalStateException("Sandbox executor exceeded the output limit");
             }
+            validateMessageSize(result.message());
             if (index < results.size() - 1 && result.status() != RunnerStatus.OK) {
                 throw new IllegalStateException("Sandbox executor returned results after a failed case");
             }
@@ -132,5 +132,11 @@ public class RunnerJobService {
 
     private long utf8Length(String value) {
         return value.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private void validateMessageSize(String message) {
+        if (utf8Length(message) > MAX_EXECUTOR_MESSAGE_BYTES) {
+            throw new IllegalStateException("Sandbox executor message exceeded the configured limit");
+        }
     }
 }

@@ -9,6 +9,7 @@ import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.StreamType;
+import com.github.dockerjava.api.model.Statistics;
 import com.github.dockerjava.api.model.Volume;
 import com.oj.runner.api.RunnerCaseResult;
 import com.oj.runner.api.RunnerCompileResult;
@@ -38,6 +39,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Trusted Docker control-plane executor. Student code only runs in disposable,
@@ -294,7 +296,7 @@ public class DockerSandboxExecutor implements SandboxExecutor {
                 CompletableFuture.runAsync(() -> killContainerBestEffort(containerId));
             }
         });
-        boolean completed;
+        boolean completed = false;
         try (callback) {
             var start = docker.execStartCmd(created.getId()).withDetach(false).withTty(false);
             if (stdin.length > 0) {
@@ -302,6 +304,14 @@ public class DockerSandboxExecutor implements SandboxExecutor {
             }
             start.exec(callback);
             completed = callback.awaitCompletion(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (RuntimeException exception) {
+            if (!outputExceeded.get()) {
+                killContainerBestEffort(containerId);
+                throw exception;
+            }
+            // Killing the container is the output-limit enforcement mechanism.
+            // Docker closes the exec stream as a consequence, which some transports
+            // report as an exception rather than a normal callback completion.
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             killContainerBestEffort(containerId);
@@ -319,10 +329,12 @@ public class DockerSandboxExecutor implements SandboxExecutor {
             Long value = docker.inspectExecCmd(created.getId()).exec().getExitCodeLong();
             exitCode = value == null ? -1 : Math.toIntExact(value);
         }
-        boolean oomKilled = inspectOomKilled(containerId);
+        DockerMemoryEvidence memoryEvidence = completed && !outputExceeded.get() && exitCode != 0
+                ? inspectMemoryEvidence(containerId)
+                : DockerMemoryEvidence.stateOnly(false);
         return new ExecutionOutcome(
                 exitCode, callback.stdout(), callback.stderr(), elapsedMs(started),
-                timedOut, outputExceeded.get(), oomKilled);
+                timedOut, outputExceeded.get(), memoryEvidence.exceededFor(exitCode));
     }
 
     private RunnerStatus compileStatus(ExecutionOutcome outcome) {
@@ -339,13 +351,47 @@ public class DockerSandboxExecutor implements SandboxExecutor {
         return outcome.exitCode() == 0 ? RunnerStatus.OK : RunnerStatus.RUNTIME_ERROR;
     }
 
-    private boolean inspectOomKilled(String containerId) {
+    private DockerMemoryEvidence inspectMemoryEvidence(String containerId) {
+        boolean oomKilled = false;
         try {
-            Boolean oomKilled = docker.inspectContainerCmd(containerId).exec().getState().getOOMKilled();
-            return Boolean.TRUE.equals(oomKilled);
-        } catch (RuntimeException exception) {
-            return false;
+            oomKilled = Boolean.TRUE.equals(
+                    docker.inspectContainerCmd(containerId).exec().getState().getOOMKilled());
+        } catch (RuntimeException ignored) {
+            // Docker exec OOMs do not consistently mark the persistent container process.
         }
+
+        AtomicReference<Statistics> observed = new AtomicReference<>();
+        try (ResultCallback.Adapter<Statistics> callback = new ResultCallback.Adapter<>() {
+            @Override
+            public void onNext(Statistics statistics) {
+                observed.set(statistics);
+            }
+        }) {
+            docker.statsCmd(containerId).withNoStream(true).exec(callback);
+            if (!callback.awaitCompletion(properties.getControlTimeoutMs(), TimeUnit.MILLISECONDS)) {
+                return DockerMemoryEvidence.stateOnly(oomKilled);
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return DockerMemoryEvidence.stateOnly(oomKilled);
+        } catch (IOException | RuntimeException exception) {
+            return DockerMemoryEvidence.stateOnly(oomKilled);
+        }
+
+        Statistics statistics = observed.get();
+        if (statistics == null || statistics.getMemoryStats() == null) {
+            return DockerMemoryEvidence.stateOnly(oomKilled);
+        }
+        var memory = statistics.getMemoryStats();
+        return new DockerMemoryEvidence(
+                oomKilled,
+                nonNegative(memory.getLimit()),
+                nonNegative(memory.getMaxUsage()),
+                nonNegative(memory.getFailcnt()));
+    }
+
+    private long nonNegative(Long value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private void cleanupStaleSandboxes() {
