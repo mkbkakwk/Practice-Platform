@@ -38,9 +38,11 @@ RUN apt-get update \
         bison ca-certificates flex g++ gcc git make pkg-config \
         libnl-route-3-dev libprotobuf-dev protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone https://github.com/google/nsjail.git /src/nsjail \
+RUN git init /src/nsjail \
     && cd /src/nsjail \
-    && git checkout --detach "$NSJAIL_REVISION" \
+    && git remote add origin https://github.com/google/nsjail.git \
+    && git fetch --depth=1 origin refs/pull/287/head \
+    && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "$NSJAIL_REVISION" \
     && git submodule update --init --recursive \
     && make -j2
