@@ -126,9 +126,10 @@ public class LinuxSandboxPreflight {
             workspaceManager.writeSource(
                     workspace, profile.sourceFilename(), NamespaceIsolationVerifier.pythonProbeSource());
             NsJailExecutionResult result;
+            NsJailExecutionResult[] completedExecution = new NsJailExecutionResult[1];
             try (ExecutionCgroupLease cgroup = cgroupManager.allocate()) {
                 Path config = configWriter.write(workspace, profile, "self-test", 2000, 128, cgroup.path());
-                result = launcher.launch(new NsJailInvocation(
+                completedExecution[0] = launcher.launch(new NsJailInvocation(
                         SandboxPhase.RUN,
                         config,
                         configWriter.logPath(workspace, "self-test"),
@@ -139,7 +140,13 @@ public class LinuxSandboxPreflight {
                         2000,
                         128,
                         4096));
+            } catch (IOException | RuntimeException exception) {
+                if (completedExecution[0] != null) {
+                    logSelfTestResult("completed before cgroup cleanup failed", completedExecution[0]);
+                }
+                throw exception;
             }
+            result = completedExecution[0];
             boolean executionSucceeded = result.termination() == SandboxTermination.COMPLETED
                     && result.exitCode() == 0;
             if (!executionSucceeded) {
@@ -175,6 +182,13 @@ public class LinuxSandboxPreflight {
     private void logSelfTestException(String stage, Exception exception) {
         log.warn("Linux sandbox self-test {} failed exceptionType={} message={}",
                 stage, exception.getClass().getSimpleName(), safeLogValue(exception.getMessage()));
+    }
+
+    private void logSelfTestResult(String stage, NsJailExecutionResult result) {
+        log.warn("Linux sandbox self-test {} termination={} exitCode={} timeMs={} memoryKb={} "
+                        + "stderr={} diagnostic={}",
+                stage, result.termination(), result.exitCode(), result.timeMs(), result.memoryKb(),
+                safeLogValue(result.stderr()), safeLogValue(result.diagnostic()));
     }
 
     private String safeLogValue(String value) {

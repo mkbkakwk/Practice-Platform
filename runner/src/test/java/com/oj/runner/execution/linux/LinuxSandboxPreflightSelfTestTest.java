@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(OutputCaptureExtension.class)
@@ -150,6 +151,22 @@ class LinuxSandboxPreflightSelfTestTest {
                 .contains("self-test execution failed")
                 .contains("exceptionType=IllegalStateException")
                 .contains("message=launcher runtime failure");
+    }
+
+    @Test
+    void cgroupCleanupFailureRetainsBoundedExecutionDiagnostic(CapturedOutput output) throws Exception {
+        when(launcher.launch(any())).thenReturn(result(
+                SandboxTermination.SANDBOX_ERROR, 255, 19, 0,
+                "nsjail stderr", "cgroup migration denied"));
+        doThrow(new IOException("execution cgroup still contains descendants"))
+                .when(cgroup).close();
+
+        assertThat(preflight.executeSelfTest()).isFalse();
+        assertThat(output.getAll())
+                .contains("completed before cgroup cleanup failed")
+                .contains("termination=SANDBOX_ERROR", "exitCode=255")
+                .contains("stderr=nsjail stderr", "diagnostic=cgroup migration denied")
+                .contains("execution cgroup still contains descendants");
     }
 
     private NsJailExecutionResult result(
