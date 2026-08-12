@@ -36,10 +36,16 @@ bash -n scripts/runner-linux-acceptance-lib.sh \
   || fail "invalid Bash syntax in scripts/runner-linux-acceptance-lib.sh"
 bash -n scripts/test-runner-linux-acceptance.sh \
   || fail "invalid Bash syntax in scripts/test-runner-linux-acceptance.sh"
+bash -n scripts/test-runner-docker-linux.sh \
+  || fail "invalid Bash syntax in scripts/test-runner-docker-linux.sh"
+bash -n scripts/test-runner-docker-acceptance.sh \
+  || fail "invalid Bash syntax in scripts/test-runner-docker-acceptance.sh"
 bash scripts/test-runner-linux-preflight.sh \
   || fail "Runner Linux preflight compatibility checks failed"
 bash scripts/test-runner-linux-acceptance.sh \
   || fail "Runner Linux acceptance harness checks failed"
+bash scripts/test-runner-docker-acceptance.sh \
+  || fail "Runner Docker acceptance configuration checks failed"
 
 if grep -Eq '^[[:space:]]+build:' "$compose_file"; then
   fail "release Compose must not contain build directives"

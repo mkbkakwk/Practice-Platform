@@ -11,6 +11,7 @@ import org.springframework.validation.annotation.Validated;
 public class LinuxSandboxProperties {
 
     @NotBlank private String mode = "unavailable";
+    private boolean containerized = false;
     @NotBlank private String nsjailPath = "/usr/bin/nsjail";
     @NotBlank private String rootfs = "/srv/oj-sandbox-runner/rootfs";
     @NotBlank private String workspaceRoot = "/run/oj-sandbox-runner/jobs";
@@ -30,6 +31,8 @@ public class LinuxSandboxProperties {
 
     public String getMode() { return mode; }
     public void setMode(String mode) { this.mode = mode; }
+    public boolean isContainerized() { return containerized; }
+    public void setContainerized(boolean containerized) { this.containerized = containerized; }
     public String getNsjailPath() { return nsjailPath; }
     public void setNsjailPath(String nsjailPath) { this.nsjailPath = nsjailPath; }
     public String getRootfs() { return rootfs; }

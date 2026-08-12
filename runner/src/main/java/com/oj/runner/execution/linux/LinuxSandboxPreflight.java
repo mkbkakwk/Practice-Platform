@@ -86,9 +86,7 @@ public class LinuxSandboxPreflight {
         if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("linux")) {
             failures.add("host-not-linux");
         }
-        if (Files.exists(Path.of("/.dockerenv"))) {
-            failures.add("container-host-unsupported");
-        }
+        inspectContainerMode(failures, Files.exists(Path.of("/.dockerenv")));
         read(Path.of("/proc/version")).map(value -> value.toLowerCase(Locale.ROOT)).ifPresent(value -> {
             if (value.contains("microsoft") || value.contains("wsl")) {
                 failures.add("wsl-docker-desktop-unsupported");
@@ -105,6 +103,14 @@ public class LinuxSandboxPreflight {
             failures.addAll(executeSelfTestFailures());
         }
         return new SandboxAvailability(failures.isEmpty(), failures);
+    }
+
+    void inspectContainerMode(List<String> failures, boolean dockerMarkerPresent) {
+        if (dockerMarkerPresent && !properties.isContainerized()) {
+            failures.add("container-host-unsupported");
+        } else if (!dockerMarkerPresent && properties.isContainerized()) {
+            failures.add("container-marker-missing");
+        }
     }
 
     boolean executeSelfTest() {

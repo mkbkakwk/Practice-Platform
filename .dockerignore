@@ -1,5 +1,6 @@
 **
 !docker-compose.release.yml
+!docker-compose.runner-acceptance.yml
 !.env.production.example
 !.gitignore
 !README.md
@@ -14,9 +15,13 @@
 !scripts/release-preflight.sh
 !scripts/release-status.sh
 !scripts/test-release-config.sh
+!scripts/test-runner-docker-linux.sh
+!scripts/test-runner-docker-acceptance.sh
 !runner/
 !runner/security/
 !runner/security/nsjail-seccomp.policy
+!runner/security/docker-runner-seccomp.json
+!runner/Dockerfile
 !frontend/
 !frontend/src/
 !frontend/src/components/

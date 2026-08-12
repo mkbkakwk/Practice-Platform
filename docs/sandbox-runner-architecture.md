@@ -375,10 +375,51 @@ student UID/GID and capabilities, environment/secret reads, isolated `/proc`, DN
 and localhost, mount/ptrace/raw socket attempts, read-only root writes, bounded
 tmpfs, Runner health after attacks, and residual process/workspace/cgroup checks.
 
-The current Windows Docker Desktop workspace is useful only for unit, protocol,
-service, and configuration tests. It is explicitly rejected by preflight. Until
-the Linux-only suite passes on the dedicated host, Stage 3B-2 is **not accepted**
-and the Runner must not be connected to Staging or Production.
+Windows Docker Desktop remains useful only for unit, protocol, service, and
+configuration tests and is explicitly rejected by preflight. A Dockerized Linux
+Runner is accepted only when `RUNNER_SANDBOX_CONTAINERIZED=true` is set deliberately
+and all of the ordinary Linux preflight checks and real nsjail self-test still pass;
+an ordinary container remains rejected by default.
+
+### Dockerized Linux acceptance
+
+`docker-compose.runner-acceptance.yml` packages the existing Stage 3B-2 executor,
+the pinned nsjail PR #287 revision, five language runtimes, runtime rootfs, and the
+project Kafel policy. It does not replace or weaken the nsjail security boundary.
+The image root is read-only, the Runner has no Linux capabilities, and the Compose
+path forbids privileged mode, host PID/network namespaces, Docker socket access,
+and `seccomp=unconfined`.
+
+The host harness creates a short-lived user-systemd unit with only
+`cpu memory pids` delegated. Its exact cgroup root is bind-mounted at
+`/run/oj-sandbox-runner/cgroup`; the container cannot manage the host's global
+cgroup tree or another service. Java still creates a fresh `RUNNER.<id>` parent
+for every compile or run invocation and performs the same post-mortem accounting
+and fail-closed cleanup used by bare-host acceptance. The container's outer
+project-owned seccomp profile permits the namespace and mount operations required
+by nsjail while denying unrelated high-risk host operations. Student processes
+remain subject to the stricter project Kafel policy inside nsjail.
+
+Ubuntu retains its global AppArmor user-namespace restriction. The Compose file
+selects the provisioned `oj-runner-preflight` profile by default so nested user
+namespaces are authorized without disabling AppArmor globally; provisioning and
+auditing that host profile remains a deployment responsibility.
+
+Run the real Dockerized acceptance only on the dedicated Linux VM:
+
+```bash
+./scripts/test-runner-docker-linux.sh
+```
+
+The script builds and starts only the disposable Runner acceptance project,
+requires `/api/health` to report `sandboxAvailable=true`, verifies the live
+container security settings, and runs the unchanged 15-test
+`LinuxSandboxSecurityIT` suite inside Docker. It prints
+`Linux isolation tests: PASSED` only after an exact 15/15 result and successful
+container, network, workspace, process, and delegated-cgroup cleanup.
+
+Until that Dockerized Linux suite passes, the Docker deployment path is **not
+accepted** and the Runner must not be connected to Staging or Production.
 
 Stage 4 still owns RabbitMQ acknowledgement reliability, retries, Outbox, and DLQ;
 this refactor intentionally does not change those semantics.

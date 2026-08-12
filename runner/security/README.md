@@ -2,7 +2,10 @@
 
 These files target a dedicated Linux host or VM. Docker Desktop and an ordinary
 container are deliberately rejected by the preflight and are not security
-acceptance environments.
+acceptance environments. The repository's explicit Dockerized Linux acceptance
+mode is a separate fail-closed path: it must set
+`RUNNER_SANDBOX_CONTAINERIZED=true`, receive only its own user-systemd delegated
+cgroup subtree, and pass the same real nsjail self-test and 15 adversarial tests.
 
 The runtime root at `/srv/oj-sandbox-runner/rootfs` must be prepared outside the
 application, mounted read-only, and contain only the runtime files required by the
@@ -96,3 +99,9 @@ that a unit still exists.
 The project seccomp policy is a small explicit deny layer over namespace, cgroup,
 filesystem, no-capability, and no-network isolation. Changes to it require the
 Linux adversarial suite; do not replace it with an unreviewed allowlist.
+
+`docker-runner-seccomp.json` is an outer container policy for the trusted Runner
+and nsjail launcher, not the student policy. It permits the namespace/mount calls
+that nsjail requires while denying unrelated high-risk host operations. The
+student process remains governed by `nsjail-seccomp.policy`. Never replace either
+layer with `seccomp=unconfined`.

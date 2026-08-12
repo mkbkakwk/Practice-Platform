@@ -1,0 +1,67 @@
+name: practice-platform-runner-acceptance
+
+x-runner-security: &runner-security
+  user: "${RUNNER_DOCKER_UID:?RUNNER_DOCKER_UID is required}:${RUNNER_DOCKER_GID:?RUNNER_DOCKER_GID is required}"
+  read_only: true
+  privileged: false
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+    - apparmor=${RUNNER_DOCKER_APPARMOR_PROFILE:-oj-runner-preflight}
+    - seccomp=./runner/security/docker-runner-seccomp.json
+  pids_limit: 512
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${RUNNER_DOCKER_UID},gid=${RUNNER_DOCKER_GID},mode=1777
+    - /run/oj-sandbox-runner/jobs:rw,nosuid,nodev,exec,size=256m,uid=${RUNNER_DOCKER_UID},gid=${RUNNER_DOCKER_GID},mode=0700
+  volumes:
+    - type: bind
+      source: ${RUNNER_DOCKER_CGROUP_ROOT:?RUNNER_DOCKER_CGROUP_ROOT is required}
+      target: /run/oj-sandbox-runner/cgroup
+  environment: &runner-environment
+    RUNNER_TOKEN: docker-linux-acceptance-token
+    RUNNER_SANDBOX_MODE: linux
+    RUNNER_SANDBOX_CONTAINERIZED: "true"
+    RUNNER_NSJAIL_PATH: /opt/oj-sandbox-runner/bin/nsjail
+    RUNNER_SANDBOX_ROOTFS: /srv/oj-sandbox-runner/rootfs
+    RUNNER_WORKSPACE_ROOT: /run/oj-sandbox-runner/jobs
+    RUNNER_SECCOMP_POLICY: /etc/oj-sandbox-runner/nsjail-seccomp.policy
+    RUNNER_CGROUP_V2_MOUNT: /run/oj-sandbox-runner/cgroup
+    RUNNER_STUDENT_UID: "65534"
+    RUNNER_STUDENT_GID: "65534"
+
+services:
+  runner:
+    <<: *runner-security
+    build:
+      context: ./runner
+      target: linux-runtime
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    ports:
+      - "127.0.0.1:${RUNNER_DOCKER_PORT:-19090}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+
+  runner-security-test:
+    <<: *runner-security
+    build:
+      context: ./runner
+      target: linux-security-test
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${RUNNER_DOCKER_UID},gid=${RUNNER_DOCKER_GID},mode=1777
+      - /run/oj-sandbox-runner/jobs:rw,nosuid,nodev,exec,size=256m,uid=${RUNNER_DOCKER_UID},gid=${RUNNER_DOCKER_GID},mode=0700
+      - /app/target:rw,nosuid,nodev,exec,size=256m,uid=${RUNNER_DOCKER_UID},gid=${RUNNER_DOCKER_GID},mode=0700
+      - /home/runner/.m2:rw,nosuid,nodev,noexec,size=512m,uid=${RUNNER_DOCKER_UID},gid=${RUNNER_DOCKER_GID},mode=0700
+    environment:
+      <<: *runner-environment
+      HOME: /home/runner
+      MAVEN_OPTS: -Dmaven.repo.local=/home/runner/.m2
