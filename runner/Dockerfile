@@ -18,7 +18,7 @@ RUN mvn -B package -DskipTests
 FROM eclipse-temurin:21-jre-jammy AS runtime
 WORKDIR /app
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl grep \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 runner \
     && useradd --uid 10001 --gid runner --no-create-home --shell /usr/sbin/nologin runner

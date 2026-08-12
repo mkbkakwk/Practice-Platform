@@ -74,6 +74,86 @@ services:
     networks:
       - oj-net
 
+  # Build-only services. They create the fixed language images used by the
+  # Runner, but never become long-running Compose containers.
+  sandbox-python-image:
+    image: practice-sandbox-python:local
+    build:
+      context: .
+      dockerfile: sandbox-images/python/Dockerfile
+    profiles: [sandbox-images]
+
+  sandbox-javascript-image:
+    image: practice-sandbox-javascript:local
+    build:
+      context: .
+      dockerfile: sandbox-images/javascript/Dockerfile
+    profiles: [sandbox-images]
+
+  sandbox-c-image:
+    image: practice-sandbox-c:local
+    build:
+      context: .
+      dockerfile: sandbox-images/native/Dockerfile
+    profiles: [sandbox-images]
+
+  sandbox-cpp-image:
+    image: practice-sandbox-cpp17:local
+    build:
+      context: .
+      dockerfile: sandbox-images/native/Dockerfile
+    profiles: [sandbox-images]
+
+  sandbox-java-image:
+    image: practice-sandbox-java:local
+    build:
+      context: .
+      dockerfile: sandbox-images/java/Dockerfile
+    profiles: [sandbox-images]
+
+  # Trusted control plane. This is the only application service allowed to
+  # reach the Docker Engine. Student code runs in disposable containers with
+  # a separate, locked-down HostConfig; it never receives this socket.
+  runner:
+    build:
+      context: ./runner
+      target: runtime
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    group_add:
+      - "${DOCKER_SOCKET_GID:?DOCKER_SOCKET_GID is required}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=33554432
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?RUNNER_TOKEN is required}
+      RUNNER_SANDBOX_MODE: docker
+      RUNNER_INSTANCE_ID: ${RUNNER_INSTANCE_ID:-oj-runner}
+      RUNNER_MAX_CONCURRENT_JOBS: ${RUNNER_MAX_CONCURRENCY:-4}
+      RUNNER_DOCKER_PYTHON_IMAGE: practice-sandbox-python:local
+      RUNNER_DOCKER_JAVASCRIPT_IMAGE: practice-sandbox-javascript:local
+      RUNNER_DOCKER_C_IMAGE: practice-sandbox-c:local
+      RUNNER_DOCKER_CPP_IMAGE: practice-sandbox-cpp17:local
+      RUNNER_DOCKER_JAVA_IMAGE: practice-sandbox-java:local
+      RUNNER_DOCKER_PIDS_LIMIT: ${RUNNER_DOCKER_PIDS_LIMIT:-64}
+      RUNNER_DOCKER_NANO_CPUS: ${RUNNER_DOCKER_NANO_CPUS:-1000000000}
+      RUNNER_DOCKER_WORKSPACE_BYTES: ${RUNNER_DOCKER_WORKSPACE_BYTES:-67108864}
+      RUNNER_DOCKER_TMP_BYTES: ${RUNNER_DOCKER_TMP_BYTES:-33554432}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/api/health | grep -Fq '\"sandboxAvailable\":true'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks:
+      - oj-net
+
   worker:
     build:
       context: ./worker
@@ -85,6 +165,15 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      runner:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=33554432
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-oj}
       POSTGRES_USER: ${POSTGRES_USER:-oj}
@@ -93,14 +182,14 @@ services:
       RABBITMQ_PORT: 5672
       RABBITMQ_USER: ${RABBITMQ_USER:-oj}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-oj}
-      JUDGE_EXECUTION_MODE: ${JUDGE_EXECUTION_MODE:-legacy-local}
+      JUDGE_EXECUTION_MODE: remote
       JUDGE_WORKSPACE: /tmp/oj-judge
       JUDGE_COMPILE_TIMEOUT_MS: ${JUDGE_COMPILE_TIMEOUT_MS:-10000}
       JUDGE_OUTPUT_LIMIT_BYTES: ${JUDGE_OUTPUT_LIMIT_BYTES:-16777216}
       JUDGE_MAX_SOURCE_BYTES: ${JUDGE_MAX_SOURCE_BYTES:-1048576}
       JUDGE_MAX_STDIN_BYTES: ${JUDGE_MAX_STDIN_BYTES:-1048576}
-      RUNNER_BASE_URL: ${RUNNER_BASE_URL:-}
-      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+      RUNNER_BASE_URL: http://runner:8080
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?RUNNER_TOKEN is required}
       RUNNER_CONNECT_TIMEOUT_MS: ${RUNNER_CONNECT_TIMEOUT_MS:-1000}
       RUNNER_READ_TIMEOUT_MS: ${RUNNER_READ_TIMEOUT_MS:-15000}
       RUNNER_MAX_REQUEST_BYTES: ${RUNNER_MAX_REQUEST_BYTES:-4194304}
@@ -109,7 +198,7 @@ services:
       WORKER_MAX_CONCURRENCY: ${WORKER_MAX_CONCURRENCY:-2}
     # Horizontal scale: `docker compose up -d --scale worker=3`
     deploy:
-      replicas: ${WORKER_REPLICAS:-1}
+      replicas: ${WORKER_REPLICAS:-3}
     networks:
       - oj-net
 
