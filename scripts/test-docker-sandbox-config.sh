@@ -65,4 +65,11 @@ if grep -Eq 'python3|node-runtime|\bgcc\b|\bg\+\+\b|javac' <<<"$runtime_stage"; 
   fail "Worker runtime must not contain student language toolchains"
 fi
 
+ordinary_tests_line="$(grep -n 'Running frontend lint' scripts/test-docker.sh | cut -d: -f1)"
+security_tests_line="$(grep -n 'Running real Docker sandbox security acceptance' scripts/test-docker.sh | cut -d: -f1)"
+if [[ -z "$ordinary_tests_line" || -z "$security_tests_line" \
+    || "$security_tests_line" -le "$ordinary_tests_line" ]]; then
+  fail "Docker security acceptance must run after ordinary module tests"
+fi
+
 echo "Docker sandbox formal configuration checks: PASSED"

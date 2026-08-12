@@ -58,20 +58,6 @@ if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -
   "${compose[@]}" up -d --wait test-db test-rabbitmq runner-contract || startup_rc=$?
 fi
 
-if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -eq 0 \
-    && $startup_rc -eq 0 && $backend_rc -eq 0 && $worker_rc -eq 0 \
-    && $runner_rc -eq 0 && $worker_runner_contract_rc -eq 0 && $frontend_rc -eq 0 ]]; then
-  echo "==> Running real Docker sandbox security acceptance"
-  docker_sandbox_security_rc=0
-  bash ./scripts/test-docker-sandbox.sh || docker_sandbox_security_rc=$?
-
-  if [[ $docker_sandbox_security_rc -eq 0 ]]; then
-    echo "==> Running three-Worker competing-consumer acceptance"
-    worker_scale_rc=0
-    bash ./scripts/test-worker-scale.sh || worker_scale_rc=$?
-  fi
-fi
-
 if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 ]]; then
   echo "==> Running Runner service tests"
   runner_rc=0
@@ -92,6 +78,20 @@ if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 ]]; then
   echo "==> Running frontend lint, authentication tests, and build"
   frontend_rc=0
   "${compose[@]}" run --rm frontend-test || frontend_rc=$?
+fi
+
+if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -eq 0 \
+    && $startup_rc -eq 0 && $backend_rc -eq 0 && $worker_rc -eq 0 \
+    && $runner_rc -eq 0 && $worker_runner_contract_rc -eq 0 && $frontend_rc -eq 0 ]]; then
+  echo "==> Running real Docker sandbox security acceptance"
+  docker_sandbox_security_rc=0
+  bash ./scripts/test-docker-sandbox.sh || docker_sandbox_security_rc=$?
+
+  if [[ $docker_sandbox_security_rc -eq 0 ]]; then
+    echo "==> Running three-Worker competing-consumer acceptance"
+    worker_scale_rc=0
+    bash ./scripts/test-worker-scale.sh || worker_scale_rc=$?
+  fi
 fi
 
 echo
