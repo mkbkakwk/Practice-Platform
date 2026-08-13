@@ -9,6 +9,7 @@ import com.oj.dto.SubmissionView;
 import com.oj.entity.ProblemEntity;
 import com.oj.entity.SubmissionEntity;
 import com.oj.entity.UserEntity;
+import com.oj.contest.ContentVisibility;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
 import com.oj.reliability.JudgeMessage;
@@ -59,15 +60,32 @@ public class SubmissionService {
         }
 
         ProblemEntity problem = problemService.getEntityById(request.getProblemId());
-        if (!Boolean.TRUE.equals(problem.getVisible())) {
+        if (!Boolean.TRUE.equals(problem.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(problem.getContentVisibility())) {
             throw ApiException.conflict("该题目已停用，无法继续提交");
         }
+
+        int submissionId = persistSubmission(userId, problem, request.getLanguage(), request.getCode(), null);
+        lastSubmit.put(userId, LocalDateTime.now());
+        return submissionId;
+    }
+
+    @Transactional
+    public int submitContest(ProblemEntity problem, String language, String code, long contestProblemId) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
+        return persistSubmission(userId, problem, language, code, contestProblemId);
+    }
+
+    private int persistSubmission(int userId, ProblemEntity problem, String language,
+                                  String code, Long contestProblemId) {
 
         SubmissionEntity submission = new SubmissionEntity();
         submission.setUserId(userId);
         submission.setProblemId(problem.getId());
-        submission.setLanguage(request.getLanguage());
-        submission.setCode(request.getCode());
+        submission.setContestProblemId(contestProblemId);
+        submission.setLanguage(language);
+        submission.setCode(code);
         submission.setVerdict("PENDING");
         submission.setTimeMs(0);
         submission.setMemoryKb(0);
@@ -85,7 +103,6 @@ public class SubmissionService {
             throw new IllegalStateException("Unable to persist judge event", exception);
         }
 
-        lastSubmit.put(userId, LocalDateTime.now());
         return submission.getId();
     }
 
@@ -134,6 +151,7 @@ public class SubmissionService {
         view.setId(submission.getId());
         view.setUserId(submission.getUserId());
         view.setProblemId(submission.getProblemId());
+        view.setContestProblemId(submission.getContestProblemId());
         view.setLanguage(submission.getLanguage());
         if (includeCode) view.setCode(submission.getCode());
         view.setVerdict(submission.getVerdict());

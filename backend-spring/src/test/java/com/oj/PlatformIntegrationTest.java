@@ -47,6 +47,7 @@ class PlatformIntegrationTest {
     void resetDatabase() {
         jdbcTemplate.execute("""
                 TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                    "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
         jdbcTemplate.queryForObject("""
@@ -59,6 +60,7 @@ class PlatformIntegrationTest {
     void cleanDatabase() {
         jdbcTemplate.execute("""
                 TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                    "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
     }

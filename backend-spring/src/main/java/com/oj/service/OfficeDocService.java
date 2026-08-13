@@ -4,6 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
+import com.oj.contest.ContestContentAccessPolicy;
+import com.oj.contest.ContestProblemType;
+import com.oj.contest.ContentVisibility;
+import com.oj.mapper.ContestProblemMapper;
 import com.oj.dto.OfficeExerciseCreateRequest;
 import com.oj.dto.ReviewRequest;
 import com.oj.entity.OfficeDocSubmissionEntity;
@@ -47,6 +51,8 @@ public class OfficeDocService {
     private final OfficeDocumentComparator comparator;
     private final OfficeJudgeConcurrencyGate concurrencyGate;
     private final OfficeResultSerializer resultSerializer;
+    private final ContestProblemMapper contestProblemMapper;
+    private final ContestContentAccessPolicy contestAccess;
 
     public OfficeDocService(OfficeExerciseMapper exerciseMapper,
                             OfficeDocSubmissionMapper submissionMapper,
@@ -56,7 +62,9 @@ public class OfficeDocService {
                             OfficeDocumentParser parser,
                             OfficeDocumentComparator comparator,
                             OfficeJudgeConcurrencyGate concurrencyGate,
-                            OfficeResultSerializer resultSerializer) {
+                            OfficeResultSerializer resultSerializer,
+                            ContestProblemMapper contestProblemMapper,
+                            ContestContentAccessPolicy contestAccess) {
         this.exerciseMapper = exerciseMapper;
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
@@ -66,11 +74,13 @@ public class OfficeDocService {
         this.comparator = comparator;
         this.concurrencyGate = concurrencyGate;
         this.resultSerializer = resultSerializer;
+        this.contestProblemMapper = contestProblemMapper;
+        this.contestAccess = contestAccess;
     }
 
     public Map<String, Object> listExercises(int page, int pageSize) {
         QueryWrapper<OfficeExerciseEntity> query = new QueryWrapper<>();
-        query.eq("visible", true).orderByDesc("id");
+        query.eq("visible", true).eq("content_visibility", ContentVisibility.PUBLIC.name()).orderByDesc("id");
         return listResponse(page, pageSize, query);
     }
 
@@ -84,7 +94,12 @@ public class OfficeDocService {
 
     public OfficeExerciseEntity getExercise(int id) {
         OfficeExerciseEntity exercise = findExercise(id);
-        if (!Boolean.TRUE.equals(exercise.getVisible()) && !CurrentUser.canManage(exercise.getCreatedBy())) {
+        boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
+        boolean contestAllowed = ContentVisibility.CONTEST_ONLY.name().equals(exercise.getContentVisibility())
+                && contestAccess.canReadContestOnly(ContestProblemType.OFFICE, exercise.getId());
+        if ((!Boolean.TRUE.equals(exercise.getVisible())
+                || ContentVisibility.CONTEST_ONLY.name().equals(exercise.getContentVisibility()))
+                && !manager && !contestAllowed) {
             throw ApiException.notFound("练习不存在");
         }
         exercise.setCreatorUsername(loadCreatorUsername(exercise.getCreatedBy()));
@@ -106,6 +121,10 @@ public class OfficeDocService {
     public OfficeExerciseEntity updateExercise(int id, OfficeExerciseCreateRequest request) {
         OfficeExerciseEntity exercise = findExercise(id);
         CurrentUser.requireCanManage(exercise.getCreatedBy());
+        if (contestProblemMapper.selectCount(new QueryWrapper<com.oj.entity.ContestProblemEntity>()
+                .eq("office_exercise_id", exercise.getId())) > 0) {
+            throw ApiException.conflict("该练习已被比赛引用，不能彻底删除");
+        }
         applyToEntity(exercise, request);
         exerciseMapper.updateById(exercise);
         exercise.setCreatorUsername(loadCreatorUsername(exercise.getCreatedBy()));
@@ -211,9 +230,26 @@ public class OfficeDocService {
         if (userId == null) throw ApiException.unauthorized("请先登录");
 
         OfficeExerciseEntity exercise = findExercise(exerciseId);
+        if (!Boolean.TRUE.equals(exercise.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility())) {
+            throw ApiException.conflict("该练习已停用，无法继续提交");
+        }
+        return judgeDocument(exercise, file, userId, null);
+    }
+
+    public OfficeDocSubmissionEntity submitContestDoc(OfficeExerciseEntity exercise,
+                                                       MultipartFile file, long contestProblemId) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
         if (!Boolean.TRUE.equals(exercise.getVisible())) {
             throw ApiException.conflict("该练习已停用，无法继续提交");
         }
+        return judgeDocument(exercise, file, userId, contestProblemId);
+    }
+
+    private OfficeDocSubmissionEntity judgeDocument(OfficeExerciseEntity exercise, MultipartFile file,
+                                                     int userId, Long contestProblemId) {
+        int exerciseId = exercise.getId();
         if (exercise.getTeacherDocPath() == null || exercise.getTeacherDocPath().isBlank()) {
             throw ApiException.badRequest("该练习尚未上传老师参考文档，暂无法提交");
         }
@@ -224,6 +260,7 @@ public class OfficeDocService {
         OfficeDocSubmissionEntity submission = new OfficeDocSubmissionEntity();
         submission.setUserId(userId);
         submission.setExerciseId(exerciseId);
+        submission.setContestProblemId(contestProblemId);
         submission.setStudentDocName(displayName);
         submission.setStatus("PENDING");
         submission.setJudgeVersion(OfficeDocumentComparator.JUDGE_VERSION);
@@ -329,6 +366,7 @@ public class OfficeDocService {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", submission.getId());
             item.put("exerciseId", submission.getExerciseId());
+            item.put("contestProblemId", submission.getContestProblemId());
             item.put("userId", submission.getUserId());
             item.put("studentDocName", submission.getStudentDocName());
             item.put("status", submission.getStatus());
@@ -373,6 +411,7 @@ public class OfficeDocService {
             item.put("title", exercise.getTitle());
             item.put("difficulty", exercise.getDifficulty());
             item.put("visible", exercise.getVisible());
+            item.put("contentVisibility", exercise.getContentVisibility());
             item.put("hasTeacherDoc", exercise.getTeacherDocPath() != null && !exercise.getTeacherDocPath().isBlank());
             item.put("createdBy", exercise.getCreatedBy());
             item.put("creatorUsername", exercise.getCreatedBy() == null ? null : creatorNames.get(exercise.getCreatedBy()));
@@ -389,6 +428,7 @@ public class OfficeDocService {
                 ? "EASY" : request.getDifficulty().toUpperCase());
         exercise.setDescription(request.getDescription());
         exercise.setVisible(request.getVisible() == null || request.getVisible());
+        exercise.setContentVisibility(ContentVisibility.parse(request.getContentVisibility()).name());
     }
 
     private OfficeExerciseEntity findExercise(int id) {

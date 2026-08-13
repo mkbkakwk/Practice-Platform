@@ -33,6 +33,7 @@ class JudgeOutboxRepositoryIntegrationTest {
     void resetDatabase() {
         jdbc.execute("""
                 TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                    "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
         jdbc.update("""

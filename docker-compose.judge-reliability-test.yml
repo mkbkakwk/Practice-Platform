@@ -97,7 +97,7 @@ services:
     environment:
       RUNNER_TOKEN: reliability-runner-token
       RUNNER_SANDBOX_MODE: docker
-      RUNNER_INSTANCE_ID: reliability-runner
+      RUNNER_INSTANCE_ID: ${RUNNER_INSTANCE_ID:-reliability-runner}
       RUNNER_MAX_CONCURRENT_JOBS: 4
       RUNNER_DOCKER_PYTHON_IMAGE: practice-sandbox-python:local
       RUNNER_DOCKER_JAVASCRIPT_IMAGE: practice-sandbox-javascript:local

@@ -37,6 +37,7 @@ const EMPTY: ProblemUpsert = {
   samples: [{ input: "", output: "" }],
   testCases: [{ input: "", output: "" }],
   visible: true,
+  contentVisibility: "PUBLIC",
 };
 
 export default function ProblemForm({ mode, initial }: Props) {
@@ -62,6 +63,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         samples: initial.samples?.length ? initial.samples : [{ input: "", output: "" }],
         testCases: initial.testCases?.length ? initial.testCases : [{ input: "", output: "" }],
         visible: initial.visible ?? true,
+        contentVisibility: initial.contentVisibility ?? "PUBLIC",
       });
       setTagsStr((initial.tags ?? []).join(", "));
     }
@@ -201,6 +203,17 @@ export default function ProblemForm({ mode, initial }: Props) {
             <div className="flex items-center gap-2 md:col-span-2">
               <Switch checked={form.visible} onCheckedChange={(v) => update("visible", v)} id="visible" />
               <Label htmlFor="visible" className="cursor-pointer">对普通用户可见</Label>
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>内容可见范围</Label>
+              <select
+                value={form.contentVisibility}
+                onChange={(e) => update("contentVisibility", e.target.value as ProblemUpsert["contentVisibility"])}
+                className="h-9 w-full rounded-md border border-zinc-200 bg-transparent px-3 text-sm"
+              >
+                <option value="PUBLIC">PUBLIC（练习区公开；加入比赛后仍可能提前查看）</option>
+                <option value="CONTEST_ONLY">CONTEST_ONLY（仅参赛者在比赛开始后可查看）</option>
+              </select>
             </div>
           </CardContent>
         </Card>

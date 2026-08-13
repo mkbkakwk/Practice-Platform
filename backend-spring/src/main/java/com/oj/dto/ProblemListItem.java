@@ -11,6 +11,7 @@ public class ProblemListItem {
     private Integer timeLimit;
     private Integer memoryLimit;
     private Boolean visible;
+    private String contentVisibility;
     private Integer createdBy;
     private String creatorUsername;
     private Long submissionCount;
@@ -20,6 +21,7 @@ public class ProblemListItem {
 
     public ProblemListItem(Integer id, String slug, String title, String difficulty, String[] tags,
                            Integer timeLimit, Integer memoryLimit, Boolean visible,
+                           String contentVisibility,
                            Integer createdBy, String creatorUsername, Long submissionCount,
                            LocalDateTime createdAt) {
         this.id = id;
@@ -30,6 +32,7 @@ public class ProblemListItem {
         this.timeLimit = timeLimit;
         this.memoryLimit = memoryLimit;
         this.visible = visible;
+        this.contentVisibility = contentVisibility;
         this.createdBy = createdBy;
         this.creatorUsername = creatorUsername;
         this.submissionCount = submissionCount;
@@ -52,6 +55,8 @@ public class ProblemListItem {
     public void setMemoryLimit(Integer memoryLimit) { this.memoryLimit = memoryLimit; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
     public Integer getCreatedBy() { return createdBy; }
     public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
     public String getCreatorUsername() { return creatorUsername; }

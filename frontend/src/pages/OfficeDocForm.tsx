@@ -20,6 +20,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
   const [difficulty, setDifficulty] = useState("EASY");
   const [description, setDescription] = useState(DEFAULT_DESCRIPTION);
   const [visible, setVisible] = useState(true);
+  const [contentVisibility, setContentVisibility] = useState<"PUBLIC" | "CONTEST_ONLY">("PUBLIC");
   const [teacherDocName, setTeacherDocName] = useState<string | null>(null);
   const [teacherFile, setTeacherFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
@@ -38,6 +39,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
       setDifficulty(exercise.difficulty);
       setDescription(exercise.description);
       setVisible(exercise.visible);
+      setContentVisibility(exercise.contentVisibility ?? "PUBLIC");
       setTeacherDocName(exercise.teacherDocName);
     }).catch((exception) => active && setError(exception instanceof ApiError ? exception.message : "加载失败"))
       .finally(() => active && setLoading(false));
@@ -49,7 +51,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
     if (!title.trim() || !description.trim()) { setError("请填写标题和要求"); return; }
     setSaving(true); setSaved(false); setError(null);
     try {
-      const payload = { title: title.trim(), difficulty, description: description.trim(), visible };
+      const payload = { title: title.trim(), difficulty, description: description.trim(), visible, contentVisibility };
       if (currentId) {
         await api.updateDocExercise(currentId, payload);
       } else {
@@ -91,6 +93,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
           <div><Label className="mb-1.5 block text-xs">难度</Label><div className="flex gap-2">{DIFFS.map((item) => <Button key={item.key} type="button" size="sm" variant={difficulty === item.key ? "default" : "outline"} onClick={() => setDifficulty(item.key)}>{item.label}</Button>)}</div></div>
           <div><Label className="mb-1.5 block text-xs">排版要求（Markdown）</Label><textarea className="min-h-32 w-full rounded-md border border-zinc-200 p-3 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
           <div className="flex items-center justify-between"><div><Label className="text-sm font-semibold">启用状态</Label><p className="text-xs text-zinc-400">停用后学生不能查看或提交，历史数据保留</p></div><button type="button" onClick={() => setVisible(!visible)} className={cn("relative h-6 w-11 rounded-full", visible ? "bg-zinc-900" : "bg-zinc-300")}><span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform", visible ? "translate-x-5" : "translate-x-0.5")} /></button></div>
+          <div><Label className="mb-1.5 block text-xs">内容可见范围</Label><select aria-label="内容可见范围" value={contentVisibility} onChange={(event) => setContentVisibility(event.target.value as "PUBLIC" | "CONTEST_ONLY")} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"><option value="PUBLIC">PUBLIC（练习区公开）</option><option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option></select></div>
         </Card>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex items-center gap-3"><Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{currentId ? "保存信息" : "创建练习"}</Button>{saved && <span className="text-sm text-green-600">✓ 已保存</span>}</div>

@@ -11,6 +11,12 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.oj.contest.ContestException.class)
+    public ResponseEntity<Map<String, Object>> handleContest(com.oj.contest.ContestException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(Map.of("error", ex.getMessage(), "code", ex.getCode()));
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> handleApi(ApiException ex) {
         return ResponseEntity.status(ex.getStatus())
