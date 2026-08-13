@@ -39,6 +39,7 @@ release_config_rc=125
 formal_sandbox_config_rc=125
 docker_sandbox_security_rc=125
 worker_scale_rc=125
+judge_reliability_rc=125
 
 echo "==> Building isolated test images"
 "${compose[@]}" build || build_rc=$?
@@ -91,6 +92,12 @@ if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -
     echo "==> Running three-Worker competing-consumer acceptance"
     worker_scale_rc=0
     bash ./scripts/test-worker-scale.sh || worker_scale_rc=$?
+
+    if [[ $worker_scale_rc -eq 0 ]]; then
+      echo "==> Running judge message reliability fault injection"
+      judge_reliability_rc=0
+      bash ./scripts/test-judge-reliability.sh || judge_reliability_rc=$?
+    fi
   fi
 fi
 
@@ -107,6 +114,7 @@ printf '  release-config: %s\n' "$release_config_rc"
 printf '  formal-sandbox-config: %s\n' "$formal_sandbox_config_rc"
 printf '  docker-sandbox-security: %s\n' "$docker_sandbox_security_rc"
 printf '  worker-scale: %s\n' "$worker_scale_rc"
+printf '  judge-reliability: %s\n' "$judge_reliability_rc"
 
 for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" \
   "$runner_rc" "$worker_runner_contract_rc" "$frontend_rc" "$formal_sandbox_config_rc" \
@@ -115,5 +123,9 @@ for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_
     exit "$rc"
   fi
 done
+
+if [[ $judge_reliability_rc -ne 0 ]]; then
+  exit "$judge_reliability_rc"
+fi
 
 exit 0

@@ -13,11 +13,35 @@ fail() {
 
 service_block() {
   local service="$1"
-  awk -v service="$service" '
-    $0 == "  " service ":" {inside = 1}
-    inside && $0 ~ /^  [a-zA-Z0-9_-]+:$/ && $0 != "  " service ":" {exit}
-    inside {print}
-  ' docker-compose.yml
+  local inside=false
+  local line
+
+  while IFS= read -r line; do
+    if [[ "$line" == "  ${service}:" ]]; then
+      inside=true
+    elif [[ "$inside" == true && "$line" =~ ^\ \ [a-zA-Z0-9_-]+:$ ]]; then
+      break
+    fi
+
+    if [[ "$inside" == true ]]; then
+      printf '%s\n' "$line"
+    fi
+  done
+}
+
+runtime_stage() {
+  local inside=false
+  local line
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^FROM[[:space:]].*[[:space:]]AS[[:space:]]runtime$ ]]; then
+      inside=true
+    fi
+
+    if [[ "$inside" == true ]]; then
+      printf '%s\n' "$line"
+    fi
+  done
 }
 
 export RUNNER_TOKEN=formal-compose-config-test-token
@@ -42,15 +66,11 @@ for required in \
   grep -Fxq "$required" <<<"$images" || fail "fixed sandbox image missing: $required"
 done
 
-runner="$(service_block runner)"
-worker="$(service_block worker)"
+runner="$(service_block runner < docker-compose.yml)"
+worker="$(service_block worker < docker-compose.yml)"
 
 for compose_file in docker-compose.sandbox-test.yml docker-compose.worker-scale-test.yml; do
-  rendered_runner="$(docker compose -f "$compose_file" config | awk '
-    $0 == "  runner:" {inside = 1}
-    inside && $0 ~ /^  [a-zA-Z0-9_-]+:$/ && $0 != "  runner:" {exit}
-    inside {print}
-  ')"
+  rendered_runner="$(docker compose -f "$compose_file" config | service_block runner)"
   grep -Fq '      - "4242"' <<<"$rendered_runner" \
     || fail "non-zero Docker socket GID was not rendered for $compose_file"
 done
@@ -82,7 +102,7 @@ grep -Fq 'JUDGE_EXECUTION_MODE: remote' <<<"$worker" \
 grep -Fq 'RUNNER_BASE_URL: http://runner:8080' <<<"$worker" \
   || fail "Worker must address the internal Runner service"
 
-runtime_stage="$(awk '/^FROM .* AS runtime$/ {inside = 1} inside {print}' worker/Dockerfile)"
+runtime_stage="$(runtime_stage < worker/Dockerfile)"
 grep -Fq 'FROM eclipse-temurin:21-jre-jammy AS runtime' <<<"$runtime_stage" \
   || fail "Worker runtime must be JRE-only"
 if grep -Eq 'python3|node-runtime|\bgcc\b|\bg\+\+\b|javac' <<<"$runtime_stage"; then
