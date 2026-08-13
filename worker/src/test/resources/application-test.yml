@@ -15,6 +15,13 @@ oj:
     exchange: ${OJ_RABBITMQ_EXCHANGE:oj.test.judge}
     routing-key: ${OJ_RABBITMQ_ROUTING_KEY:oj.test.judge.submit}
     queue: ${OJ_RABBITMQ_QUEUE:oj.test.judge.queue}
+    retry-exchange: ${OJ_RABBITMQ_RETRY_EXCHANGE:oj.test.judge.retry}
+    retry-routing-key: ${OJ_RABBITMQ_RETRY_ROUTING_KEY:oj.test.judge.retry}
+    retry-queue: ${OJ_RABBITMQ_RETRY_QUEUE:oj.test.judge.retry.queue}
+    retry-delay-ms: ${JUDGE_RETRY_DELAY_MS:100}
+    dead-letter-exchange: ${OJ_RABBITMQ_DLX:oj.test.judge.dlx}
+    dead-letter-routing-key: ${OJ_RABBITMQ_DLQ_ROUTING_KEY:oj.test.judge.dead}
+    dead-letter-queue: ${OJ_RABBITMQ_DLQ:oj.test.judge.dlq}
 
 logging:
   level:
