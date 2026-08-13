@@ -2,7 +2,7 @@
 
 # 🧑‍💻 Practice Platform
 
-### 算法评测 · Office 操作练习 · 文档排版练习 · 三角色权限 · Docker 一键部署
+### 算法评测 · DOCX 判题 · 基础比赛 · 三角色权限 · Docker 一键部署
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Java](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
@@ -21,11 +21,12 @@
 
 ## 📖 项目简介
 
-Practice Platform 是一套面向教学和自学场景的在线练习系统。目前已实现 **三大模块**：
+Practice Platform 是一套面向教学和自学场景的在线练习系统。目前已实现以下核心模块：
 
 1. **算法评测（Online Judge）** —— 消息队列 + Worker 池异步评测，支持 Python/JS/C/C++/Java
 2. **Office 选择题练习** —— Word/Excel/PPT 操作题，单选/多选/判断，即时判分
 3. **文档排版练习** —— 学生上传 .docx，系统用 Apache POI 自动解析格式并与老师参考文档逐段比对，有差异的老师人工复核
+4. **基础比赛** —— OPEN / INVITE_ONLY 参赛、服务端 UTC 生命周期、算法与 DOCX 比赛提交
 
 采用 **管理员 / 老师 / 学生** 三角色权限体系，各司其职。
 
@@ -56,6 +57,7 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 | 🏆 排行榜 | 按通过题数排名 |
 | 📝 Office 选择题 | Word/Excel/PPT 分类、单选/多选/判断、即时判分+解析、答题统计 |
 | 📄 文档排版练习 | 学生上传 .docx → POI 解析格式 → 和老师文档逐段比对 → 老师复核打分 |
+| 🗓️ 基础比赛 | 草稿/发布/取消、公开或邀请参赛、算法与 DOCX 比赛题、`[start,end)` 提交边界 |
 | ⚙️ 管理后台 | 算法题可视化表单（Markdown+LaTeX预览）、Office 题库管理、用户角色管理 |
 | 🛡️ 错误处理 | 前端 ErrorBoundary 友好错误页 + 统一日志 |
 
@@ -66,6 +68,8 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 | 查看已启用内容、做算法题 / Office 选择题 | ✅ | ✅ | ✅ |
 | 下载排版素材、上传排版作业 | ✅ | ✅ | ✅ |
 | 查看自己的提交与成绩 | ✅ | ✅ | ✅ |
+| 加入公开比赛并在运行阶段提交 | ✅ | ❌ | ❌ |
+| 创建和管理自己的比赛 | ❌ | ✅ | ✅ |
 | 创建三类内容 | ❌ | ✅ | ✅ |
 | 编辑、启用、停用自建内容 | ❌ | ✅ | ✅ |
 | 复核自建排版练习的学生提交 | ❌ | ✅ | ✅ |
@@ -183,11 +187,13 @@ Flyway 是唯一的数据库结构来源，迁移文件位于
 `backend-spring/src/main/resources/db/migration`：
 
 1. `V1__baseline_schema.sql` 创建完整空库结构；
-2. `V2__data_integrity_constraints.sql` 检查孤立数据并增加外键和 `CHECK`；
-3. `V3__supporting_indexes.sql` 增加查询所需索引。
+2. V2–V4 增加数据约束、索引与会话版本；
+3. V5 增加可靠判题 Outbox / lease 状态；
+4. V6 增加可靠 DOCX 判题字段；
+5. V7 增加 Contest、参赛/题目关系、内容可见性与不可变提交上下文。
 
-全新空库执行 V1–V3。由旧 `schema.sql` 创建的非空数据库会在版本 1
-建立 baseline，然后仅执行 V2–V3；不会重复建表或自动插入演示数据。
+全新空库执行 V1–V7。由旧 `schema.sql` 创建的非空数据库会在版本 1
+建立 baseline，然后执行后续迁移；不会重复建表或自动插入演示数据。
 Backend 是唯一迁移执行方，Worker 明确禁用 SQL 初始化。
 
 可选演示题位于 `scripts/dev-seed.sql`，只允许在明确的开发数据库中
@@ -246,6 +252,7 @@ docker compose up -d --scale worker=3
 2. **算法练习**：在「题库」选择已启用题目 → 编写代码 → 提交评测 → 查看自己的结果
 3. **Office 选择题**：点「Office」→ 选择已启用题目 → 答题 → 查看即时判分与个人统计
 4. **文档排版练习**：下载已启用练习的参考文档 → 在 Word 中排版 → 上传 .docx → 查看自己的自动比对与复核成绩
+5. **比赛**：查看可访问比赛 → 在 OPEN 比赛开始前加入 → 运行阶段提交算法代码或 DOCX → 赛后查看历史题目
 
 ### 老师
 
@@ -254,6 +261,7 @@ docker compose up -d --scale worker=3
 3. 可编辑、启用、停用自建内容；系统预置内容和其他教师内容没有管理按钮，后端也会拒绝请求
 4. 可在「复核」中查看和批改自己创建的排版练习下的学生提交
 5. 自建内容没有学生提交时可彻底删除；已有提交时只能停用
+6. 可创建 OPEN / INVITE_ONLY 比赛，配置自有题目和学生名单，并发布或取消比赛
 
 ### 管理员
 
@@ -261,6 +269,7 @@ docker compose up -d --scale worker=3
 - 可以停用或重新启用任意内容；停用保留历史数据
 - 可以彻底删除任意内容；有关联提交时会事务清理提交、文件和实际存在的统计字段
 - **用户角色管理**：导航栏「用户」→ 修改任意用户的角色（学生/老师/管理员）
+- 可以管理全部比赛；Stage 6 不包含排行榜、计分、罚时、封榜或 Rejudge
 
 ---
 
@@ -370,10 +379,16 @@ practice-platform/
 | DELETE | `/api/office/docs/exercises/:id` | 🔒 所有者/管理员 | 彻底删除排版练习 |
 | POST | `/api/office/docs/exercises/:id/teacher-doc` | 🔒 老师/管理员 | 上传老师参考文档 |
 | POST | `/api/office/docs/exercises/:id/submit` | ✅ | 学生上传 .docx |
+| GET | `/api/contests` | ✅ | 按角色分页列出可访问比赛 |
+| GET | `/api/contests/:id` | ✅ | 比赛阶段、参赛状态与安全题目 DTO |
+| POST | `/api/contests/:id/join` | ✅ 学生 | 开始前加入 OPEN 比赛 |
+| POST | `/api/contests/:id/problems/:contestProblemId/submissions` | ✅ 参赛者 | 运行阶段算法提交 |
+| POST | `/api/contests/:id/problems/:contestProblemId/office-submissions` | ✅ 参赛者 | 运行阶段 DOCX 提交 |
 | GET | `/api/office/docs/submissions` | ✅ | 学生看自己；教师看自建练习；管理员看全部 |
 | PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
 
 排版判题仅支持经过安全验证的 DOCX；上传限制、确定性评分属性、结果格式和存储生命周期见 [Office DOCX judging](docs/office-judging.md)。
+比赛生命周期、可见性和权限边界见 [Contest core](docs/contest-core.md)。
 | GET | `/api/users` | 🔒 管理员 | 用户列表 |
 | PUT | `/api/users/:id/role` | 🔒 管理员 | 修改用户角色 |
 | DELETE | `/api/users/:id` | 🔒 管理员 | 删除无历史记录的用户（最后管理员受保护） |
@@ -504,6 +519,7 @@ Staging 使用独立 Compose 项目 `practice-platform-staging`，并固定使�
 | `release-config-test` | 校验正式 Compose 只使用不可变镜像、外部数据资源且不包含秘密或 Staging 配置 |
 | Docker sandbox security | 五语言、CE/RE/TLE/MLE/OLE、fork/network/fs/cap/proc/secret/concurrency/cleanup |
 | Worker scale | 3 个竞争消费者处理同一条消息，观察一次判题结果与队列清空 |
+| Contest core | Contest API → Outbox → 3 Workers → Docker Runner，验证 CONTEST_ONLY 与 AC/WA/CE |
 
 隔离保证：
 
@@ -602,7 +618,8 @@ docker compose build
 - [x] 用户角色管理（管理员可改任意用户角色）
 - [ ] SQL 练习模块
 - [ ] SSE 实时推送评测结果（替代轮询）
-- [ ] 比赛模式（限时、计分板）
+- [x] 基础比赛（OPEN / INVITE_ONLY、算法与 DOCX 比赛提交）
+- [ ] 比赛排行榜、计分、罚时、封榜与 Rejudge
 - [ ] 题目数据导入 / 导出
 - [ ] 代码防作弊相似度检测
 
