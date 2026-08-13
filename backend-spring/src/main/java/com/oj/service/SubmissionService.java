@@ -2,10 +2,8 @@ package com.oj.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
-import com.oj.config.AppProperties;
 import com.oj.dto.SubmitRequest;
 import com.oj.dto.SubmissionView;
 import com.oj.entity.ProblemEntity;
@@ -13,16 +11,20 @@ import com.oj.entity.SubmissionEntity;
 import com.oj.entity.UserEntity;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.oj.reliability.JudgeMessage;
+import com.oj.reliability.JudgeOutboxRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 @Service
 public class SubmissionService {
@@ -32,20 +34,21 @@ public class SubmissionService {
     private final SubmissionMapper submissionMapper;
     private final UserMapper userMapper;
     private final ProblemService problemService;
-    private final RabbitTemplate rabbitTemplate;
-    private final AppProperties appProperties;
+    private final JudgeOutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
     private final Map<Integer, LocalDateTime> lastSubmit = new ConcurrentHashMap<>();
 
     public SubmissionService(SubmissionMapper submissionMapper, UserMapper userMapper,
-                             ProblemService problemService, RabbitTemplate rabbitTemplate,
-                             AppProperties appProperties) {
+                             ProblemService problemService, JudgeOutboxRepository outboxRepository,
+                             ObjectMapper objectMapper) {
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
         this.problemService = problemService;
-        this.rabbitTemplate = rabbitTemplate;
-        this.appProperties = appProperties;
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
     }
 
+    @Transactional
     public int submit(SubmitRequest request) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
@@ -74,20 +77,12 @@ public class SubmissionService {
         submissionMapper.insert(submission);
 
         try {
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("submissionId", submission.getId());
-            payload.put("language", submission.getLanguage());
-            payload.put("code", submission.getCode());
-            payload.put("timeLimitMs", problem.getTimeLimit());
-            payload.put("memoryLimitKb", problem.getMemoryLimit() * 1024);
-            payload.put("testCasesJson", problem.getTestCases());
-            rabbitTemplate.convertAndSend(
-                    appProperties.getRabbitmq().getExchange(),
-                    appProperties.getRabbitmq().getRoutingKey(), payload);
-        } catch (Exception exception) {
-            submission.setVerdict("SE");
-            submission.setMessage("评测服务暂不可用: " + exception.getMessage());
-            submissionMapper.updateById(submission);
+            UUID eventId = UUID.randomUUID();
+            String payload = objectMapper.writeValueAsString(
+                    JudgeMessage.initial(eventId, submission.getId()));
+            outboxRepository.insert(eventId, submission.getId(), payload);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Unable to persist judge event", exception);
         }
 
         lastSubmit.put(userId, LocalDateTime.now());

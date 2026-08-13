@@ -51,7 +51,7 @@ class OfficeDocStorageIntegrationTest {
     @BeforeEach
     void resetState() throws Exception {
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
         storageRoot = Path.of(appProperties.getDocStorage()).toAbsolutePath().normalize();
@@ -68,7 +68,7 @@ class OfficeDocStorageIntegrationTest {
             assertThat(files.findAny()).isEmpty();
         }
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
     }
