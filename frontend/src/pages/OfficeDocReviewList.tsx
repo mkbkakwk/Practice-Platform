@@ -6,8 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Loader2, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STATUS_LABEL: Record<string, string> = { AUTO_CHECKED: "自动通过", NEEDS_REVIEW: "待复核", REVIEWED: "已复核" };
-const STATUS_CLASS: Record<string, string> = { AUTO_CHECKED: "bg-green-100 text-green-700", NEEDS_REVIEW: "bg-yellow-100 text-yellow-700", REVIEWED: "bg-blue-100 text-blue-700" };
+const STATUS_LABEL: Record<string, string> = { PENDING: "等待判题", JUDGING: "判题中", COMPLETED: "自动判题完成", FAILED: "判题失败", AUTO_CHECKED: "自动通过", NEEDS_REVIEW: "待复核", REVIEWED: "已复核" };
+const STATUS_CLASS: Record<string, string> = { PENDING: "bg-zinc-100 text-zinc-700", JUDGING: "bg-blue-100 text-blue-700", COMPLETED: "bg-green-100 text-green-700", FAILED: "bg-red-100 text-red-700", AUTO_CHECKED: "bg-green-100 text-green-700", NEEDS_REVIEW: "bg-yellow-100 text-yellow-700", REVIEWED: "bg-blue-100 text-blue-700" };
 
 export default function OfficeDocReviewList() {
   const [items, setItems] = useState<DocSubmissionListItem[]>([]);

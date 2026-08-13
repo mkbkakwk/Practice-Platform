@@ -275,7 +275,6 @@ export interface DocExerciseDetail {
   title: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
   description: string;
-  teacherDocPath: string | null;
   teacherDocName: string | null;
   visible: boolean;
   createdBy: number | null;
@@ -298,7 +297,8 @@ export interface DocParaInfo {
 }
 
 export interface DocCompareDiff {
-  prop: string;
+    ruleId?: string;
+    prop?: string;
   label: string;
   student: unknown;
   teacher: unknown;
@@ -318,13 +318,35 @@ export interface DocSubmission {
   userId: number;
   exerciseId: number;
   studentDocName: string;
-  studentDocPath: string;
   autoResult: string;   // JSON string of DocParaInfo[]
   compareResult: string; // JSON string of DocCompareRow[]
-  status: "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
+  status: "PENDING" | "JUDGING" | "COMPLETED" | "FAILED" | "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
   score: number | null;
   teacherComment: string | null;
+  judgeVersion: string;
+  resultDetail: OfficeJudgeResultDetail;
+  errorCategory: string | null;
+  judgedAt: string | null;
   createdAt: string;
+}
+
+export interface OfficeJudgeResultDetail {
+  judgeVersion: string;
+  totalScore: number;
+  earnedScore: number;
+  passed: boolean;
+  items: Array<{
+    ruleId: string;
+    target: string;
+    expected: string;
+    actual: string;
+    score: number;
+    earned: number;
+    passed: boolean;
+    message: string;
+  }>;
+  totalErrorCount: number;
+  truncated: boolean;
 }
 
 export interface DocSubmissionListItem {
@@ -332,7 +354,7 @@ export interface DocSubmissionListItem {
   exerciseId: number;
   userId: number;
   studentDocName: string;
-  status: "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
+  status: DocSubmission["status"];
   score: number | null;
   createdAt: string;
 }
@@ -603,4 +625,3 @@ export const api = {
     return submission;
   },
 };
-

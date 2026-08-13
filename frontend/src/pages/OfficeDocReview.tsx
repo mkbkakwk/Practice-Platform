@@ -9,6 +9,10 @@ import { Loader2, Download, ArrowLeft, CheckCircle2, XCircle } from "lucide-reac
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, string> = {
+  PENDING: "等待判题",
+  JUDGING: "判题中",
+  COMPLETED: "自动判题完成",
+  FAILED: "判题失败",
   AUTO_CHECKED: "自动检查通过",
   NEEDS_REVIEW: "待复核",
   REVIEWED: "已复核",
