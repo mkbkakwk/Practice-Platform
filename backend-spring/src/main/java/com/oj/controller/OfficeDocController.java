@@ -1,6 +1,5 @@
 package com.oj.controller;
 
-import com.oj.common.ApiException;
 import com.oj.dto.OfficeExerciseCreateRequest;
 import com.oj.dto.ReviewRequest;
 import com.oj.dto.VisibilityRequest;
@@ -81,7 +80,6 @@ public class OfficeDocController {
     @PostMapping("/exercises/{id}/teacher-doc")
     public Map<String, Object> uploadTeacherDoc(
             @PathVariable int id, @RequestParam("file") MultipartFile file) {
-        validateDocx(file);
         return service.uploadTeacherDoc(id, file);
     }
 
@@ -94,7 +92,6 @@ public class OfficeDocController {
     @PostMapping("/exercises/{id}/submit")
     public Map<String, Object> submitDoc(
             @PathVariable int id, @RequestParam("file") MultipartFile file) {
-        validateDocx(file);
         OfficeDocSubmissionEntity submission = service.submitDoc(id, file);
         return Map.of("submission", submission);
     }
@@ -124,14 +121,6 @@ public class OfficeDocController {
     public Map<String, Object> review(
             @PathVariable int id, @Valid @RequestBody ReviewRequest request) {
         return Map.of("submission", service.review(id, request));
-    }
-
-    private void validateDocx(MultipartFile file) {
-        String name = file.getOriginalFilename();
-        if (name == null || !name.toLowerCase().endsWith(".docx")) {
-            throw ApiException.badRequest("请上传 .docx 格式的 Word 文档");
-        }
-        if (file.isEmpty()) throw ApiException.badRequest("文件为空");
     }
 
     private ResponseEntity<FileSystemResource> fileResponse(File file, String filename) {
