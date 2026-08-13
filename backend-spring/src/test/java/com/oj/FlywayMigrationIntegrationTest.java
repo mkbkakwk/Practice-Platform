@@ -69,7 +69,7 @@ class FlywayMigrationIntegrationTest {
                 """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(8);
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(5);
+                Integer.class)).isEqualTo(6);
         assertThat(database.jdbc().queryForObject("""
                 SELECT column_default FROM information_schema.columns
                 WHERE table_schema=? AND table_name='User' AND column_name='token_version'
@@ -80,6 +80,16 @@ class FlywayMigrationIntegrationTest {
                   AND column_name IN ('judge_token', 'judge_lease_until',
                                       'judge_attempt_count', 'judge_failure_category')
                 """, Integer.class, database.schema())).isEqualTo(4);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=? AND table_name='OfficeDocSubmission'
+                  AND column_name IN ('judge_version', 'result_detail', 'error_category', 'judged_at')
+                """, Integer.class, database.schema())).isEqualTo(4);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema=? AND table_name='OfficeDocSubmission'
+                  AND column_name='student_doc_path'
+                """, String.class, database.schema())).isEqualTo("YES");
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM \"Problem\"", Integer.class)).isZero();
         assertThat(database.jdbc().queryForObject(
@@ -158,7 +168,7 @@ class FlywayMigrationIntegrationTest {
                 """, String.class)).isEqualTo("BASELINE");
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(5);
+                Integer.class)).isEqualTo(6);
         assertThat(jdbc.queryForObject(
                 "SELECT solved_count FROM \"User\" WHERE id=?",
                 Integer.class, userId)).isEqualTo(1);
@@ -180,6 +190,12 @@ class FlywayMigrationIntegrationTest {
         assertThat(jdbc.queryForObject(
                 "SELECT score FROM \"OfficeDocSubmission\" WHERE exercise_id=?",
                 Integer.class, exerciseId)).isEqualTo(88);
+        assertThat(jdbc.queryForObject(
+                "SELECT judge_version FROM \"OfficeDocSubmission\" WHERE exercise_id=?",
+                String.class, exerciseId)).isEqualTo("legacy");
+        assertThat(jdbc.queryForObject(
+                "SELECT result_detail::text FROM \"OfficeDocSubmission\" WHERE exercise_id=?",
+                String.class, exerciseId)).isEqualTo("{}");
     }
 
     @Test
@@ -285,6 +301,11 @@ class FlywayMigrationIntegrationTest {
                 "UPDATE \"Submission\" SET passed=2, total=1 WHERE problem_id=?", problemId);
         assertDatabaseRejects(jdbc,
                 "UPDATE \"OfficeDocSubmission\" SET score=101 WHERE id=?", documentSubmissionId);
+        assertDatabaseRejects(jdbc,
+                "UPDATE \"OfficeDocSubmission\" SET judge_version=' ' WHERE id=?", documentSubmissionId);
+        assertDatabaseRejects(jdbc,
+                "UPDATE \"OfficeDocSubmission\" SET result_detail=to_jsonb(repeat('x', 262145)) WHERE id=?",
+                documentSubmissionId);
         assertDatabaseRejects(jdbc, """
                 INSERT INTO "User" (username, password, role)
                 VALUES ('valid_user', 'hash', 'USER')
