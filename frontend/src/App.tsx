@@ -23,6 +23,9 @@ import OfficeDocManageList from "@/pages/OfficeDocManageList";
 import OfficeDocReview from "@/pages/OfficeDocReview";
 import OfficeDocReviewList from "@/pages/OfficeDocReviewList";
 import AdminUserList from "@/pages/AdminUserList";
+import ContestList from "@/pages/ContestList";
+import ContestDetail from "@/pages/ContestDetail";
+import ContestManage from "@/pages/ContestManage";
 
 function Layout({ label, children }: { label?: string; children: React.ReactNode }) {
   return <div className="min-h-screen bg-white text-zinc-900"><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
@@ -40,6 +43,8 @@ export default function App() {
             <Route path="/problem/:slug" element={<Layout label="题目详情"><ProblemDetail /></Layout>} />
             <Route path="/submissions" element={<Layout label="提交记录"><Submissions /></Layout>} />
             <Route path="/leaderboard" element={<Layout label="排行榜"><Leaderboard /></Layout>} />
+            <Route path="/contests" element={<Layout label="比赛"><ContestList /></Layout>} />
+            <Route path="/contests/:id" element={<Layout label="比赛详情"><ContestDetail /></Layout>} />
             <Route path="/office" element={<Layout label="Office 练习"><OfficeList /></Layout>} />
             <Route path="/office/:id" element={<Layout label="Office 练习"><OfficePractice /></Layout>} />
             <Route path="/office/docs" element={<Layout label="排版练习"><OfficeDocList /></Layout>} />
@@ -57,6 +62,8 @@ export default function App() {
             <Route path="/admin/office-doc/review-list" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReviewList /></TeacherGuard></Layout>} />
             <Route path="/admin/office-doc/review/:id" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReview /></TeacherGuard></Layout>} />
             <Route path="/admin/users" element={<Layout label="用户管理"><AdminGuard><AdminUserList /></AdminGuard></Layout>} />
+            <Route path="/admin/contests/new" element={<Layout label="创建比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
+            <Route path="/admin/contests/:id" element={<Layout label="管理比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </HashRouter>

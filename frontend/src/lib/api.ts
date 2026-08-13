@@ -121,6 +121,7 @@ export interface ProblemListItem {
   timeLimit: number;
   memoryLimit: number;
   visible?: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   createdBy: number | null;
   creatorUsername: string | null;
   submissionCount: number;
@@ -147,6 +148,7 @@ export interface ProblemDetail {
   /** Only present for an authorized content manager (for editing). */
   testCases?: Sample[];
   visible: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   createdBy: number | null;
   creatorUsername: string | null;
   createdAt: string;
@@ -166,6 +168,7 @@ export interface ProblemUpsert {
   samples: Sample[];
   testCases: Sample[];
   visible: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
 }
 
 export interface LanguageDef {
@@ -175,7 +178,7 @@ export interface LanguageDef {
   template: string;
 }
 
-export type Verdict = "PENDING" | "AC" | "WA" | "TLE" | "RE" | "CE" | "SE";
+export type Verdict = "PENDING" | "JUDGING" | "AC" | "WA" | "TLE" | "MLE" | "OLE" | "RE" | "CE" | "SE" | "JUDGE_FAILED";
 
 export interface Submission {
   id: number;
@@ -188,6 +191,7 @@ export interface Submission {
   language: string;
   code: string;
   createdAt: string;
+  contestProblemId?: number | null;
   problem?: { id: number; slug: string; title: string; difficulty: string };
   user?: { id: number; username: string };
 }
@@ -263,6 +267,7 @@ export interface DocExerciseListItem {
   title: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
   visible: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   hasTeacherDoc: boolean;
   createdBy: number | null;
   creatorUsername: string | null;
@@ -277,6 +282,7 @@ export interface DocExerciseDetail {
   description: string;
   teacherDocName: string | null;
   visible: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   createdBy: number | null;
   creatorUsername: string | null;
   createdAt: string;
@@ -328,6 +334,60 @@ export interface DocSubmission {
   errorCategory: string | null;
   judgedAt: string | null;
   createdAt: string;
+  contestProblemId?: number | null;
+}
+
+// ---- Contest core ----
+export type ContestPhase = "DRAFT" | "UPCOMING" | "RUNNING" | "ENDED" | "CANCELLED";
+export type ContestAccessType = "OPEN" | "INVITE_ONLY";
+
+export interface ContestSummary {
+  id: number;
+  title: string;
+  description: string;
+  status: "DRAFT" | "PUBLISHED" | "CANCELLED";
+  phase: ContestPhase;
+  accessType: ContestAccessType;
+  ownerId: number;
+  ownerUsername: string | null;
+  startAt: string;
+  endAt: string;
+  participant: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContestProblemItem {
+  contestProblemId: number;
+  problemType: "ALGORITHM" | "OFFICE";
+  problemId: number;
+  displayOrder: number;
+  label: string;
+  title: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  slug: string | null;
+  content: Record<string, unknown> | null;
+}
+
+export interface ContestDetail {
+  contest: ContestSummary;
+  problems: ContestProblemItem[];
+}
+
+export interface ContestParticipant {
+  id: number;
+  userId: number;
+  username: string;
+  addedBy: number;
+  joinedAt: string;
+}
+
+export interface ContestUpsert {
+  title: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  accessType: ContestAccessType;
 }
 
 export interface OfficeJudgeResultDetail {
@@ -523,12 +583,12 @@ export const api = {
   },
   getDocExercise: (id: number) =>
     request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises/${id}`),
-  createDocExercise: (payload: { title: string; difficulty: string; description: string; visible?: boolean }) =>
+  createDocExercise: (payload: { title: string; difficulty: string; description: string; visible?: boolean; contentVisibility: "PUBLIC" | "CONTEST_ONLY" }) =>
     request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateDocExercise: (id: number, payload: { title: string; difficulty: string; description: string; visible?: boolean }) =>
+  updateDocExercise: (id: number, payload: { title: string; difficulty: string; description: string; visible?: boolean; contentVisibility: "PUBLIC" | "CONTEST_ONLY" }) =>
     request<{ exercise: DocExerciseDetail }>(`/office/docs/exercises/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
@@ -579,6 +639,71 @@ export const api = {
       body: JSON.stringify({ score, comment }),
     }),
 
+  // ---- Contest core ----
+  listContests: (params: { page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; contests: ContestSummary[] }>(
+      `/contests?${q.toString()}`,
+    );
+  },
+  getContest: (id: number) => request<{ detail: ContestDetail }>(`/contests/${id}`),
+  createContest: (payload: ContestUpsert) => request<{ detail: ContestDetail }>("/contests", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+  updateContest: (id: number, payload: ContestUpsert) => request<{ detail: ContestDetail }>(`/contests/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }),
+  publishContest: (id: number) => request<{ detail: ContestDetail }>(`/contests/${id}/publish`, { method: "POST" }),
+  cancelContest: (id: number) => request<{ detail: ContestDetail }>(`/contests/${id}/cancel`, { method: "POST" }),
+  deleteContest: (id: number) => request<{ deleted: boolean }>(`/contests/${id}`, { method: "DELETE" }),
+  joinContest: (id: number) => request<{ participant: ContestParticipant }>(`/contests/${id}/join`, { method: "POST" }),
+  listContestParticipants: (id: number, params: { page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; participants: ContestParticipant[] }>(
+      `/contests/${id}/participants?${q.toString()}`,
+    );
+  },
+  addContestParticipant: (id: number, userId: number) => request<{ participant: ContestParticipant }>(
+    `/contests/${id}/participants`, { method: "POST", body: JSON.stringify({ userId }) },
+  ),
+  removeContestParticipant: (id: number, userId: number) => request<{ removed: boolean }>(
+    `/contests/${id}/participants/${userId}`, { method: "DELETE" },
+  ),
+  addContestProblem: (id: number, problemType: "ALGORITHM" | "OFFICE", problemId: number, label?: string) =>
+    request<{ contestProblem: ContestProblemItem }>(`/contests/${id}/problems`, {
+      method: "POST",
+      body: JSON.stringify({ problemType, problemId, label }),
+    }),
+  reorderContestProblems: (id: number, contestProblemIds: number[]) =>
+    request<{ problems: ContestProblemItem[] }>(`/contests/${id}/problems/order`, {
+      method: "PUT",
+      body: JSON.stringify({ contestProblemIds }),
+    }),
+  removeContestProblem: (id: number, contestProblemId: number) => request<{ removed: boolean }>(
+    `/contests/${id}/problems/${contestProblemId}`, { method: "DELETE" },
+  ),
+  submitContestAlgorithm: (contestId: number, contestProblemId: number, language: string, code: string) =>
+    request<{ submissionId: number; status: Verdict; message: string }>(
+      `/contests/${contestId}/problems/${contestProblemId}/submissions`, {
+        method: "POST",
+        body: JSON.stringify({ language, code }),
+      },
+    ),
+  submitContestOffice: (contestId: number, contestProblemId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ submission: DocSubmission }>(
+      `/contests/${contestId}/problems/${contestProblemId}/office-submissions`,
+      { method: "POST", body: fd },
+    );
+  },
+
   // ---- admin user management ----
   listUsers: (params: { page?: number; pageSize?: number } = {}) => {
     const q = new URLSearchParams();
@@ -614,7 +739,7 @@ export const api = {
       const { submission } = await api.getSubmission(id);
       log.debug(TAGS.poll, `#${id} 第 ${poll} 次轮询 verdict=${submission.verdict}`);
       opts.onTick?.(poll, submission);
-      if (submission.verdict !== "PENDING") {
+      if (submission.verdict !== "PENDING" && submission.verdict !== "JUDGING") {
         log.info(TAGS.poll, `#${id} 评测完成 verdict=${submission.verdict} passed=${submission.passed}/${submission.total} timeMs=${submission.timeMs}`);
         return submission;
       }

@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users } from "lucide-react";
+import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const deployEnvironment = import.meta.env.VITE_DEPLOY_ENV as string | undefined;
@@ -16,6 +16,7 @@ export function Navbar() {
   const links = [
     { to: "/", label: "题库", icon: ListOrdered, match: (path: string) => path === "/" || path.startsWith("/problem") },
     { to: "/office", label: "Office", icon: Briefcase, match: (path: string) => path.startsWith("/office") },
+    { to: "/contests", label: "比赛", icon: CalendarDays, match: (path: string) => path.startsWith("/contests") || path.startsWith("/admin/contests") },
     { to: "/submissions", label: "提交记录", icon: FileCode2, match: (path: string) => path.startsWith("/submissions") },
     { to: "/leaderboard", label: "排行榜", icon: Trophy, match: (path: string) => path.startsWith("/leaderboard") },
   ];
