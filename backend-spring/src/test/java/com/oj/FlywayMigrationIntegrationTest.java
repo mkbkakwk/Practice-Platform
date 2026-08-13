@@ -69,7 +69,16 @@ class FlywayMigrationIntegrationTest {
                 """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(8);
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(6);
+                Integer.class)).isEqualTo(7);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema=? AND table_name IN ('Contest', 'ContestParticipant', 'ContestProblem')
+                """, Integer.class, database.schema())).isEqualTo(3);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=? AND table_name IN ('Submission', 'OfficeDocSubmission')
+                  AND column_name='contest_problem_id'
+                """, Integer.class, database.schema())).isEqualTo(2);
         assertThat(database.jdbc().queryForObject("""
                 SELECT column_default FROM information_schema.columns
                 WHERE table_schema=? AND table_name='User' AND column_name='token_version'
@@ -168,7 +177,7 @@ class FlywayMigrationIntegrationTest {
                 """, String.class)).isEqualTo("BASELINE");
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(6);
+                Integer.class)).isEqualTo(7);
         assertThat(jdbc.queryForObject(
                 "SELECT solved_count FROM \"User\" WHERE id=?",
                 Integer.class, userId)).isEqualTo(1);
