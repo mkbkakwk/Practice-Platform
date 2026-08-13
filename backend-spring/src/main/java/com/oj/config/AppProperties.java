@@ -15,6 +15,7 @@ public class AppProperties {
     private RabbitMq rabbitmq = new RabbitMq();
     private Outbox outbox = new Outbox();
     private String docStorage = "/tmp/oj-docs";
+    private Office office = new Office();
 
     public Jwt getJwt() { return jwt; }
     public void setJwt(Jwt jwt) { this.jwt = jwt; }
@@ -28,6 +29,8 @@ public class AppProperties {
     public void setOutbox(Outbox outbox) { this.outbox = outbox; }
     public String getDocStorage() { return docStorage; }
     public void setDocStorage(String docStorage) { this.docStorage = docStorage; }
+    public Office getOffice() { return office; }
+    public void setOffice(Office office) { this.office = office; }
 
     public static class Jwt {
         private String secret;
@@ -105,5 +108,41 @@ public class AppProperties {
         public void setCleanupInterval(Duration cleanupInterval) { this.cleanupInterval = cleanupInterval; }
         public int getCleanupBatchSize() { return cleanupBatchSize; }
         public void setCleanupBatchSize(int cleanupBatchSize) { this.cleanupBatchSize = cleanupBatchSize; }
+    }
+
+    public static class Office {
+        private long maxUploadBytes = 10L * 1024 * 1024;
+        private long maxExpandedBytes = 32L * 1024 * 1024;
+        private long maxEntryBytes = 8L * 1024 * 1024;
+        private int maxZipEntries = 2048;
+        private double minInflateRatio = 0.01;
+        private int maxResultItems = 200;
+        private int maxResultBytes = 256 * 1024;
+        private int maxConcurrentJudges = 4;
+        private int maxDocumentElements = 20000;
+        private int maxTextChars = 1000000;
+        private Duration orphanMinAge = Duration.ofHours(1);
+        public long getMaxUploadBytes() { return maxUploadBytes; }
+        public void setMaxUploadBytes(long maxUploadBytes) { this.maxUploadBytes = maxUploadBytes; }
+        public long getMaxExpandedBytes() { return maxExpandedBytes; }
+        public void setMaxExpandedBytes(long maxExpandedBytes) { this.maxExpandedBytes = maxExpandedBytes; }
+        public long getMaxEntryBytes() { return maxEntryBytes; }
+        public void setMaxEntryBytes(long maxEntryBytes) { this.maxEntryBytes = maxEntryBytes; }
+        public int getMaxZipEntries() { return maxZipEntries; }
+        public void setMaxZipEntries(int maxZipEntries) { this.maxZipEntries = maxZipEntries; }
+        public double getMinInflateRatio() { return minInflateRatio; }
+        public void setMinInflateRatio(double minInflateRatio) { this.minInflateRatio = minInflateRatio; }
+        public int getMaxResultItems() { return maxResultItems; }
+        public void setMaxResultItems(int maxResultItems) { this.maxResultItems = maxResultItems; }
+        public int getMaxResultBytes() { return maxResultBytes; }
+        public void setMaxResultBytes(int maxResultBytes) { this.maxResultBytes = maxResultBytes; }
+        public int getMaxConcurrentJudges() { return maxConcurrentJudges; }
+        public void setMaxConcurrentJudges(int maxConcurrentJudges) { this.maxConcurrentJudges = maxConcurrentJudges; }
+        public int getMaxDocumentElements() { return maxDocumentElements; }
+        public void setMaxDocumentElements(int maxDocumentElements) { this.maxDocumentElements = maxDocumentElements; }
+        public int getMaxTextChars() { return maxTextChars; }
+        public void setMaxTextChars(int maxTextChars) { this.maxTextChars = maxTextChars; }
+        public Duration getOrphanMinAge() { return orphanMinAge; }
+        public void setOrphanMinAge(Duration orphanMinAge) { this.orphanMinAge = orphanMinAge; }
     }
 }

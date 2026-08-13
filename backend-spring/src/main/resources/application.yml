@@ -30,10 +30,10 @@ spring:
     baseline-on-migrate: true
     baseline-version: "1"
     validate-migration-naming: true
-  servlet:
-    multipart:
-      max-file-size: 20MB
-      max-request-size: 25MB
+    servlet:
+      multipart:
+        max-file-size: ${OFFICE_HTTP_MAX_FILE_SIZE:10MB}
+        max-request-size: ${OFFICE_HTTP_MAX_REQUEST_SIZE:11MB}
 
 mybatis-plus:
   configuration:
@@ -73,6 +73,18 @@ oj:
     cleanup-interval: ${OUTBOX_CLEANUP_INTERVAL_MS:3600000}ms
     cleanup-batch-size: ${OUTBOX_CLEANUP_BATCH_SIZE:500}
   doc-storage: ${DOC_STORAGE:/tmp/oj-docs}
+  office:
+    max-upload-bytes: ${OFFICE_MAX_UPLOAD_BYTES:10485760}
+    max-expanded-bytes: ${OFFICE_MAX_EXPANDED_BYTES:33554432}
+    max-entry-bytes: ${OFFICE_MAX_ENTRY_BYTES:8388608}
+    max-zip-entries: ${OFFICE_MAX_ZIP_ENTRIES:2048}
+    min-inflate-ratio: ${OFFICE_MIN_INFLATE_RATIO:0.01}
+    max-result-items: ${OFFICE_MAX_RESULT_ITEMS:200}
+    max-result-bytes: ${OFFICE_MAX_RESULT_BYTES:262144}
+    max-concurrent-judges: ${OFFICE_MAX_CONCURRENT_JUDGES:4}
+    max-document-elements: ${OFFICE_MAX_DOCUMENT_ELEMENTS:20000}
+    max-text-chars: ${OFFICE_MAX_TEXT_CHARS:1000000}
+    orphan-min-age: ${OFFICE_ORPHAN_MIN_AGE:1h}
 
 logging:
   level:

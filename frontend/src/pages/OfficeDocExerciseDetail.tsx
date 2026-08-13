@@ -9,11 +9,19 @@ import { Loader2, Upload, Download, CheckCircle2, XCircle, ArrowLeft, FileText }
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, string> = {
+  PENDING: "等待判题",
+  JUDGING: "判题中",
+  COMPLETED: "自动判题完成",
+  FAILED: "判题失败",
   AUTO_CHECKED: "自动检查通过",
   NEEDS_REVIEW: "待老师复核",
   REVIEWED: "已复核",
 };
 const STATUS_CLASS: Record<string, string> = {
+  PENDING: "bg-zinc-100 text-zinc-700",
+  JUDGING: "bg-blue-100 text-blue-700",
+  COMPLETED: "bg-green-100 text-green-700",
+  FAILED: "bg-red-100 text-red-700",
   AUTO_CHECKED: "bg-green-100 text-green-700",
   NEEDS_REVIEW: "bg-yellow-100 text-yellow-700",
   REVIEWED: "bg-blue-100 text-blue-700",
@@ -93,7 +101,7 @@ export default function OfficeDocExerciseDetail() {
         <div className="prose prose-sm max-w-none">
           <Markdown>{exercise.description}</Markdown>
         </div>
-        {exercise.teacherDocName && (
+        {exercise.teacherDocName && (user?.role === "TEACHER" || user?.role === "ADMIN") && (
           <div className="mt-4 border-t pt-3">
             <span onClick={() => void api.downloadTeacherDoc(exerciseId, exercise.teacherDocName!)}>
               <Button variant="outline" size="sm">
@@ -107,7 +115,7 @@ export default function OfficeDocExerciseDetail() {
       {/* Upload area */}
       <Card className="mb-4 p-5">
         <h2 className="mb-3 text-sm font-semibold text-zinc-700">上传你的文档</h2>
-        <p className="mb-3 text-xs text-zinc-500">请上传 .docx 格式的 Word 文档（最大 20MB）</p>
+        <p className="mb-3 text-xs text-zinc-500">请上传 .docx 格式的 Word 文档（最大 10MB）</p>
         <input
           ref={fileRef}
           type="file"
@@ -146,15 +154,37 @@ export default function OfficeDocExerciseDetail() {
             </div>
           </div>
 
-          {/* Score if reviewed */}
-          {submission.status === "REVIEWED" && (
+          {/* Score */}
+          {submission.score != null && (
             <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
               <div className="flex items-center gap-4">
                 <span className="text-2xl font-bold text-blue-700">{submission.score}</span>
                 <span className="text-sm text-zinc-600">分</span>
               </div>
-              {submission.teacherComment && (
+              {submission.status === "REVIEWED" && submission.teacherComment && (
                 <p className="mt-2 text-sm text-zinc-700"><span className="font-medium">老师评语：</span>{submission.teacherComment}</p>
+              )}
+            </div>
+          )}
+
+          {submission.status === "FAILED" && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              文档未能完成判题：{failureLabel(submission.errorCategory)}。请检查文件后重新上传。
+            </div>
+          )}
+
+          {submission.resultDetail?.items?.length > 0 && (
+            <div className="mb-4 rounded-md border border-zinc-200 p-4">
+              <h3 className="mb-2 text-sm font-medium text-zinc-700">主要扣分项</h3>
+              <ul className="space-y-1 text-sm text-zinc-600">
+                {submission.resultDetail.items.slice(0, 20).map((item) => (
+                  <li key={item.ruleId}>• {item.target}：{item.message}（{item.earned}/{item.score}）</li>
+                ))}
+              </ul>
+              {submission.resultDetail.truncated && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  仅显示部分错误，共 {submission.resultDetail.totalErrorCount} 项。
+                </p>
               )}
             </div>
           )}
@@ -222,4 +252,16 @@ function formatVal(v: unknown): string {
 
 function safeParse<T>(json: string, fallback: T): T {
   try { return JSON.parse(json) as T; } catch { return fallback; }
+}
+
+function failureLabel(category: string | null): string {
+  const labels: Record<string, string> = {
+    INVALID_FILE_TYPE: "文件类型不受支持",
+    FILE_TOO_LARGE: "文件超过大小限制",
+    INVALID_DOCUMENT: "文档格式无效或已损坏",
+    UNSUPPORTED_DOCUMENT: "文档包含不支持的内容",
+    PASSWORD_PROTECTED: "暂不支持密码保护文档",
+    PARSING_FAILED: "文档无法解析",
+  };
+  return category ? (labels[category] ?? "文档判题失败") : "文档判题失败";
 }

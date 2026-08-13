@@ -14,6 +14,7 @@ public class OfficeExerciseEntity {
     private String title;
     private String difficulty;
     private String description;
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String teacherDocPath;
     private String teacherDocName;
     private Boolean visible;
