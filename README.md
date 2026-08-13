@@ -277,12 +277,13 @@ practice-platform/
 │   ├── pom.xml                 # 含 Apache POI 与 Flyway PostgreSQL 支持
 │   ├── src/main/resources/
 │   │   ├── application.yml     # 配置（含 multipart 文件上传）
-│   │   └── db/migration/       # 唯一权威数据库结构：V1 / V2 / V3
+│   │   └── db/migration/       # 唯一权威数据库结构：V1–V6
 │   ├── src/test/resources/
 │   │   └── legacy-schema.sql   # 仅用于验证旧 schema 无损升级
 │   └── src/main/java/com/oj/
 │       ├── config/             # WebConfig / RabbitConfig / AppProperties
-│       ├── common/             # JwtUtil / CurrentUser(三角色) / DocxParser / DocComparator
+│       ├── common/             # JwtUtil / CurrentUser / 通用基础设施
+│       ├── office/             # DOCX 验证 / 存储 / Canonical Model / 确定性判题
 │       ├── entity/             # 实体（含 OfficeQuestion/Exercise/Submission）
 │       ├── mapper/             # Mapper 接口
 │       ├── dto/                # 请求/响应 DTO
@@ -371,6 +372,8 @@ practice-platform/
 | POST | `/api/office/docs/exercises/:id/submit` | ✅ | 学生上传 .docx |
 | GET | `/api/office/docs/submissions` | ✅ | 学生看自己；教师看自建练习；管理员看全部 |
 | PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
+
+排版判题仅支持经过安全验证的 DOCX；上传限制、确定性评分属性、结果格式和存储生命周期见 [Office DOCX judging](docs/office-judging.md)。
 | GET | `/api/users` | 🔒 管理员 | 用户列表 |
 | PUT | `/api/users/:id/role` | 🔒 管理员 | 修改用户角色 |
 | DELETE | `/api/users/:id` | 🔒 管理员 | 删除无历史记录的用户（最后管理员受保护） |
