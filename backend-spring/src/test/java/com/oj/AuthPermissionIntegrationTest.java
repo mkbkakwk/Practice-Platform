@@ -59,7 +59,7 @@ class AuthPermissionIntegrationTest {
     @BeforeEach
     void resetDatabase() {
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
     }
@@ -68,7 +68,7 @@ class AuthPermissionIntegrationTest {
     void cleanDatabase() {
         CurrentUser.clear();
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
     }

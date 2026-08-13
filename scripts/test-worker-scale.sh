@@ -89,16 +89,22 @@ fi
 
 "${compose[@]}" exec -T db psql -v ON_ERROR_STOP=1 -U scale_test -d scale_test <<'SQL'
 INSERT INTO "User" (id, username, password) VALUES (1, 'scale-test-user', 'not-a-real-password');
-INSERT INTO "Problem" (id, slug, title, description) VALUES (1, 'scale-test', 'Scale test', 'Disposable test problem');
+INSERT INTO "Problem" (id, slug, title, description, time_limit, memory_limit, test_cases)
+VALUES (1, 'scale-test', 'Scale test', 'Disposable test problem', 1000, 128,
+        '[{"input":"","output":"1"}]');
 INSERT INTO "Submission" (id, user_id, problem_id, language, code)
 VALUES (1, 1, 1, 'python', 'print(1)');
 SQL
 
-payload='{"submissionId":1,"language":"python","code":"print(1)","timeLimitMs":1000,"memoryLimitKb":131072,"testCasesJson":"[{\"input\":\"\",\"output\":\"1\"}]"}'
-"${compose[@]}" exec -T rabbitmq rabbitmqadmin \
-  -u scale_test -p scale_test_password publish \
-  exchange=oj.judge routing_key=oj.judge.submit \
-  payload="$payload" properties='{"content_type":"application/json"}' >/dev/null
+event_id='11111111-1111-1111-1111-111111111111'
+payload="{\"eventId\":\"$event_id\",\"submissionId\":1,\"schemaVersion\":1,\"deliveryAttempt\":0}"
+for _ in 1 2 3 4 5; do
+  "${compose[@]}" exec -T rabbitmq rabbitmqadmin \
+    -u scale_test -p scale_test_password publish \
+    exchange=oj.judge routing_key=oj.judge.submit \
+    payload="$payload" \
+    properties="{\"content_type\":\"application/json\",\"delivery_mode\":2,\"message_id\":\"$event_id\",\"correlation_id\":\"1\"}" >/dev/null
+done
 
 deadline=$((SECONDS + 45))
 verdict=""
@@ -115,21 +121,45 @@ if [[ "$verdict" != "AC" ]]; then
 fi
 
 logs=$("${compose[@]}" logs --no-color worker)
-judging_count=$(grep -c '\[worker\] judging submission #1 ' <<<"$logs" || true)
-result_count=$(grep -c '\[worker\] submission #1 requestId=.* verdict=AC ' <<<"$logs" || true)
+judging_count=$(grep -c 'Judge claim success eventId=.* submissionId=1 ' <<<"$logs" || true)
+result_count=$(grep -c 'Judge result committed eventId=.* submissionId=1 .* verdict=AC' <<<"$logs" || true)
 if [[ "$judging_count" -ne 1 || "$result_count" -ne 1 ]]; then
   echo "ERROR: expected exactly one judge and one AC result log; judging=$judging_count result=$result_count" >&2
   print_worker_scale_diagnostics
   exit 1
 fi
 
-queue_state=$("${compose[@]}" exec -T rabbitmq rabbitmqctl list_queues -q \
-  name messages_ready messages_unacknowledged consumers | awk '$1 == "oj.judge.queue" {print $2 " " $3 " " $4}')
+judge_attempts=$("${compose[@]}" exec -T db psql -At -U scale_test -d scale_test \
+  -c 'SELECT judge_attempt_count FROM "Submission" WHERE id = 1;')
+if [[ "$judge_attempts" != "1" ]]; then
+  echo "ERROR: expected one database judge claim, got $judge_attempts" >&2
+  print_worker_scale_diagnostics
+  exit 1
+fi
+
+queue_state=""
+while read -r queue_name ready unacked consumers; do
+  [[ "$queue_name" == "oj.judge.queue" ]] && queue_state="$ready $unacked $consumers"
+done < <("${compose[@]}" exec -T rabbitmq rabbitmqctl list_queues -q \
+  name messages_ready messages_unacknowledged consumers)
 if [[ "$queue_state" != "0 0 3" ]]; then
   echo "ERROR: unexpected queue state: $queue_state" >&2
   print_worker_scale_diagnostics
   exit 1
 fi
+
+for queue in oj.judge.retry.queue oj.judge.dlq; do
+  queued=""
+  while read -r queue_name ready unacked; do
+    [[ "$queue_name" == "$queue" ]] && queued="$ready $unacked"
+  done < <("${compose[@]}" exec -T rabbitmq rabbitmqctl list_queues -q \
+    name messages_ready messages_unacknowledged)
+  if [[ "$queued" != "0 0" ]]; then
+    echo "ERROR: queue $queue did not drain: $queued" >&2
+    print_worker_scale_diagnostics
+    exit 1
+  fi
+done
 
 if docker container ls -aq --filter "label=com.practice-platform.runner-instance=$runner_instance" | grep -q .; then
   echo "ERROR: residual student container after Worker scale test" >&2
@@ -140,4 +170,4 @@ if docker volume ls -q --filter "label=com.practice-platform.runner-instance=$ru
   exit 1
 fi
 
-echo "Worker scale test: PASSED (3 consumers, exactly-once observed result, queue drained)"
+echo "Worker scale test: PASSED (3 consumers, 5 duplicate deliveries, 1 effective judge, queues drained)"

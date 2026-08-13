@@ -91,10 +91,13 @@ Frontend -> Backend -> PostgreSQL
 ```
 
 **异步评测流程**：
-1. 学生提交代码 → 后端写入 `PENDING` 记录 → 发送到 RabbitMQ → 立即返回 `submissionId`
-2. 多个 Worker 竞争消费同一队列，将代码和测试输入通过认证的 Runner API 送入执行层
-3. Runner 按固定语言配置 compile once，再为每个测试点创建独立、无网络的一次性容器
-4. Worker 比较实际输出与预期输出并写回 PostgreSQL；前端轮询最终结果
+1. 学生提交代码 → 后端在同一事务写入 `PENDING` Submission 与 Judge Outbox → 立即返回 `submissionId`
+2. Outbox relay 获得 RabbitMQ publisher confirm 后标记已发布；RabbitMQ 不可用时保留并重试
+3. 多个 Worker 以数据库 CAS + judge token + lease 幂等竞争，再通过认证的 Runner API 进入执行层
+4. Runner 按固定语言配置 compile once，再为每个测试点创建独立、无网络的一次性容器
+5. Worker 先提交最终结果再 manual ACK；临时基础设施故障有限重试，超过上限进入 DLQ 和 `JUDGE_FAILED`
+
+消息链路采用 **at-least-once + Transactional Outbox + idempotent consumer**，重复投递是正常且受支持的行为。PostgreSQL 始终是业务状态真相源；完整语义和故障恢复见 [Judge message reliability](docs/judge-message-reliability.md)。
 
 **文档排版比对流程**：
 1. 老师创建排版练习 → 写 Markdown 排版要求 → 上传参考 .docx
@@ -387,6 +390,11 @@ practice-platform/
 | `RABBITMQ_PASSWORD` | `oj` | RabbitMQ 密码 |
 | `WORKER_REPLICAS` | `3` | Worker 竞争消费者数量 |
 | `WORKER_CONCURRENCY` | `1` | 单 Worker 并发消费数 |
+| `JUDGE_MAX_RETRIES` | `3` | Runner/基础设施故障的最大执行尝试数 |
+| `JUDGE_RETRY_DELAY_MS` | `5000` | RabbitMQ retry queue 延迟（毫秒） |
+| `JUDGE_LEASE` | `30m` | Worker 判题所有权 lease，须长于硬执行上限 |
+| `OUTBOX_LEASE` | `30s` | Outbox publisher 崩溃恢复 lease |
+| `OUTBOX_RETENTION` | `7d` | 已发布 Outbox 事件保留期 |
 | `RUNNER_TOKEN` | 无 | Worker/Runner 内部 Bearer Token（**必须配置**） |
 | `DOCKER_SOCKET_GID` | 无 | Docker socket 的宿主 GID（**必须配置**） |
 | `RUNNER_MAX_CONCURRENCY` | `4` | Runner 同时接受的 submission job 上限 |

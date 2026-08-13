@@ -29,7 +29,7 @@ class FlywayMigrationIntegrationTest {
 
     private static final String[] BUSINESS_TABLES = {
             "User", "Problem", "Submission", "OfficeQuestion", "OfficeRecord",
-            "OfficeExercise", "OfficeDocSubmission"
+            "OfficeExercise", "OfficeDocSubmission", "judge_outbox"
     };
 
     @Autowired
@@ -66,14 +66,20 @@ class FlywayMigrationIntegrationTest {
                 FROM information_schema.tables
                 WHERE table_schema = ?
                   AND table_name = ANY (?)
-                """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(7);
+                """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(8);
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(4);
+                Integer.class)).isEqualTo(5);
         assertThat(database.jdbc().queryForObject("""
                 SELECT column_default FROM information_schema.columns
                 WHERE table_schema=? AND table_name='User' AND column_name='token_version'
                 """, String.class, database.schema())).isEqualTo("0");
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=? AND table_name='Submission'
+                  AND column_name IN ('judge_token', 'judge_lease_until',
+                                      'judge_attempt_count', 'judge_failure_category')
+                """, Integer.class, database.schema())).isEqualTo(4);
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM \"Problem\"", Integer.class)).isZero();
         assertThat(database.jdbc().queryForObject(
@@ -152,7 +158,7 @@ class FlywayMigrationIntegrationTest {
                 """, String.class)).isEqualTo("BASELINE");
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(4);
+                Integer.class)).isEqualTo(5);
         assertThat(jdbc.queryForObject(
                 "SELECT solved_count FROM \"User\" WHERE id=?",
                 Integer.class, userId)).isEqualTo(1);

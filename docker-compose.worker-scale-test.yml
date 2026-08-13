@@ -11,7 +11,7 @@ services:
     tmpfs:
       - /var/lib/postgresql/data:rw,nosuid,nodev,size=268435456
     volumes:
-      - ./backend-spring/src/main/resources/db/migration/V1__baseline_schema.sql:/docker-entrypoint-initdb.d/001.sql:ro
+      - ./backend-spring/src/main/resources/db/migration:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scale_test -d scale_test"]
       interval: 2s
@@ -95,6 +95,8 @@ services:
       RUNNER_READ_TIMEOUT_MS: 15000
       WORKER_CONCURRENCY: 1
       WORKER_MAX_CONCURRENCY: 1
+      JUDGE_RETRY_DELAY_MS: 100
+      JUDGE_LEASE: 30s
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,size=33554432
     healthcheck:
