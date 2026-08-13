@@ -18,6 +18,7 @@ public class OfficeExerciseEntity {
     private String teacherDocPath;
     private String teacherDocName;
     private Boolean visible;
+    private String contentVisibility;
     private Integer createdBy;
     @TableField(exist = false)
     private String creatorUsername;
@@ -37,6 +38,8 @@ public class OfficeExerciseEntity {
     public void setTeacherDocName(String teacherDocName) { this.teacherDocName = teacherDocName; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
     public Integer getCreatedBy() { return createdBy; }
     public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
     public String getCreatorUsername() { return creatorUsername; }

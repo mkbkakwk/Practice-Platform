@@ -25,6 +25,7 @@ public class ProblemEntity {
     private String samples;
     private String testCases;
     private Boolean visible;
+    private String contentVisibility;
     private Integer createdBy;
     @TableField(exist = false)
     private String creatorUsername;
@@ -56,6 +57,8 @@ public class ProblemEntity {
     public void setTestCases(String testCases) { this.testCases = testCases; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
     public Integer getCreatedBy() { return createdBy; }
     public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
     public String getCreatorUsername() { return creatorUsername; }

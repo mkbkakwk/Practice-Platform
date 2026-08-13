@@ -6,12 +6,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
+import com.oj.contest.ContestContentAccessPolicy;
+import com.oj.contest.ContestProblemType;
+import com.oj.contest.ContentVisibility;
 import com.oj.dto.ProblemDetail;
 import com.oj.dto.ProblemListItem;
 import com.oj.dto.ProblemUpsertRequest;
 import com.oj.entity.ProblemEntity;
 import com.oj.entity.SubmissionEntity;
 import com.oj.mapper.ProblemMapper;
+import com.oj.mapper.ContestProblemMapper;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
 import org.springframework.stereotype.Service;
@@ -28,23 +32,28 @@ public class ProblemService {
     private final ProblemMapper problemMapper;
     private final SubmissionMapper submissionMapper;
     private final UserMapper userMapper;
+    private final ContestProblemMapper contestProblemMapper;
+    private final ContestContentAccessPolicy contestAccess;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ProblemService(ProblemMapper problemMapper, SubmissionMapper submissionMapper, UserMapper userMapper) {
+    public ProblemService(ProblemMapper problemMapper, SubmissionMapper submissionMapper, UserMapper userMapper,
+                          ContestProblemMapper contestProblemMapper, ContestContentAccessPolicy contestAccess) {
         this.problemMapper = problemMapper;
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
+        this.contestProblemMapper = contestProblemMapper;
+        this.contestAccess = contestAccess;
     }
 
     public List<ProblemListItem> list(int page, int pageSize, String difficulty) {
         QueryWrapper<ProblemEntity> query = baseListQuery(difficulty);
-        query.eq("visible", true).orderByAsc("id");
+        query.eq("visible", true).eq("content_visibility", ContentVisibility.PUBLIC.name()).orderByAsc("id");
         return toListItems(problemMapper.selectPage(new Page<>(page, pageSize), query).getRecords());
     }
 
     public long count(String difficulty) {
         QueryWrapper<ProblemEntity> query = baseListQuery(difficulty);
-        query.eq("visible", true);
+        query.eq("visible", true).eq("content_visibility", ContentVisibility.PUBLIC.name());
         return problemMapper.selectCount(query);
     }
 
@@ -60,7 +69,12 @@ public class ProblemService {
 
     public ProblemDetail getBySlug(String slug) {
         ProblemEntity entity = findBySlug(slug);
-        if (!Boolean.TRUE.equals(entity.getVisible()) && !CurrentUser.canManage(entity.getCreatedBy())) {
+        boolean manager = CurrentUser.canManage(entity.getCreatedBy());
+        boolean contestAccessAllowed = ContentVisibility.CONTEST_ONLY.name().equals(entity.getContentVisibility())
+                && contestAccess.canReadContestOnly(ContestProblemType.ALGORITHM, entity.getId());
+        if ((!Boolean.TRUE.equals(entity.getVisible())
+                || ContentVisibility.CONTEST_ONLY.name().equals(entity.getContentVisibility()))
+                && !manager && !contestAccessAllowed) {
             throw ApiException.notFound("题目不存在");
         }
         return toDetail(entity);
@@ -92,6 +106,11 @@ public class ProblemService {
     public ProblemEntity update(String slug, ProblemUpsertRequest request) {
         ProblemEntity entity = findBySlug(slug);
         CurrentUser.requireCanManage(entity.getCreatedBy());
+
+        if (contestProblemMapper.selectCount(new QueryWrapper<com.oj.entity.ContestProblemEntity>()
+                .eq("algorithm_problem_id", entity.getId())) > 0) {
+            throw ApiException.conflict("该题目已被比赛引用，不能彻底删除");
+        }
         if (!slug.equals(request.getSlug())
                 && problemMapper.selectCount(new QueryWrapper<ProblemEntity>().eq("slug", request.getSlug())) > 0) {
             throw ApiException.conflict("slug 已存在");
@@ -177,6 +196,7 @@ public class ProblemService {
         detail.setMemoryLimit(entity.getMemoryLimit());
         detail.setSamples(parseJsonArray(entity.getSamples()));
         detail.setVisible(entity.getVisible());
+        detail.setContentVisibility(entity.getContentVisibility());
         detail.setCreatedBy(entity.getCreatedBy());
         detail.setCreatorUsername(loadCreatorUsername(entity.getCreatedBy()));
         detail.setCreatedAt(entity.getCreatedAt());
@@ -193,6 +213,7 @@ public class ProblemService {
                 entity.getId(), entity.getSlug(), entity.getTitle(), entity.getDifficulty(),
                 entity.getTags() == null ? new String[0] : entity.getTags(),
                 entity.getTimeLimit(), entity.getMemoryLimit(), entity.getVisible(),
+                entity.getContentVisibility(),
                 entity.getCreatedBy(), entity.getCreatedBy() == null ? null : creatorNames.get(entity.getCreatedBy()),
                 submissionCounts.getOrDefault(entity.getId(), 0L), entity.getCreatedAt()
         )).toList();
@@ -236,6 +257,7 @@ public class ProblemService {
         entity.setSamples(serialize(request.getSamples()));
         entity.setTestCases(serializeTestCases(request.getTestCases()));
         entity.setVisible(request.getVisible() == null || request.getVisible());
+        entity.setContentVisibility(ContentVisibility.parse(request.getContentVisibility()).name());
     }
 
     private Object parseJsonArray(String json) {

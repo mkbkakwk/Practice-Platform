@@ -14,6 +14,7 @@ public class OfficeDocSubmissionEntity {
     private Integer id;
     private Integer userId;
     private Integer exerciseId;
+    private Long contestProblemId;
     @com.fasterxml.jackson.annotation.JsonIgnore
     private String studentDocPath;
     private String studentDocName;
@@ -35,6 +36,8 @@ public class OfficeDocSubmissionEntity {
     public void setUserId(Integer userId) { this.userId = userId; }
     public Integer getExerciseId() { return exerciseId; }
     public void setExerciseId(Integer exerciseId) { this.exerciseId = exerciseId; }
+    public Long getContestProblemId() { return contestProblemId; }
+    public void setContestProblemId(Long contestProblemId) { this.contestProblemId = contestProblemId; }
     public String getStudentDocPath() { return studentDocPath; }
     public void setStudentDocPath(String studentDocPath) { this.studentDocPath = studentDocPath; }
     public String getStudentDocName() { return studentDocName; }
