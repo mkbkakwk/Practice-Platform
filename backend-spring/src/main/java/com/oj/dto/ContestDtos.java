@@ -22,4 +22,5 @@ public final class ContestDtos {
     public record Participant(
             Long id, Integer userId, String username, Integer addedBy, Instant joinedAt) {}
 
+    public record StudentOption(Integer id, String username, String role) {}
 }

@@ -193,6 +193,28 @@ class ContestCoreIntegrationTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void contentManagersCanSearchOnlySafeStudentIdentityFields() {
+        as(teacher, "teacher", "TEACHER");
+        var result = contests.students("student", 1, 20);
+        assertThat(result).containsEntry("total", 2L).containsEntry("page", 1).containsEntry("pageSize", 20);
+        var options = (List<ContestDtos.StudentOption>) result.get("students");
+        assertThat(options).extracting(ContestDtos.StudentOption::username)
+                .containsExactly("other-student", "student");
+        assertThat(options).allSatisfy(option -> {
+            assertThat(option.id()).isNotNull();
+            assertThat(option.role()).isEqualTo("USER");
+        });
+
+        as(admin, "admin", "ADMIN");
+        assertThat((List<ContestDtos.StudentOption>) contests.students("other", 1, 20).get("students"))
+                .extracting(ContestDtos.StudentOption::username).containsExactly("other-student");
+
+        as(student, "student", "USER");
+        assertThatThrownBy(() -> contests.students("", 1, 20)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void participantAndProblemMutationsAreDeterministic() throws Exception {
         as(teacher, "teacher", "TEACHER");
         int contestId = contests.create(request("Concurrent join", "OPEN")).getId();

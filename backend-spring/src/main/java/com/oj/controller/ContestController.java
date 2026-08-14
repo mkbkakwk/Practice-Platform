@@ -27,6 +27,13 @@ public class ContestController {
         return service.list(Math.max(1, page), Math.min(50, Math.max(1, pageSize)));
     }
 
+    @GetMapping("/students")
+    public Map<String, Object> students(@RequestParam(defaultValue = "") String query,
+                                        @RequestParam(defaultValue = "1") int page,
+                                        @RequestParam(defaultValue = "20") int pageSize) {
+        return service.students(query, Math.max(1, page), Math.min(50, Math.max(1, pageSize)));
+    }
+
     @GetMapping("/{contestId}")
     public Map<String, Object> detail(@PathVariable int contestId) {
         return Map.of("detail", service.detail(contestId));

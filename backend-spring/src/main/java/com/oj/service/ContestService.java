@@ -90,6 +90,21 @@ public class ContestService {
         return Map.of("total", result.getTotal(), "page", page, "pageSize", pageSize, "contests", contests);
     }
 
+    public Map<String, Object> students(String search, int page, int pageSize) {
+        CurrentUser.requireContentManager();
+        QueryWrapper<UserEntity> query = new QueryWrapper<UserEntity>()
+                .eq("role", "USER")
+                .orderByAsc("username")
+                .orderByAsc("id");
+        String normalized = search == null ? "" : search.trim();
+        if (!normalized.isEmpty()) query.like("username", normalized);
+        Page<UserEntity> result = userMapper.selectPage(new Page<>(page, pageSize), query);
+        List<ContestDtos.StudentOption> students = result.getRecords().stream()
+                .map(user -> new ContestDtos.StudentOption(user.getId(), user.getUsername(), user.getRole()))
+                .toList();
+        return Map.of("total", result.getTotal(), "page", page, "pageSize", pageSize, "students", students);
+    }
+
     public ContestDtos.Detail detail(int contestId) {
         ContestEntity contest = requireVisibleContest(contestId);
         boolean participant = isParticipant(contestId, CurrentUser.getId());
