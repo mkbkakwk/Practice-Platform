@@ -26,6 +26,7 @@ import AdminUserList from "@/pages/AdminUserList";
 import ContestList from "@/pages/ContestList";
 import ContestDetail from "@/pages/ContestDetail";
 import ContestManage from "@/pages/ContestManage";
+import { Toaster } from "sonner";
 
 function Layout({ label, children }: { label?: string; children: React.ReactNode }) {
   return <div className="min-h-screen bg-white text-zinc-900"><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/admin/contests/:id" element={<Layout label="管理比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <Toaster richColors position="top-center" />
         </HashRouter>
       </AuthProvider>
     </ErrorBoundary>
