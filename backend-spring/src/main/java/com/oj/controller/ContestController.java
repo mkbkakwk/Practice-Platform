@@ -124,7 +124,7 @@ public class ContestController {
             @PathVariable int contestId,
             @PathVariable long contestProblemId,
             @RequestParam("file") MultipartFile file) {
-        ContestDtos.OfficeSubmission submission = service.submitOffice(contestId, contestProblemId, file);
+        OfficeSubmissionDtos.StudentSubmission submission = service.submitOffice(contestId, contestProblemId, file);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("submission", submission));
     }
 }

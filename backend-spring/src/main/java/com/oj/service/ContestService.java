@@ -341,20 +341,19 @@ public class ContestService {
     }
 
     @Transactional(noRollbackFor = ApiException.class)
-    public ContestDtos.OfficeSubmission submitOffice(int contestId, long contestProblemId, MultipartFile file) {
+    public OfficeSubmissionDtos.StudentSubmission submitOffice(
+            int contestId, long contestProblemId, MultipartFile file) {
         ContestProblemEntity item = validateSubmissionContext(contestId, contestProblemId,
                 ContestProblemType.OFFICE);
         OfficeExerciseEntity exercise = exerciseMapper.selectById(item.getOfficeExerciseId());
         if (exercise == null || !Boolean.TRUE.equals(exercise.getVisible())) {
             throw ContestException.conflict("CONTEST_PROBLEM_NOT_VISIBLE", "比赛题目当前不可用");
         }
-        OfficeDocSubmissionEntity submission = officeDocService.submitContestDoc(exercise, file, contestProblemId);
+        OfficeSubmissionDtos.StudentSubmission submission =
+                officeDocService.submitContestDoc(exercise, file, contestProblemId);
         log.info("Contest action=office-submit contestId={} contestProblemId={} submissionId={} userId={} phase=RUNNING",
-                contestId, contestProblemId, submission.getId(), CurrentUser.getId());
-        return new ContestDtos.OfficeSubmission(submission.getId(), submission.getExerciseId(),
-                submission.getContestProblemId(), submission.getStudentDocName(), submission.getStatus(),
-                submission.getScore(), submission.getJudgeVersion(), submission.getResultDetail(),
-                submission.getJudgedAt());
+                contestId, contestProblemId, submission.id(), CurrentUser.getId());
+        return submission;
     }
 
     private ContestProblemEntity validateSubmissionContext(int contestId, long contestProblemId,

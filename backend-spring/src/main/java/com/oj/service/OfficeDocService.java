@@ -9,6 +9,7 @@ import com.oj.contest.ContestProblemType;
 import com.oj.contest.ContentVisibility;
 import com.oj.mapper.ContestProblemMapper;
 import com.oj.dto.OfficeExerciseCreateRequest;
+import com.oj.dto.OfficeSubmissionDtos;
 import com.oj.dto.ReviewRequest;
 import com.oj.entity.OfficeDocSubmissionEntity;
 import com.oj.entity.OfficeExerciseEntity;
@@ -21,6 +22,7 @@ import com.oj.office.OfficeDocumentParser;
 import com.oj.office.OfficeFileValidator;
 import com.oj.office.OfficeJudgeConcurrencyGate;
 import com.oj.office.OfficeResultSerializer;
+import com.oj.office.OfficeSubmissionResponseMapper;
 import com.oj.office.OfficeStorageService;
 import com.oj.office.model.OfficeDocumentModel;
 import com.oj.office.model.OfficeJudgeResult;
@@ -51,6 +53,7 @@ public class OfficeDocService {
     private final OfficeDocumentComparator comparator;
     private final OfficeJudgeConcurrencyGate concurrencyGate;
     private final OfficeResultSerializer resultSerializer;
+    private final OfficeSubmissionResponseMapper responseMapper;
     private final ContestProblemMapper contestProblemMapper;
     private final ContestContentAccessPolicy contestAccess;
 
@@ -63,6 +66,7 @@ public class OfficeDocService {
                             OfficeDocumentComparator comparator,
                             OfficeJudgeConcurrencyGate concurrencyGate,
                             OfficeResultSerializer resultSerializer,
+                            OfficeSubmissionResponseMapper responseMapper,
                             ContestProblemMapper contestProblemMapper,
                             ContestContentAccessPolicy contestAccess) {
         this.exerciseMapper = exerciseMapper;
@@ -74,6 +78,7 @@ public class OfficeDocService {
         this.comparator = comparator;
         this.concurrencyGate = concurrencyGate;
         this.resultSerializer = resultSerializer;
+        this.responseMapper = responseMapper;
         this.contestProblemMapper = contestProblemMapper;
         this.contestAccess = contestAccess;
     }
@@ -225,7 +230,7 @@ public class OfficeDocService {
         return exercise.getTeacherDocName();
     }
 
-    public OfficeDocSubmissionEntity submitDoc(int exerciseId, MultipartFile file) {
+    public OfficeSubmissionDtos.StudentSubmission submitDoc(int exerciseId, MultipartFile file) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
 
@@ -234,17 +239,17 @@ public class OfficeDocService {
                 || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility())) {
             throw ApiException.conflict("该练习已停用，无法继续提交");
         }
-        return judgeDocument(exercise, file, userId, null);
+        return responseMapper.student(judgeDocument(exercise, file, userId, null));
     }
 
-    public OfficeDocSubmissionEntity submitContestDoc(OfficeExerciseEntity exercise,
-                                                       MultipartFile file, long contestProblemId) {
+    public OfficeSubmissionDtos.StudentSubmission submitContestDoc(OfficeExerciseEntity exercise,
+                                                                    MultipartFile file, long contestProblemId) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
         if (!Boolean.TRUE.equals(exercise.getVisible())) {
             throw ApiException.conflict("该练习已停用，无法继续提交");
         }
-        return judgeDocument(exercise, file, userId, contestProblemId);
+        return responseMapper.student(judgeDocument(exercise, file, userId, contestProblemId));
     }
 
     private OfficeDocSubmissionEntity judgeDocument(OfficeExerciseEntity exercise, MultipartFile file,
@@ -328,13 +333,19 @@ public class OfficeDocService {
         }
     }
 
-    public OfficeDocSubmissionEntity getSubmission(int submissionId) {
+    public OfficeSubmissionDtos.StudentSubmission getStudentSubmission(int submissionId) {
         OfficeDocSubmissionEntity submission = findSubmission(submissionId);
         requireCanAccessSubmission(submission);
-        return submission;
+        return responseMapper.student(submission);
     }
 
-    public Map<String, Object> listSubmissions(Integer exerciseId, int page, int pageSize) {
+    public OfficeSubmissionDtos.ReviewerSubmission getReviewerSubmission(int submissionId) {
+        OfficeDocSubmissionEntity submission = findSubmission(submissionId);
+        requireCanReviewSubmission(submission);
+        return responseMapper.reviewer(submission);
+    }
+
+    public OfficeSubmissionDtos.SubmissionListResponse listSubmissions(Integer exerciseId, int page, int pageSize) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
         QueryWrapper<OfficeDocSubmissionEntity> query = new QueryWrapper<>();
@@ -362,30 +373,19 @@ public class OfficeDocService {
 
         query.orderByDesc("id");
         Page<OfficeDocSubmissionEntity> result = submissionMapper.selectPage(new Page<>(page, pageSize), query);
-        List<Map<String, Object>> items = result.getRecords().stream().map(submission -> {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", submission.getId());
-            item.put("exerciseId", submission.getExerciseId());
-            item.put("contestProblemId", submission.getContestProblemId());
-            item.put("userId", submission.getUserId());
-            item.put("studentDocName", submission.getStudentDocName());
-            item.put("status", submission.getStatus());
-            item.put("score", submission.getScore());
-            item.put("createdAt", submission.getCreatedAt());
-            return item;
-        }).toList();
-        return Map.of("total", result.getTotal(), "page", page, "pageSize", pageSize, "submissions", items);
+        return new OfficeSubmissionDtos.SubmissionListResponse(
+                result.getTotal(), page, pageSize,
+                result.getRecords().stream().map(responseMapper::summary).toList());
     }
 
-    public OfficeDocSubmissionEntity review(int submissionId, ReviewRequest request) {
+    public OfficeSubmissionDtos.ReviewerSubmission review(int submissionId, ReviewRequest request) {
         OfficeDocSubmissionEntity submission = findSubmission(submissionId);
-        OfficeExerciseEntity exercise = findExercise(submission.getExerciseId());
-        CurrentUser.requireCanManage(exercise.getCreatedBy());
+        requireCanReviewSubmission(submission);
         submission.setScore(Math.max(0, Math.min(100, request.getScore())));
         submission.setTeacherComment(request.getComment() == null ? "" : request.getComment());
         submission.setStatus("REVIEWED");
         submissionMapper.updateById(submission);
-        return submission;
+        return responseMapper.reviewer(submission);
     }
 
     public File getStudentDocFile(int submissionId) {
@@ -452,6 +452,11 @@ public class OfficeDocService {
             if (CurrentUser.canManage(exercise.getCreatedBy())) return;
         }
         throw ApiException.forbidden("无权查看此提交记录");
+    }
+
+    private void requireCanReviewSubmission(OfficeDocSubmissionEntity submission) {
+        OfficeExerciseEntity exercise = findExercise(submission.getExerciseId());
+        CurrentUser.requireCanManage(exercise.getCreatedBy());
     }
 
     private Map<Integer, String> loadCreatorNames(List<OfficeExerciseEntity> exercises) {
