@@ -1,99 +1,455 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { FileUp, Loader2, Send } from "lucide-react";
-import { api, ApiError, type ContestDetail as ContestDetailModel, type ContestProblemItem, type LanguageDef, type Submission } from "@/lib/api";
+import { toast } from "sonner";
+import {
+  api,
+  getApiErrorMessage,
+  isAbortError,
+  type ContestDetail as ContestDetailModel,
+  type ContestProblemItem,
+  type StudentDocSubmission,
+  type LanguageDef,
+  type Submission,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CodeEditor } from "@/components/CodeEditor";
+import { OfficeJudgeResult } from "@/components/OfficeJudgeResult";
+import { SubmissionResultCard } from "@/components/SubmissionResultCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Markdown } from "@/components/Markdown";
-import { VerdictBadge } from "@/lib/verdict";
-import { PHASE_LABEL, formatTime } from "./ContestList";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PHASE_LABEL, formatTime, phaseClass } from "./ContestList";
+import { cn } from "@/lib/utils";
+
+export const CONTEST_REFRESH_MS = 15_000;
+const DOCX_MAX_BYTES = 10 * 1024 * 1024;
+
+interface ProblemDraft {
+  language: string;
+  codeByLanguage: Record<string, string>;
+}
+
+interface ProblemRunState {
+  busy: "submitting" | "polling" | null;
+  pollCount: number;
+  submission?: Submission;
+  officeSubmission?: StudentDocSubmission;
+  notice?: string;
+  error?: string;
+}
 
 export default function ContestDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const contestId = Number(id);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [detail, setDetail] = useState<ContestDetailModel | null>(null);
   const [languages, setLanguages] = useState<LanguageDef[]>([]);
+  const [languageError, setLanguageError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [drafts, setDrafts] = useState<Record<number, ProblemDraft>>({});
+  const [runs, setRuns] = useState<Record<number, ProblemRunState>>({});
+  const [files, setFiles] = useState<Record<number, File | null>>({});
+  const [now, setNow] = useState(() => Date.now());
+  const joiningRef = useRef(false);
+  const phaseRef = useRef<ContestDetailModel["contest"]["phase"] | null>(null);
+  const boundaryRefreshRef = useRef<number | null>(null);
+  const controllersRef = useRef<Record<number, AbortController>>({});
+  const attemptRef = useRef<Record<number, number>>({});
+  const busyProblemRef = useRef<Set<number>>(new Set());
+  const mountedRef = useRef(true);
 
-  const reload = async () => {
+  const applyDetail = useCallback((next: ContestDetailModel, notify = false) => {
+    if (!mountedRef.current) return;
+    const previous = phaseRef.current;
+    phaseRef.current = next.contest.phase;
+    setDetail(next);
+    if (!notify || !previous || previous === next.contest.phase) return;
+    if (previous === "UPCOMING" && next.contest.phase === "RUNNING") toast.success("比赛已开始");
+    if (previous === "RUNNING" && next.contest.phase === "ENDED") toast.info("比赛已结束");
+  }, []);
+
+  const reload = useCallback(async (notify = false) => {
     const response = await api.getContest(contestId);
-    setDetail(response.detail);
-  };
+    applyDetail(response.detail, notify);
+  }, [applyDetail, contestId]);
+
   useEffect(() => {
     let active = true;
-    Promise.all([api.getContest(contestId), api.getLanguages()]).then(([contest, languageResult]) => {
+    setLoading(true);
+    setError("");
+    Promise.allSettled([api.getContest(contestId), api.getLanguages()]).then(([contestResult, languageResult]) => {
       if (!active) return;
-      setDetail(contest.detail);
-      setLanguages(languageResult.languages);
-    }).catch((exception) => active && setError(exception instanceof ApiError ? exception.message : "比赛加载失败"))
-      .finally(() => active && setLoading(false));
+      if (contestResult.status === "fulfilled") applyDetail(contestResult.value.detail);
+      else setError(getApiErrorMessage(contestResult.reason, "比赛加载失败"));
+      if (languageResult.status === "fulfilled") {
+        setLanguages(languageResult.value.languages);
+        setLanguageError(languageResult.value.languages.length === 0 ? "当前没有可用编程语言，算法提交已禁用。" : "");
+      } else {
+        setLanguages([]);
+        setLanguageError(getApiErrorMessage(languageResult.reason, "编程语言列表加载失败，算法提交已禁用。"));
+      }
+    }).finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [contestId]);
+  }, [applyDetail, contestId]);
+
+  useEffect(() => {
+    if (!detail || languages.length === 0) return;
+    const first = languages[0];
+    setDrafts((current) => {
+      const next = { ...current };
+      for (const problem of detail.problems) {
+        if (problem.problemType !== "ALGORITHM" || next[problem.contestProblemId]) continue;
+        next[problem.contestProblemId] = {
+          language: first.id,
+          codeByLanguage: { [first.id]: first.template },
+        };
+      }
+      return next;
+    });
+  }, [detail, languages]);
+
+  const currentPhase = detail?.contest.phase;
+  useEffect(() => {
+    if (!currentPhase || !["UPCOMING", "RUNNING"].includes(currentPhase)) return;
+    const interval = window.setInterval(() => void reload(true).catch((reason) => setError(getApiErrorMessage(reason, "比赛状态刷新失败"))), CONTEST_REFRESH_MS);
+    return () => window.clearInterval(interval);
+  }, [currentPhase, reload]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const boundary = detail?.contest.phase === "UPCOMING"
+    ? Date.parse(detail.contest.startAt)
+    : detail?.contest.phase === "RUNNING" ? Date.parse(detail.contest.endAt) : null;
+  useEffect(() => {
+    if (boundary == null || now < boundary || boundaryRefreshRef.current === boundary) return;
+    boundaryRefreshRef.current = boundary;
+    void reload(true).catch((reason) => setError(getApiErrorMessage(reason, "比赛状态刷新失败")));
+  }, [boundary, now, reload]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const controllers = controllersRef.current;
+    const busyProblems = busyProblemRef.current;
+    return () => {
+      mountedRef.current = false;
+      Object.values(controllers).forEach((controller) => controller.abort());
+      busyProblems.clear();
+    };
+  }, []);
+
+  const requestedProblemId = Number(searchParams.get("problem"));
+  const activeProblem = useMemo(() => {
+    if (!detail?.problems.length) return null;
+    return detail.problems.find((problem) => problem.contestProblemId === requestedProblemId) ?? detail.problems[0];
+  }, [detail, requestedProblemId]);
+
+  useEffect(() => {
+    if (!activeProblem || requestedProblemId === activeProblem.contestProblemId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("problem", String(activeProblem.contestProblemId));
+    setSearchParams(next, { replace: true });
+  }, [activeProblem, requestedProblemId, searchParams, setSearchParams]);
+
+  function selectProblem(problemId: number) {
+    const next = new URLSearchParams(searchParams);
+    next.set("problem", String(problemId));
+    setSearchParams(next);
+  }
+
+  function updateDraft(problemId: number, updater: (current: ProblemDraft) => ProblemDraft) {
+    setDrafts((current) => {
+      const existing = current[problemId];
+      if (!existing) return current;
+      return { ...current, [problemId]: updater(existing) };
+    });
+  }
+
+  function switchLanguage(problemId: number, language: string) {
+    updateDraft(problemId, (current) => ({
+      language,
+      codeByLanguage: {
+        ...current.codeByLanguage,
+        [language]: current.codeByLanguage[language] ?? languages.find((item) => item.id === language)?.template ?? "",
+      },
+    }));
+  }
+
+  function updateCode(problemId: number, code: string) {
+    updateDraft(problemId, (current) => ({
+      ...current,
+      codeByLanguage: { ...current.codeByLanguage, [current.language]: code },
+    }));
+  }
+
+  function updateRun(problemId: number, patch: Partial<ProblemRunState>) {
+    if (!mountedRef.current) return;
+    setRuns((current) => {
+      const previous = current[problemId] ?? { busy: null, pollCount: 0 };
+      return { ...current, [problemId]: { ...previous, ...patch } };
+    });
+  }
+
+  async function submitAlgorithm(problem: ContestProblemItem) {
+    const problemId = problem.contestProblemId;
+    const draft = drafts[problemId];
+    if (!draft || busyProblemRef.current.has(problemId)) return;
+    const code = draft.codeByLanguage[draft.language] ?? "";
+    if (!draft.language || !code.trim()) return;
+
+    busyProblemRef.current.add(problemId);
+    controllersRef.current[problemId]?.abort();
+    const controller = new AbortController();
+    controllersRef.current[problemId] = controller;
+    const attempt = (attemptRef.current[problemId] ?? 0) + 1;
+    attemptRef.current[problemId] = attempt;
+    updateRun(problemId, { busy: "submitting", pollCount: 0, submission: undefined, notice: undefined, error: undefined });
+    try {
+      const response = await api.submitContestAlgorithm(contestId, problemId, draft.language, code);
+      if (attemptRef.current[problemId] !== attempt || controller.signal.aborted) return;
+      const queued: Submission = {
+        id: response.submissionId,
+        verdict: response.status,
+        timeMs: 0,
+        memoryKb: 0,
+        passed: 0,
+        total: 0,
+        language: draft.language,
+        code,
+        createdAt: new Date().toISOString(),
+        contestProblemId: problemId,
+      };
+      updateRun(problemId, { busy: "polling", submission: queued });
+      const settled = await api.pollSubmission(response.submissionId, {
+        timeoutMs: 60_000,
+        signal: controller.signal,
+        onTick: (pollCount, submission) => {
+          if (attemptRef.current[problemId] !== attempt || controller.signal.aborted) return;
+          updateRun(problemId, { pollCount, submission: submission ?? queued });
+        },
+      });
+      if (attemptRef.current[problemId] !== attempt || controller.signal.aborted) return;
+      const pending = settled.verdict === "PENDING" || settled.verdict === "JUDGING";
+      updateRun(problemId, {
+        busy: null,
+        submission: settled,
+        notice: pending ? "判题仍在进行，可前往提交记录查看最终结果。" : undefined,
+      });
+      if (!pending) toast.success(`Submission #${settled.id} 判题完成`);
+    } catch (reason) {
+      if (!isAbortError(reason) && attemptRef.current[problemId] === attempt) {
+        updateRun(problemId, { busy: null, error: getApiErrorMessage(reason, "提交失败") });
+      }
+    } finally {
+      if (controllersRef.current[problemId] === controller) delete controllersRef.current[problemId];
+      busyProblemRef.current.delete(problemId);
+    }
+  }
+
+  async function submitOffice(problem: ContestProblemItem) {
+    const problemId = problem.contestProblemId;
+    const file = files[problemId];
+    if (!file || busyProblemRef.current.has(problemId)) return;
+    busyProblemRef.current.add(problemId);
+    updateRun(problemId, { busy: "submitting", officeSubmission: undefined, notice: undefined, error: undefined });
+    try {
+      const response = await api.submitContestOffice(contestId, problemId, file);
+      updateRun(problemId, { busy: null, officeSubmission: response.submission });
+      toast.success("DOCX 上传并判题完成");
+    } catch (reason) {
+      updateRun(problemId, { busy: null, error: getApiErrorMessage(reason, "DOCX 提交失败") });
+    } finally {
+      busyProblemRef.current.delete(problemId);
+    }
+  }
+
+  function chooseFile(problemId: number, file: File | null) {
+    if (!file) {
+      setFiles((current) => ({ ...current, [problemId]: null }));
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".docx")) {
+      updateRun(problemId, { error: "仅支持 DOCX 文件。" });
+      setFiles((current) => ({ ...current, [problemId]: null }));
+      return;
+    }
+    if (file.size > DOCX_MAX_BYTES) {
+      updateRun(problemId, { error: "文件超过 10 MiB。" });
+      setFiles((current) => ({ ...current, [problemId]: null }));
+      return;
+    }
+    updateRun(problemId, { error: undefined });
+    setFiles((current) => ({ ...current, [problemId]: file }));
+  }
+
+  async function join() {
+    if (joiningRef.current || !detail) return;
+    joiningRef.current = true;
+    setJoining(true);
+    setError("");
+    try {
+      await api.joinContest(detail.contest.id);
+      await reload();
+      toast.success("已加入比赛");
+    } catch (reason) {
+      setError(getApiErrorMessage(reason, "加入失败"));
+    } finally {
+      joiningRef.current = false;
+      setJoining(false);
+    }
+  }
 
   if (loading) return <div className="py-20 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" /></div>;
   if (!detail) return <div className="p-8"><p role="alert" className="text-red-600">{error || "比赛不存在"}</p></div>;
+
   const contest = detail.contest;
   const canJoin = user?.role === "USER" && contest.status === "PUBLISHED" && contest.phase === "UPCOMING"
     && contest.accessType === "OPEN" && !contest.participant;
-  return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+  const countdown = countdownLabel(contest.phase, contest.startAt, contest.endAt, now);
+
+  return <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
     <div className="mb-5"><Link className="text-sm text-zinc-500 hover:underline" to="/contests">← 返回比赛</Link>
-      <div className="mt-3 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">{contest.title}</h1><p className="mt-1 text-sm text-zinc-500">{formatTime(contest.startAt)} — {formatTime(contest.endAt)}</p></div><span className="rounded bg-zinc-900 px-3 py-1 text-sm font-semibold text-white">{PHASE_LABEL[contest.phase]}</span></div>
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">{contest.title}</h1><p className="mt-1 text-sm text-zinc-500">{formatTime(contest.startAt)} — {formatTime(contest.endAt)}</p>{countdown && <p className="mt-1 text-sm font-medium text-blue-700">{countdown}</p>}</div><span className={cn("rounded px-3 py-1 text-sm font-semibold", phaseClass(contest.phase))}>{PHASE_LABEL[contest.phase]}</span></div>
     </div>
     {error && <p role="alert" className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     <Card className="mb-4 p-5"><Markdown>{contest.description || "暂无比赛说明。"}</Markdown><div className="mt-3 flex flex-wrap gap-3 text-sm text-zinc-500"><span>{contest.accessType === "OPEN" ? "公开报名" : "邀请制"}</span><span>{contest.participant ? "已参赛" : "未参赛"}</span></div>
-      {canJoin && <Button className="mt-4" onClick={async () => { try { await api.joinContest(contest.id); await reload(); } catch (exception) { setError(exception instanceof ApiError ? exception.message : "加入失败"); } }}>加入比赛</Button>}
+      {canJoin && <Button className="mt-4" disabled={joining} onClick={() => void join()}>{joining && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{joining ? "加入中..." : "加入比赛"}</Button>}
       {contest.accessType === "INVITE_ONLY" && !contest.participant && user?.role === "USER" && <p className="mt-3 text-sm text-amber-700">邀请制比赛仅对受邀学生开放。</p>}
     </Card>
     {contest.phase === "UPCOMING" && <p className="mb-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">比赛尚未开始；CONTEST_ONLY 题目正文将在服务端确认开赛且你是参赛者后开放。</p>}
     {contest.phase === "CANCELLED" && <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">比赛已取消，历史信息保留，但不能创建新提交。</p>}
-    <h2 className="mb-3 text-lg font-semibold">比赛题目</h2>
-    {detail.problems.length === 0 ? <Card className="p-8 text-center text-zinc-400">当前阶段没有可展示的题目</Card>
-      : <div className="space-y-4">{detail.problems.map((problem) => <ContestProblem key={problem.contestProblemId} contestId={contest.id} phase={contest.phase} participant={contest.participant} problem={problem} languages={languages} onError={setError} />)}</div>}
+    {detail.problems.length === 0 ? <Card className="p-8 text-center text-zinc-500">当前阶段没有可展示的题目</Card> : <>
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-2 md:hidden" aria-label="比赛题目导航">
+        {detail.problems.map((problem) => <ProblemNavButton key={problem.contestProblemId} problem={problem} active={problem.contestProblemId === activeProblem?.contestProblemId} compact onClick={() => selectProblem(problem.contestProblemId)} />)}
+      </div>
+      <div className="grid gap-5 md:grid-cols-[260px_minmax(0,1fr)]">
+        <Card className="hidden h-fit p-3 md:block"><h2 className="mb-2 px-2 text-sm font-semibold">题目导航</h2><div className="space-y-1">{detail.problems.map((problem) => <ProblemNavButton key={problem.contestProblemId} problem={problem} active={problem.contestProblemId === activeProblem?.contestProblemId} onClick={() => selectProblem(problem.contestProblemId)} />)}</div></Card>
+        {activeProblem && <ContestProblemPanel
+          problem={activeProblem}
+          phase={contest.phase}
+          participant={contest.participant}
+          languages={languages}
+          languageError={languageError}
+          draft={drafts[activeProblem.contestProblemId]}
+          run={runs[activeProblem.contestProblemId]}
+          file={files[activeProblem.contestProblemId] ?? null}
+          onLanguageChange={(language) => switchLanguage(activeProblem.contestProblemId, language)}
+          onCodeChange={(code) => updateCode(activeProblem.contestProblemId, code)}
+          onFileChange={(file) => chooseFile(activeProblem.contestProblemId, file)}
+          onSubmitAlgorithm={() => void submitAlgorithm(activeProblem)}
+          onSubmitOffice={() => void submitOffice(activeProblem)}
+        />}
+      </div>
+    </>}
   </div>;
 }
 
-function ContestProblem({ contestId, phase, participant, problem, languages, onError }: {
-  contestId: number; phase: ContestDetailModel["contest"]["phase"]; participant: boolean;
-  problem: ContestProblemItem; languages: LanguageDef[]; onError: (message: string) => void;
+function ProblemNavButton({ problem, active, compact = false, onClick }: {
+  problem: ContestProblemItem;
+  active: boolean;
+  compact?: boolean;
+  onClick: () => void;
 }) {
-  const [language, setLanguage] = useState(languages[0]?.id ?? "python");
-  const [code, setCode] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<Submission | null>(null);
-  const [officeResult, setOfficeResult] = useState<string | null>(null);
-  useEffect(() => { if (!language && languages[0]) setLanguage(languages[0].id); }, [language, languages]);
+  return <button type="button" aria-current={active ? "page" : undefined} onClick={onClick} className={cn(
+    "rounded-md border text-left transition-colors",
+    compact ? "min-w-36 px-3 py-2" : "w-full px-3 py-2",
+    active ? "border-zinc-900 bg-zinc-900 text-white" : "border-transparent text-zinc-700 hover:bg-zinc-100",
+  )}><span className="mr-2 font-bold">{problem.label}</span><span className="text-sm">{problem.title}</span><span className={cn("ml-2 text-[10px]", active ? "text-zinc-300" : "text-zinc-500")}>{problem.problemType === "ALGORITHM" ? "算法" : "DOCX"} · {problem.difficulty}</span></button>;
+}
+
+function ContestProblemPanel({
+  problem,
+  phase,
+  participant,
+  languages,
+  languageError,
+  draft,
+  run,
+  file,
+  onLanguageChange,
+  onCodeChange,
+  onFileChange,
+  onSubmitAlgorithm,
+  onSubmitOffice,
+}: {
+  problem: ContestProblemItem;
+  phase: ContestDetailModel["contest"]["phase"];
+  participant: boolean;
+  languages: LanguageDef[];
+  languageError: string;
+  draft?: ProblemDraft;
+  run?: ProblemRunState;
+  file: File | null;
+  onLanguageChange: (language: string) => void;
+  onCodeChange: (code: string) => void;
+  onFileChange: (file: File | null) => void;
+  onSubmitAlgorithm: () => void;
+  onSubmitOffice: () => void;
+}) {
   const canSubmit = phase === "RUNNING" && participant;
-  const content = problem.content as { description?: string; inputFmt?: string; outputFmt?: string; samples?: Array<{ input: string; output: string }> } | null;
+  const content = problem.content as {
+    description?: string;
+    inputFmt?: string;
+    outputFmt?: string;
+    samples?: Array<{ input: string; output: string }>;
+  } | null;
+  const code = draft ? (draft.codeByLanguage[draft.language] ?? "") : "";
+  const busy = run?.busy != null;
 
-  async function submitAlgorithm() {
-    setSubmitting(true); onError("");
-    try {
-      const response = await api.submitContestAlgorithm(contestId, problem.contestProblemId, language, code);
-      setResult(await api.pollSubmission(response.submissionId, { timeoutMs: 60000 }));
-    } catch (exception) { onError(exception instanceof ApiError ? exception.message : "提交失败"); }
-    finally { setSubmitting(false); }
-  }
-  async function submitOffice() {
-    if (!file) return;
-    setSubmitting(true); onError("");
-    try {
-      const response = await api.submitContestOffice(contestId, problem.contestProblemId, file);
-      setOfficeResult(`${response.submission.status}${response.submission.score == null ? "" : ` · ${response.submission.score} 分`}`);
-    } catch (exception) { onError(exception instanceof ApiError ? exception.message : "DOCX 提交失败"); }
-    finally { setSubmitting(false); }
-  }
-
-  return <Card className="p-5" data-testid={`contest-problem-${problem.contestProblemId}`}>
-    <div className="mb-3 flex items-center gap-2"><span className="rounded bg-zinc-900 px-2 py-1 text-xs font-bold text-white">{problem.label}</span><h3 className="font-semibold">{problem.title}</h3><span className="text-xs text-zinc-500">{problem.problemType === "ALGORITHM" ? "算法" : "DOCX"}</span></div>
+  return <Card className="min-w-0 p-5" data-testid={`contest-problem-${problem.contestProblemId}`}>
+    <div className="mb-4 flex items-center gap-2"><span className="rounded bg-zinc-900 px-2 py-1 text-xs font-bold text-white">{problem.label}</span><h2 className="text-lg font-semibold">{problem.title}</h2><span className="text-xs text-zinc-500">{problem.problemType === "ALGORITHM" ? "算法" : "DOCX"}</span></div>
     {content?.description && <Markdown>{content.description}</Markdown>}
-    {content?.inputFmt && <div className="mt-3"><h4 className="text-sm font-semibold">输入</h4><Markdown>{content.inputFmt}</Markdown></div>}
-    {content?.outputFmt && <div className="mt-3"><h4 className="text-sm font-semibold">输出</h4><Markdown>{content.outputFmt}</Markdown></div>}
-    {canSubmit && problem.problemType === "ALGORITHM" && <div className="mt-4 space-y-3 border-t pt-4"><select aria-label={`${problem.label} 编程语言`} value={language} onChange={(event) => setLanguage(event.target.value)} className="h-9 rounded border px-3 text-sm">{languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><textarea aria-label={`${problem.label} 源代码`} className="min-h-40 w-full rounded border p-3 font-mono text-sm" value={code} onChange={(event) => setCode(event.target.value)} /><Button disabled={submitting || !code.trim()} onClick={() => void submitAlgorithm()}><Send className="mr-1 h-4 w-4" />提交代码</Button>{result && <div className="flex items-center gap-2 text-sm"><span>提交 #{result.id}</span><VerdictBadge verdict={result.verdict} /></div>}</div>}
-    {canSubmit && problem.problemType === "OFFICE" && <div className="mt-4 space-y-3 border-t pt-4"><input aria-label={`${problem.label} DOCX 文件`} type="file" accept=".docx" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /><Button disabled={submitting || !file} onClick={() => void submitOffice()}><FileUp className="mr-1 h-4 w-4" />提交 DOCX</Button>{officeResult && <p className="text-sm text-green-700">判题结果：{officeResult}</p>}</div>}
-    {!canSubmit && <p className="mt-3 text-xs text-zinc-500">{phase === "ENDED" ? "比赛已结束；历史题目仍可查看。" : "仅参赛者可在比赛进行中提交。"}</p>}
+    {content?.inputFmt && <section className="mt-4"><h3 className="text-sm font-semibold">输入</h3><Markdown>{content.inputFmt}</Markdown></section>}
+    {content?.outputFmt && <section className="mt-4"><h3 className="text-sm font-semibold">输出</h3><Markdown>{content.outputFmt}</Markdown></section>}
+    {content?.samples && content.samples.length > 0 && <section className="mt-5"><h3 className="mb-3 text-sm font-semibold">样例</h3><div className="space-y-4">{content.samples.map((sample, index) => <div key={index}><h4 className="mb-2 text-xs font-semibold text-zinc-500">样例 {index + 1}</h4><div className="grid gap-3 sm:grid-cols-2"><SampleBox label="输入" value={sample.input} /><SampleBox label="输出" value={sample.output} /></div></div>)}</div></section>}
+
+    {canSubmit && problem.problemType === "ALGORITHM" && <section className="mt-5 space-y-3 border-t pt-5">
+      {languageError && <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{languageError}</p>}
+      <div className="w-full sm:w-52"><Select value={draft?.language ?? ""} disabled={languages.length === 0 || busy} onValueChange={onLanguageChange}><SelectTrigger aria-label={`${problem.label} 编程语言`}><SelectValue placeholder="选择语言" /></SelectTrigger><SelectContent>{languages.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
+      <CodeEditor ariaLabel={`${problem.label} 源代码`} value={code} language={draft?.language ?? ""} onChange={onCodeChange} height="360px" />
+      <Button disabled={busy || languages.length === 0 || !draft?.language || !code.trim()} onClick={onSubmitAlgorithm}><Send className="mr-1 h-4 w-4" />{run?.busy === "submitting" ? "提交中..." : run?.busy === "polling" ? `正在判题${run.pollCount ? ` (${run.pollCount})` : "..."}` : "提交代码"}</Button>
+    </section>}
+
+    {canSubmit && problem.problemType === "OFFICE" && <section className="mt-5 space-y-3 border-t pt-5">
+      <label className="block text-sm font-medium" htmlFor={`contest-docx-${problem.contestProblemId}`}>DOCX 文件</label>
+      <input id={`contest-docx-${problem.contestProblemId}`} type="file" accept=".docx" disabled={busy} onChange={(event) => onFileChange(event.target.files?.[0] ?? null)} />
+      {file && <p className="text-sm text-zinc-600">{file.name} · {formatFileSize(file.size)}</p>}
+      <Button disabled={busy || !file} onClick={onSubmitOffice}>{run?.busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}<FileUp className="mr-1 h-4 w-4" />{run?.busy ? "上传判题中..." : "提交 DOCX"}</Button>
+    </section>}
+
+    {!canSubmit && <p className="mt-4 rounded bg-zinc-50 p-3 text-sm text-zinc-600">{phase === "ENDED" ? "比赛已结束；历史题目仍可查看。" : phase === "UPCOMING" ? "比赛尚未开始。" : "仅参赛者可在比赛进行中提交。"}</p>}
+    {run?.error && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{run.error}</p>}
+    {run?.submission && <SubmissionResultCard submission={run.submission} pendingMessage={run.notice} />}
+    {run?.officeSubmission && <OfficeJudgeResult submission={run.officeSubmission} />}
   </Card>;
+}
+
+function SampleBox({ label, value }: { label: string; value: string }) {
+  return <div><div className="mb-1 text-xs font-medium text-zinc-500">{label}</div><pre className="overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">{value}</pre></div>;
+}
+
+function countdownLabel(phase: ContestDetailModel["contest"]["phase"], startAt: string, endAt: string, now: number) {
+  if (phase === "UPCOMING") return `距离开始 ${formatDuration(Math.max(0, Date.parse(startAt) - now))}`;
+  if (phase === "RUNNING") return `剩余 ${formatDuration(Math.max(0, Date.parse(endAt) - now))}`;
+  if (phase === "ENDED") return "比赛已结束";
+  return "";
+}
+
+function formatDuration(milliseconds: number) {
+  const seconds = Math.floor(milliseconds / 1_000);
+  const hours = Math.floor(seconds / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const remainingSeconds = seconds % 60;
+  return [hours, minutes, remainingSeconds].map((part) => String(part).padStart(2, "0")).join(":");
+}
+
+function formatFileSize(bytes: number) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MiB` : `${Math.ceil(bytes / 1024)} KiB`;
 }

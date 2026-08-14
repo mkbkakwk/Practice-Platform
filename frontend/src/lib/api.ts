@@ -30,6 +30,14 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiErrorMessage(error: unknown, fallback = "操作失败") {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
+export function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -54,6 +62,7 @@ async function request<T>(
   try {
     res = await fetch(url, { ...options, headers });
   } catch (networkErr) {
+    if (isAbortError(networkErr)) throw networkErr;
     log.error(TAGS.api, `网络请求失败 ${method} ${path}`, networkErr);
     throw new ApiError(0, `网络请求失败：${(networkErr as Error).message}`);
   }
@@ -401,6 +410,12 @@ export interface ContestParticipant {
   joinedAt: string;
 }
 
+export interface ContestStudentOption {
+  id: number;
+  username: string;
+  role: "USER";
+}
+
 export interface ContestUpsert {
   title: string;
   description: string;
@@ -509,8 +524,8 @@ export const api = {
       "/submissions",
       { method: "POST", body: JSON.stringify({ problemId, language, code }) },
     ),
-  getSubmission: (id: number) =>
-    request<{ submission: Submission }>(`/submissions/${id}`),
+  getSubmission: (id: number, signal?: AbortSignal) =>
+    request<{ submission: Submission }>(`/submissions/${id}`, { signal }),
   listSubmissions: (params: { page?: number; pageSize?: number; problemId?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.page) q.set("page", String(params.page));
@@ -670,6 +685,15 @@ export const api = {
     );
   },
   getContest: (id: number) => request<{ detail: ContestDetail }>(`/contests/${id}`),
+  searchContestStudents: (params: { query?: string; page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.query) q.set("query", params.query);
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; students: ContestStudentOption[] }>(
+      `/contests/students?${q.toString()}`,
+    );
+  },
   createContest: (payload: ContestUpsert) => request<{ detail: ContestDetail }>("/contests", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -748,7 +772,12 @@ export const api = {
    */
   pollSubmission: async (
     id: number,
-    opts: { intervalMs?: number; timeoutMs?: number; onTick?: (poll: number, s: Submission | null) => void } = {},
+    opts: {
+      intervalMs?: number;
+      timeoutMs?: number;
+      onTick?: (poll: number, submission: Submission | null) => void;
+      signal?: AbortSignal;
+    } = {},
   ): Promise<Submission> => {
     const interval = opts.intervalMs ?? 1500;
     const timeout = opts.timeoutMs ?? 30000;
@@ -756,18 +785,41 @@ export const api = {
     let poll = 0;
     log.info(TAGS.poll, `开始轮询提交 #${id}，间隔 ${interval}ms，超时 ${timeout}ms`);
     while (Date.now() < deadline) {
+      throwIfAborted(opts.signal);
       poll++;
-      const { submission } = await api.getSubmission(id);
+      const { submission } = await api.getSubmission(id, opts.signal);
       log.debug(TAGS.poll, `#${id} 第 ${poll} 次轮询 verdict=${submission.verdict}`);
       opts.onTick?.(poll, submission);
       if (submission.verdict !== "PENDING" && submission.verdict !== "JUDGING") {
         log.info(TAGS.poll, `#${id} 评测完成 verdict=${submission.verdict} passed=${submission.passed}/${submission.total} timeMs=${submission.timeMs}`);
         return submission;
       }
-      await new Promise((r) => setTimeout(r, interval));
+      await abortableDelay(interval, opts.signal);
     }
     log.warn(TAGS.poll, `#${id} 轮询超时（${timeout}ms），仍为 PENDING`);
-    const { submission } = await api.getSubmission(id);
+    throwIfAborted(opts.signal);
+    const { submission } = await api.getSubmission(id, opts.signal);
     return submission;
   },
 };
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw new DOMException("Polling aborted", "AbortError");
+}
+
+function abortableDelay(milliseconds: number, signal?: AbortSignal) {
+  if (!signal) return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+  throwIfAborted(signal);
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    const onAbort = () => {
+      window.clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      reject(new DOMException("Polling aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}

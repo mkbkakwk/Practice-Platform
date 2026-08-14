@@ -221,3 +221,28 @@ describe("protected document downloads", () => {
     expired.stop();
   });
 });
+
+describe("submission polling lifecycle", () => {
+  it("stops without another request when its signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(api.pollSubmission(42, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels an in-flight polling delay when the page is left", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse(200, {
+      submission: { id: 42, verdict: "PENDING", timeMs: 0, memoryKb: 0, passed: 0, total: 0, language: "python", code: "", createdAt: "2026-08-01T00:00:00Z" },
+    }));
+
+    const polling = api.pollSubmission(42, { intervalMs: 60_000, timeoutMs: 120_000, signal: controller.signal });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    await expect(polling).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
