@@ -319,14 +319,33 @@ export interface DocCompareRow {
   match: boolean;
 }
 
-export interface DocSubmission {
+export type DocSubmissionStatus =
+  "PENDING" | "JUDGING" | "COMPLETED" | "FAILED" | "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
+
+export interface StudentDocSubmission {
   id: number;
   userId: number;
   exerciseId: number;
   studentDocName: string;
-  autoResult: string;   // JSON string of DocParaInfo[]
-  compareResult: string; // JSON string of DocCompareRow[]
-  status: "PENDING" | "JUDGING" | "COMPLETED" | "FAILED" | "AUTO_CHECKED" | "NEEDS_REVIEW" | "REVIEWED";
+  status: DocSubmissionStatus;
+  score: number | null;
+  teacherComment: string | null;
+  judgeVersion: string;
+  resultDetail: OfficeJudgeResultDetail;
+  errorCategory: string | null;
+  judgedAt: string | null;
+  createdAt: string;
+  contestProblemId?: number | null;
+}
+
+export interface ReviewerDocSubmission {
+  id: number;
+  userId: number;
+  exerciseId: number;
+  studentDocName: string;
+  autoResult: string;
+  compareResult: string;
+  status: DocSubmissionStatus;
   score: number | null;
   teacherComment: string | null;
   judgeVersion: string;
@@ -414,7 +433,7 @@ export interface DocSubmissionListItem {
   exerciseId: number;
   userId: number;
   studentDocName: string;
-  status: DocSubmission["status"];
+  status: DocSubmissionStatus;
   score: number | null;
   createdAt: string;
 }
@@ -615,13 +634,15 @@ export const api = {
   submitDocExercise: (exerciseId: number, file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    return request<{ submission: DocSubmission }>(`/office/docs/exercises/${exerciseId}/submit`, {
+    return request<{ submission: StudentDocSubmission }>(`/office/docs/exercises/${exerciseId}/submit`, {
       method: "POST",
       body: fd,
     });
   },
   getDocSubmission: (id: number) =>
-    request<{ submission: DocSubmission }>(`/office/docs/submissions/${id}`),
+    request<{ submission: StudentDocSubmission }>(`/office/docs/submissions/${id}`),
+  getDocSubmissionForReview: (id: number) =>
+    request<{ submission: ReviewerDocSubmission }>(`/office/docs/submissions/${id}/review-detail`),
   listDocSubmissions: (params: { exerciseId?: number; page?: number; pageSize?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.exerciseId) q.set("exerciseId", String(params.exerciseId));
@@ -634,7 +655,7 @@ export const api = {
   downloadStudentDoc: (submissionId: number, filename: string) =>
     downloadFile(`/office/docs/submissions/${submissionId}/download`, filename),
   reviewDocSubmission: (id: number, score: number, comment: string) =>
-    request<{ submission: DocSubmission }>(`/office/docs/submissions/${id}/review`, {
+    request<{ submission: ReviewerDocSubmission }>(`/office/docs/submissions/${id}/review`, {
       method: "PUT",
       body: JSON.stringify({ score, comment }),
     }),
@@ -698,7 +719,7 @@ export const api = {
   submitContestOffice: (contestId: number, contestProblemId: number, file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    return request<{ submission: DocSubmission }>(
+    return request<{ submission: StudentDocSubmission }>(
       `/contests/${contestId}/problems/${contestProblemId}/office-submissions`,
       { method: "POST", body: fd },
     );

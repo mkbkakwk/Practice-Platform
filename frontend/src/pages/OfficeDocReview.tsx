@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, type DocSubmission, type DocCompareRow, type DocExerciseDetail } from "@/lib/api";
+import { api, type ReviewerDocSubmission, type DocCompareRow, type DocExerciseDetail } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ export default function OfficeDocReview() {
   const { id } = useParams<{ id: string }>();
   const submissionId = Number(id);
 
-  const [submission, setSubmission] = useState<DocSubmission | null>(null);
+  const [submission, setSubmission] = useState<ReviewerDocSubmission | null>(null);
   const [exercise, setExercise] = useState<DocExerciseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState<number>(80);
@@ -34,7 +34,7 @@ export default function OfficeDocReview() {
     if (!Number.isFinite(submissionId)) return;
     let active = true;
     setLoading(true);
-    api.getDocSubmission(submissionId).then(({ submission: sub }) => {
+    api.getDocSubmissionForReview(submissionId).then(({ submission: sub }) => {
       if (!active) return;
       setSubmission(sub);
       if (sub.score != null) setScore(sub.score);

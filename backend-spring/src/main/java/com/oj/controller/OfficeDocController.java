@@ -1,9 +1,9 @@
 package com.oj.controller;
 
 import com.oj.dto.OfficeExerciseCreateRequest;
+import com.oj.dto.OfficeSubmissionDtos;
 import com.oj.dto.ReviewRequest;
 import com.oj.dto.VisibilityRequest;
-import com.oj.entity.OfficeDocSubmissionEntity;
 import com.oj.entity.OfficeExerciseEntity;
 import com.oj.service.OfficeDocService;
 import jakarta.validation.Valid;
@@ -90,19 +90,23 @@ public class OfficeDocController {
     }
 
     @PostMapping("/exercises/{id}/submit")
-    public Map<String, Object> submitDoc(
+    public OfficeSubmissionDtos.StudentSubmissionResponse submitDoc(
             @PathVariable int id, @RequestParam("file") MultipartFile file) {
-        OfficeDocSubmissionEntity submission = service.submitDoc(id, file);
-        return Map.of("submission", submission);
+        return new OfficeSubmissionDtos.StudentSubmissionResponse(service.submitDoc(id, file));
     }
 
     @GetMapping("/submissions/{id}")
-    public Map<String, Object> getSubmission(@PathVariable int id) {
-        return Map.of("submission", service.getSubmission(id));
+    public OfficeSubmissionDtos.StudentSubmissionResponse getSubmission(@PathVariable int id) {
+        return new OfficeSubmissionDtos.StudentSubmissionResponse(service.getStudentSubmission(id));
+    }
+
+    @GetMapping("/submissions/{id}/review-detail")
+    public OfficeSubmissionDtos.ReviewerSubmissionResponse getReviewerSubmission(@PathVariable int id) {
+        return new OfficeSubmissionDtos.ReviewerSubmissionResponse(service.getReviewerSubmission(id));
     }
 
     @GetMapping("/submissions")
-    public Map<String, Object> listSubmissions(
+    public OfficeSubmissionDtos.SubmissionListResponse listSubmissions(
             @RequestParam(required = false) Integer exerciseId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
@@ -118,9 +122,9 @@ public class OfficeDocController {
     }
 
     @PutMapping("/submissions/{id}/review")
-    public Map<String, Object> review(
+    public OfficeSubmissionDtos.ReviewerSubmissionResponse review(
             @PathVariable int id, @Valid @RequestBody ReviewRequest request) {
-        return Map.of("submission", service.review(id, request));
+        return new OfficeSubmissionDtos.ReviewerSubmissionResponse(service.review(id, request));
     }
 
     private ResponseEntity<FileSystemResource> fileResponse(File file, String filename) {

@@ -294,8 +294,10 @@ class ContestCoreIntegrationTest {
         contests.publish(contestId);
         setNow(START);
         as(student, "student", "USER");
-        ContestDtos.OfficeSubmission full = contests.submitOffice(contestId, item.contestProblemId(), docx("expected"));
-        ContestDtos.OfficeSubmission mismatch = contests.submitOffice(contestId, item.contestProblemId(), docx("different"));
+        OfficeSubmissionDtos.StudentSubmission full =
+                contests.submitOffice(contestId, item.contestProblemId(), docx("expected"));
+        OfficeSubmissionDtos.StudentSubmission mismatch =
+                contests.submitOffice(contestId, item.contestProblemId(), docx("different"));
         assertThat(full.score()).isEqualTo(100);
         assertThat(mismatch.score()).isLessThan(100);
         assertThat(officeSubmissions.selectById(full.id()).getContestProblemId())
