@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, type DocExerciseDetail, type DocSubmission, type DocCompareRow } from "@/lib/api";
+import { api, type DocExerciseDetail, type StudentDocSubmission } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Markdown } from "@/components/Markdown";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Loader2, Upload, Download, CheckCircle2, XCircle, ArrowLeft, FileText } from "lucide-react";
+import { Loader2, Upload, Download, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -34,7 +34,7 @@ export default function OfficeDocExerciseDetail() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [exercise, setExercise] = useState<DocExerciseDetail | null>(null);
-  const [submission, setSubmission] = useState<DocSubmission | null>(null);
+  const [submission, setSubmission] = useState<StudentDocSubmission | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +69,6 @@ export default function OfficeDocExerciseDetail() {
       setUploading(false);
     }
   }
-
-  const compareRows: DocCompareRow[] = submission?.compareResult ? safeParse(submission.compareResult, []) : [];
-  const matchPercent = compareRows.length > 0
-    ? Math.round(compareRows.filter((r) => r.match).length * 100 / compareRows.length)
-    : 0;
 
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
@@ -173,12 +168,26 @@ export default function OfficeDocExerciseDetail() {
             </div>
           )}
 
-          {submission.resultDetail?.items?.length > 0 && (
+          {submission.resultDetail && (
             <div className="mb-4 rounded-md border border-zinc-200 p-4">
-              <h3 className="mb-2 text-sm font-medium text-zinc-700">主要扣分项</h3>
-              <ul className="space-y-1 text-sm text-zinc-600">
+              <div className="mb-3 flex flex-wrap items-baseline gap-3">
+                <h3 className="text-sm font-medium text-zinc-700">安全判题反馈</h3>
+                <span className="text-sm text-zinc-600">
+                  {submission.resultDetail.earnedScore} / {submission.resultDetail.totalScore}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  {submission.resultDetail.totalErrorCount} 项差异
+                </span>
+              </div>
+              <ul className="space-y-2 text-sm text-zinc-600">
                 {submission.resultDetail.items.slice(0, 20).map((item) => (
-                  <li key={item.ruleId}>• {item.target}：{item.message}（{item.earned}/{item.score}）</li>
+                  <li key={item.ruleId} className="rounded bg-zinc-50 p-3">
+                    <p className="font-medium text-zinc-700">{item.target}：{item.message}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      你的结果：{formatVal(item.actual)} · 要求：{formatVal(item.expected)}
+                      <span className="ml-2">得分 {item.earned}/{item.score}</span>
+                    </p>
+                  </li>
                 ))}
               </ul>
               {submission.resultDetail.truncated && (
@@ -188,45 +197,6 @@ export default function OfficeDocExerciseDetail() {
               )}
             </div>
           )}
-
-          {/* Auto match summary */}
-          <div className="mb-4 flex items-center gap-2 rounded-md bg-zinc-50 p-3 text-sm">
-            <FileText className="h-4 w-4 text-zinc-400" />
-            <span>自动比对匹配率：</span>
-            <span className={cn("font-bold", matchPercent === 100 ? "text-green-600" : "text-orange-600")}>{matchPercent}%</span>
-            <span className="text-zinc-400">（{compareRows.filter((r) => r.match).length}/{compareRows.length} 段匹配）</span>
-          </div>
-
-          {/* Per-paragraph comparison */}
-          <div className="space-y-3">
-            {compareRows.map((row) => (
-              <div key={row.index} className={cn("rounded-lg border p-3", row.match ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50")}>
-                <div className="mb-2 flex items-center gap-2">
-                  {row.match ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
-                  <span className="text-xs font-medium text-zinc-500">第 {row.index + 1} 段</span>
-                </div>
-                <div className="mb-2 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded bg-white/60 p-2">
-                    <span className="text-xs text-zinc-400">你的文档：</span>
-                    <p className="line-clamp-2 text-zinc-700">{row.studentText || "(空)"}</p>
-                  </div>
-                  <div className="rounded bg-white/60 p-2">
-                    <span className="text-xs text-zinc-400">老师文档：</span>
-                    <p className="line-clamp-2 text-zinc-700">{row.teacherText || "(空)"}</p>
-                  </div>
-                </div>
-                {!row.match && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {row.diffs.filter((d) => !d.match).map((d, i) => (
-                      <span key={i} className="rounded border border-red-200 bg-white px-2 py-0.5 text-xs text-red-700">
-                        {d.label}：你={formatVal(d.student)} / 老师={formatVal(d.teacher)}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
 
           {/* Download student doc */}
           <div className="mt-4 border-t pt-3">
@@ -248,10 +218,6 @@ function formatVal(v: unknown): string {
   if (v === false) return "否";
   if (typeof v === "number") return v === 0 ? "未设置" : String(v);
   return String(v);
-}
-
-function safeParse<T>(json: string, fallback: T): T {
-  try { return JSON.parse(json) as T; } catch { return fallback; }
 }
 
 function failureLabel(category: string | null): string {
