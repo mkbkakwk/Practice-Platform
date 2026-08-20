@@ -453,6 +453,7 @@ function ContestProblemPanel({
   onSubmitChoice: () => void;
   onDownloadStarter: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const canSubmit = phase === "RUNNING" && participant;
   const content = problem.content as {
     description?: string;
@@ -515,8 +516,9 @@ function ContestProblemPanel({
 
     {canSubmit && problem.problemType === "OFFICE_DOCX" && <section className="mt-5 space-y-3 border-t pt-5">
       <label className="block text-sm font-medium" htmlFor={`contest-docx-${problem.contestProblemId}`}>DOCX 文件</label>
-      <input id={`contest-docx-${problem.contestProblemId}`} type="file" accept=".docx" disabled={busy} onChange={(event) => onFileChange(event.target.files?.[0] ?? null)} />
-      {file && <p className="text-sm text-zinc-600">{file.name} · {formatFileSize(file.size)}</p>}
+      <input ref={fileInputRef} id={`contest-docx-${problem.contestProblemId}`} type="file" accept=".docx" className="sr-only" disabled={busy} onChange={(event) => onFileChange(event.target.files?.[0] ?? null)} />
+      <Button type="button" variant="outline" disabled={busy} onClick={() => fileInputRef.current?.click()}><FileUp className="mr-1 h-4 w-4" />选择 DOCX 文件</Button>
+      {file && <div className="min-w-0 max-w-full rounded border bg-zinc-50 px-3 py-2 text-sm text-zinc-600" aria-live="polite"><p className="truncate" title={file.name}>{file.name}</p><p className="text-xs text-zinc-500">{formatFileSize(file.size)}</p></div>}
       <Button disabled={busy || !file} onClick={onSubmitOffice}>{run?.busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}<FileUp className="mr-1 h-4 w-4" />{run?.busy ? "上传判题中..." : "提交 DOCX"}</Button>
     </section>}
 
