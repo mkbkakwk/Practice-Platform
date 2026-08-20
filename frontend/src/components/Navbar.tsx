@@ -43,13 +43,13 @@ export function Navbar() {
             <span className="hidden sm:inline">STAGING · {buildSha || "unknown"}</span>
           </span>
         )}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav aria-label="主导航" className="hidden items-center gap-1 xl:flex">
           {links.map((link) => {
             const Icon = link.icon;
             return <Link key={link.to} to={link.to} className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors", link.match(location.pathname) ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")}><Icon className="h-4 w-4" />{link.label}</Link>;
           })}
         </nav>
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="ml-auto hidden items-center gap-2 xl:flex">
           {user ? <>
             <span className="hidden items-center gap-1.5 text-sm text-zinc-600 sm:flex"><UserCircle className="h-4 w-4" />{user.username}{user.role === "ADMIN" && <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">管理员</span>}{user.role === "TEACHER" && <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">老师</span>}</span>
             <Button variant="ghost" size="sm" onClick={() => { logout(); navigate("/"); }}><LogOut className="mr-1 h-4 w-4" />退出</Button>
@@ -57,7 +57,7 @@ export function Navbar() {
         </div>
         <Sheet>
           <SheetTrigger asChild>
-            <Button className="ml-auto md:hidden" variant="ghost" size="icon" aria-label="打开导航菜单">
+            <Button className="ml-auto xl:hidden" variant="ghost" size="icon" aria-label="打开导航菜单">
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
