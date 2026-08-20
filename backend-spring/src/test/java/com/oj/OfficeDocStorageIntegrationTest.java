@@ -19,6 +19,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.io.InputStream;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -177,6 +180,96 @@ class OfficeDocStorageIntegrationTest {
     }
 
     @Test
+    void starterDownloadIsPublicPracticeContentButReferenceRemainsManagerOnly() throws Exception {
+        TestUser teacher = createUser("starter_teacher", "TEACHER");
+        TestUser student = createUser("starter_student", "USER");
+        Path starter = copyFixture("normal.docx", "public-starter.docx");
+        Path reference = copyFixture("normal.docx", "private-reference.docx");
+        int exerciseId = jdbcTemplate.queryForObject("""
+                INSERT INTO "OfficeExercise"
+                    (title, description, starter_doc_path, starter_doc_name,
+                     teacher_doc_path, teacher_doc_name, visible, content_visibility, created_by)
+                VALUES ('Starter download', 'integration test', ?, '中文名称.docx',
+                        ?, 'reference.docx', TRUE, 'PUBLIC', ?)
+                RETURNING id
+                """, Integer.class, starter.toString(), reference.toString(), teacher.id());
+
+        MvcResult response = mockMvc.perform(get("/api/office/docs/exercises/{id}/starter", exerciseId)
+                        .header("Authorization", bearer(student)))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(response.getResponse().getContentAsByteArray()).isEqualTo(Files.readAllBytes(starter));
+        String encodedName = URLEncoder.encode("中文名称.docx", StandardCharsets.UTF_8).replace("+", "%20");
+        assertThat(response.getResponse().getHeader("Content-Disposition"))
+                .isEqualTo("attachment; filename*=UTF-8''" + encodedName);
+        assertThat(response.getResponse().getHeader("Cache-Control")).isEqualTo("private, no-store");
+        mockMvc.perform(get("/api/office/docs/exercises/{id}/teacher-doc", exerciseId)
+                        .header("Authorization", bearer(student)))
+                .andExpect(status().isForbidden());
+
+        jdbcTemplate.update("UPDATE \"OfficeExercise\" SET content_visibility='CONTEST_ONLY' WHERE id=?", exerciseId);
+        mockMvc.perform(get("/api/office/docs/exercises/{id}/starter", exerciseId)
+                        .header("Authorization", bearer(student)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/office/docs/exercises/{id}/starter", exerciseId)
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/office/docs/exercises/{id}/teacher-doc", exerciseId)
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void starterUploadUsesTheSameFailClosedDocxValidation() throws Exception {
+        TestUser teacher = createUser("starter_validator", "TEACHER");
+        int exerciseId = insertExercise("Starter validation", teacher.id(), null, true);
+        long before = managedFileCount();
+        MockMultipartFile damaged = new MockMultipartFile(
+                "file", "damaged.docx", OfficeFileValidator.DOCX_CONTENT_TYPE,
+                fixtureBytes("damaged.docx"));
+
+        mockMvc.perform(multipart("/api/office/docs/exercises/{id}/starter", exerciseId)
+                        .file(damaged)
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isBadRequest());
+
+        assertThat(managedFileCount()).isEqualTo(before);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT starter_doc_path IS NULL FROM \"OfficeExercise\" WHERE id=?",
+                Boolean.class, exerciseId)).isTrue();
+    }
+
+    @Test
+    void replacingStarterCommitsTheNewManagedFileAndRemovesTheOldOne() throws Exception {
+        TestUser teacher = createUser("starter_replace", "TEACHER");
+        int exerciseId = insertExercise("Starter replacement", teacher.id(), null, true);
+
+        mockMvc.perform(multipart("/api/office/docs/exercises/{id}/starter", exerciseId)
+                        .file(new MockMultipartFile("file", "first.docx", OfficeFileValidator.DOCX_CONTENT_TYPE,
+                                fixtureBytes("normal.docx")))
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isOk());
+        String firstStorageId = jdbcTemplate.queryForObject(
+                "SELECT starter_doc_path FROM \"OfficeExercise\" WHERE id=?", String.class, exerciseId);
+        assertThat(storageRoot.resolve(firstStorageId)).exists();
+
+        mockMvc.perform(multipart("/api/office/docs/exercises/{id}/starter", exerciseId)
+                        .file(new MockMultipartFile("file", "second.docx", OfficeFileValidator.DOCX_CONTENT_TYPE,
+                                fixtureBytes("normal.docx")))
+                        .header("Authorization", bearer(teacher)))
+                .andExpect(status().isOk());
+        String secondStorageId = jdbcTemplate.queryForObject(
+                "SELECT starter_doc_path FROM \"OfficeExercise\" WHERE id=?", String.class, exerciseId);
+
+        assertThat(secondStorageId).isNotEqualTo(firstStorageId);
+        assertThat(storageRoot.resolve(firstStorageId)).doesNotExist();
+        assertThat(storageRoot.resolve(secondStorageId)).exists();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT starter_doc_name FROM \"OfficeExercise\" WHERE id=?", String.class, exerciseId))
+                .isEqualTo("second.docx");
+    }
+
+    @Test
     void deleteCommitsDatabaseFirstThenRemovesOnlyOwnedFiles() throws Exception {
         TestUser admin = createUser("delete_admin", "ADMIN");
         TestUser student = createUser("delete_student", "USER");
@@ -312,10 +405,17 @@ class OfficeDocStorageIntegrationTest {
     private int insertExercise(String title, int createdBy, String teacherPath, boolean visible) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO "OfficeExercise"
-                    (title, description, teacher_doc_path, teacher_doc_name, visible, created_by)
-                VALUES (?, 'integration test', ?, 'reference.docx', ?, ?)
+                    (title, description, starter_doc_path, starter_doc_name,
+                     teacher_doc_path, teacher_doc_name, visible, created_by)
+                VALUES (?, 'integration test', ?, 'starter.docx', ?, 'reference.docx', ?, ?)
                 RETURNING id
-                """, Integer.class, title, teacherPath, visible, createdBy);
+                """, Integer.class, title, teacherPath, teacherPath, visible, createdBy);
+    }
+
+    private long managedFileCount() throws IOException {
+        try (var files = Files.list(storageRoot)) {
+            return files.filter(Files::isRegularFile).count();
+        }
     }
 
     private TestUser createUser(String username, String role) throws Exception {

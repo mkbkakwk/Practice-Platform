@@ -79,16 +79,73 @@ const problems: ContestProblemItem[] = [
   },
   {
     contestProblemId: 73,
-    problemType: "OFFICE",
+    problemType: "OFFICE_DOCX",
     problemId: 6,
     displayOrder: 3,
     label: "C",
     title: "Word 排版",
     difficulty: "MEDIUM",
     slug: null,
-    content: { description: "C 题正文" },
+    content: { description: "C 题正文", hasStarter: true, starterDocName: "contest-starter.docx", hasReference: true },
   },
 ];
+
+const choiceProblem: ContestProblemItem = {
+  contestProblemId: 74,
+  problemType: "OFFICE_CHOICE",
+  problemId: 60,
+  displayOrder: 4,
+  label: "D",
+  title: "Word 快捷键",
+  difficulty: "EASY",
+  slug: null,
+  content: {
+    appType: "WORD",
+    category: "基础",
+    difficulty: "EASY",
+    questionType: "SINGLE_CHOICE",
+    content: "保存文档的快捷键是？",
+    options: ["Ctrl+P", "Ctrl+S"],
+  },
+};
+
+const multiChoiceProblem: ContestProblemItem = {
+  contestProblemId: 75,
+  problemType: "OFFICE_CHOICE",
+  problemId: 61,
+  displayOrder: 5,
+  label: "E",
+  title: "Excel 多选",
+  difficulty: "MEDIUM",
+  slug: null,
+  content: {
+    appType: "EXCEL",
+    category: "公式",
+    difficulty: "MEDIUM",
+    questionType: "MULTI_CHOICE",
+    content: "哪些属于 Excel 函数？",
+    options: ["SUM", "AVERAGE", "SLIDE"],
+  },
+};
+
+const trueFalseProblem: ContestProblemItem = {
+  contestProblemId: 76,
+  problemType: "OFFICE_CHOICE",
+  problemId: 62,
+  displayOrder: 6,
+  label: "F",
+  title: "Word 判断",
+  difficulty: "EASY",
+  slug: null,
+  content: {
+    appType: "WORD",
+    category: "基础",
+    difficulty: "EASY",
+    questionType: "TRUE_FALSE",
+    content: "Word 可以保存 DOCX 文档。",
+    options: ["正确", "错误"],
+  },
+};
 
 const defaultLanguages: LanguageDef[] = [
   { id: "javascript", name: "JavaScript", ext: ".js", template: "console.log('js')" },
@@ -118,6 +175,7 @@ function mockManage(value: ContestDetailModel, participantTotal = 0) {
     participants: participantTotal > 0 ? [{ id: options?.page ?? 1, userId: 100 + (options?.page ?? 1), username: `student-${options?.page ?? 1}`, addedBy: 2, joinedAt: "2026-08-01T00:00:00Z" }] : [],
   }));
   vi.spyOn(api, "listManageProblems").mockResolvedValue({ total: 1, page: 1, pageSize: 20, problems: [{ id: 44, title: "最大子数组", slug: "max-subarray", difficulty: "MEDIUM", contentVisibility: "PUBLIC", visible: true, tags: [], createdBy: 2, creatorUsername: "teacher", createdAt: "2026-08-01T00:00:00Z", timeLimit: 1000, memoryLimit: 128, submissionCount: 0 }] });
+  vi.spyOn(api, "listManageOfficeQuestions").mockResolvedValue({ total: 0, page: 1, pageSize: 20, questions: [] });
   vi.spyOn(api, "listManageDocExercises").mockResolvedValue({ total: 0, page: 1, pageSize: 20, exercises: [] });
   vi.spyOn(api, "searchContestStudents").mockResolvedValue({ total: 1, page: 1, pageSize: 10, students: [{ id: 10, username: "stage_student", role: "USER" }] });
 }
@@ -306,6 +364,127 @@ describe("contest stage UI", () => {
     expect(screen.getByText(/仅显示.*部分结果/)).toBeInTheDocument();
   });
 
+  it("submits an Office choice inside the contest without rendering an answer or explanation", async () => {
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [choiceProblem]));
+    const submit = vi.spyOn(api, "submitContestChoice").mockResolvedValue({
+      submission: {
+        recordId: 301,
+        contestProblemId: 74,
+        selected: ["1"],
+        correct: true,
+        createdAt: "2026-09-01T01:30:00Z",
+      },
+    });
+    const user = userEvent.setup();
+    expect(await screen.findByText("保存文档的快捷键是？")).toBeInTheDocument();
+    expect(screen.queryByText(/解析|正确答案/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Ctrl+S" }));
+    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    await waitFor(() => expect(submit).toHaveBeenCalledWith(7, 74, ["1"]));
+    expect(await screen.findByText(/回答正确/)).toBeInTheDocument();
+  });
+
+  it("supports multi-choice and true/false contest controls with canonical selections", async () => {
+    const user = userEvent.setup();
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [multiChoiceProblem, trueFalseProblem]));
+    const submit = vi.spyOn(api, "submitContestChoice")
+      .mockResolvedValueOnce({ submission: { recordId: 302, contestProblemId: 75, selected: ["0", "1"], correct: true, createdAt: "2026-09-01T01:30:00Z" } })
+      .mockResolvedValueOnce({ submission: { recordId: 303, contestProblemId: 76, selected: ["T"], correct: true, createdAt: "2026-09-01T01:31:00Z" } });
+
+    await user.click(await screen.findByRole("checkbox", { name: "SUM" }));
+    await user.click(screen.getByRole("checkbox", { name: "AVERAGE" }));
+    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    await waitFor(() => expect(submit).toHaveBeenNthCalledWith(1, 7, 75, ["0", "1"]));
+
+    await user.click(screen.getAllByRole("button", { name: /FWord 判断Office 选择题/ })[0]);
+    await user.click(await screen.findByRole("radio", { name: "正确" }));
+    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    await waitFor(() => expect(submit).toHaveBeenNthCalledWith(2, 7, 76, ["T"]));
+  });
+
+  it("navigates one active workspace across algorithm, single, multi, DOCX, and true/false", async () => {
+    const user = userEvent.setup();
+    const mixed: ContestProblemItem[] = [
+      problems[0],
+      { ...choiceProblem, label: "B", displayOrder: 2 },
+      { ...multiChoiceProblem, label: "C", displayOrder: 3 },
+      { ...problems[2], label: "D", displayOrder: 4 },
+      { ...trueFalseProblem, label: "E", displayOrder: 5 },
+    ];
+    renderDetail(detail({ phase: "RUNNING", participant: true }, mixed));
+
+    expect(await screen.findByLabelText("A 源代码")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /BWord 快捷键Office 选择题/ })[0]);
+    expect(await screen.findByRole("radio", { name: "Ctrl+S" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("A 源代码")).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /CExcel 多选Office 选择题/ })[0]);
+    expect(await screen.findByRole("checkbox", { name: "SUM" })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /DWord 排版DOCX/ })[0]);
+    expect(await screen.findByLabelText("DOCX 文件")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /EWord 判断Office 选择题/ })[0]);
+    expect(await screen.findByRole("radio", { name: "正确" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("DOCX 文件")).not.toBeInTheDocument();
+  });
+
+  it("preserves each Office choice draft and result while navigating between problems", async () => {
+    const user = userEvent.setup();
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [choiceProblem, multiChoiceProblem]));
+    vi.spyOn(api, "submitContestChoice").mockResolvedValue({
+      submission: { recordId: 304, contestProblemId: 74, selected: ["1"], correct: true, createdAt: "2026-09-01T01:30:00Z" },
+    });
+
+    await user.click(await screen.findByRole("radio", { name: "Ctrl+S" }));
+    await user.click(screen.getByRole("button", { name: "提交答案" }));
+    expect(await screen.findByText(/Record #304/)).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /EExcel 多选Office 选择题/ })[0]);
+    await user.click(await screen.findByRole("checkbox", { name: "SUM" }));
+    expect(screen.queryByText(/Record #304/)).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /DWord 快捷键Office 选择题/ })[0]);
+    expect(screen.getByRole("radio", { name: "Ctrl+S" })).toBeChecked();
+    expect(screen.getByText(/Record #304/)).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /EExcel 多选Office 选择题/ })[0]);
+    expect(screen.getByRole("checkbox", { name: "SUM" })).toBeChecked();
+  });
+
+  it("prevents a synchronous double click from submitting one Office choice twice", async () => {
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [choiceProblem]));
+    let resolveSubmit!: (value: Awaited<ReturnType<typeof api.submitContestChoice>>) => void;
+    const submit = vi.spyOn(api, "submitContestChoice").mockReturnValue(new Promise((resolve) => { resolveSubmit = resolve; }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Ctrl+S" }));
+    const button = screen.getByRole("button", { name: "提交答案" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(submit).toHaveBeenCalledTimes(1);
+    await act(async () => resolveSubmit({ submission: { recordId: 305, contestProblemId: 74, selected: ["1"], correct: true, createdAt: "2026-09-01T01:30:00Z" } }));
+    expect(await screen.findByText(/Record #305/)).toBeInTheDocument();
+  });
+
+  it("downloads the contest-gated DOCX starter from the active problem", async () => {
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [problems[2]]));
+    const download = vi.spyOn(api, "downloadContestStarter").mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "下载 contest-starter.docx" }));
+    expect(download).toHaveBeenCalledWith(7, 73, "contest-starter.docx");
+  });
+
+  it("keeps the contest starter unavailable before start and prevents duplicate downloads", async () => {
+    const upcoming = renderDetail(detail({ phase: "UPCOMING", participant: true }, [problems[2]]));
+    expect(await screen.findByText("比赛尚未开始。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "下载 contest-starter.docx" })).not.toBeInTheDocument();
+    upcoming.unmount();
+
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [problems[2]]));
+    let resolveDownload!: () => void;
+    const download = vi.spyOn(api, "downloadContestStarter").mockReturnValue(new Promise<void>((resolve) => { resolveDownload = resolve; }));
+    const button = await screen.findByRole("button", { name: "下载 contest-starter.docx" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "下载中..." })).toBeDisabled();
+    await act(async () => resolveDownload());
+    expect(await screen.findByRole("button", { name: "下载 contest-starter.docx" })).toBeEnabled();
+  });
+
   it("rejects non-DOCX and oversized files before a contest upload", async () => {
     renderDetail(detail({ phase: "RUNNING", participant: true }, [problems[2]]));
     const submit = vi.spyOn(api, "submitContestOffice");
@@ -394,19 +573,50 @@ describe("contest stage UI", () => {
     await waitFor(() => expect(add).toHaveBeenCalledWith(7, "ALGORITHM", 44));
   });
 
-  it("shows DOCX availability and disables exercises without a reference document", async () => {
+  it("shows DOCX completeness and disables exercises missing either document", async () => {
     auth.user = { id: 2, username: "teacher", role: "TEACHER" };
     mockManage(detail({ status: "DRAFT", phase: "DRAFT" }, []));
     vi.mocked(api.listManageDocExercises).mockResolvedValue({ total: 2, page: 1, pageSize: 20, exercises: [
-      { id: 50, title: "Word 排版基础", difficulty: "MEDIUM", visible: true, contentVisibility: "CONTEST_ONLY", hasTeacherDoc: true, createdBy: 2, creatorUsername: "teacher", submissionCount: 0, createdAt: "2026-08-01T00:00:00Z" },
-      { id: 51, title: "缺少参考文档", difficulty: "EASY", visible: true, contentVisibility: "PUBLIC", hasTeacherDoc: false, createdBy: 2, creatorUsername: "teacher", submissionCount: 0, createdAt: "2026-08-01T00:00:00Z" },
+      { id: 50, title: "Word 排版基础", difficulty: "MEDIUM", visible: true, contentVisibility: "CONTEST_ONLY", hasStarterDoc: true, starterDocName: "starter.docx", hasTeacherDoc: true, createdBy: 2, creatorUsername: "teacher", submissionCount: 0, createdAt: "2026-08-01T00:00:00Z" },
+      { id: 51, title: "缺少起始文档", difficulty: "EASY", visible: true, contentVisibility: "PUBLIC", hasStarterDoc: false, starterDocName: null, hasTeacherDoc: true, createdBy: 2, creatorUsername: "teacher", submissionCount: 0, createdAt: "2026-08-01T00:00:00Z" },
     ] });
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/admin/contests/7"]}><Routes><Route path="/admin/contests/:id" element={<ContestManage />} /></Routes></MemoryRouter>);
-    await user.selectOptions(await screen.findByLabelText("添加题型"), "OFFICE");
+    await user.selectOptions(await screen.findByLabelText("添加题型"), "OFFICE_DOCX");
     expect(await screen.findByText("Word 排版基础")).toBeInTheDocument();
-    expect(screen.getByText(/已有参考文档/)).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "选择 缺少参考文档" })).toBeDisabled();
+    expect(screen.getByText(/Starter \+ Reference 已齐全/)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "选择 缺少起始文档" })).toBeDisabled();
+  });
+
+  it("adds an Office choice from the safe management catalog", async () => {
+    auth.user = { id: 2, username: "teacher", role: "TEACHER" };
+    mockManage(detail({ status: "DRAFT", phase: "DRAFT" }, []));
+    vi.mocked(api.listManageOfficeQuestions).mockResolvedValue({
+      total: 1,
+      page: 1,
+      pageSize: 20,
+      questions: [{
+        id: 60,
+        appType: "WORD",
+        category: "基础",
+        difficulty: "EASY",
+        questionType: "SINGLE_CHOICE",
+        content: "保存文档的快捷键是？",
+        visible: true,
+        contentVisibility: "CONTEST_ONLY",
+        createdBy: 2,
+        creatorUsername: "teacher",
+        submissionCount: 0,
+        createdAt: "2026-08-01T00:00:00Z",
+      }],
+    });
+    const add = vi.spyOn(api, "addContestProblem").mockResolvedValue({ contestProblem: choiceProblem });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/admin/contests/7"]}><Routes><Route path="/admin/contests/:id" element={<ContestManage />} /></Routes></MemoryRouter>);
+    await user.selectOptions(await screen.findByLabelText("添加题型"), "OFFICE_CHOICE");
+    await user.click(await screen.findByRole("checkbox", { name: "选择 保存文档的快捷键是？" }));
+    await user.click(screen.getByRole("button", { name: "添加 1 道题" }));
+    await waitFor(() => expect(add).toHaveBeenCalledWith(7, "OFFICE_CHOICE", 60));
   });
 
   it("searches and adds a participant by username instead of a user ID field", async () => {

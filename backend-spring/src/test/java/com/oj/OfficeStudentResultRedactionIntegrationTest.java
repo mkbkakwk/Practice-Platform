@@ -177,7 +177,7 @@ class OfficeStudentResultRedactionIntegrationTest {
         long contestProblemId = jdbcTemplate.queryForObject("""
                 INSERT INTO "ContestProblem"
                     (contest_id, problem_type, office_exercise_id, display_order, label)
-                VALUES (?, 'OFFICE', ?, 1, 'A') RETURNING id
+                VALUES (?, 'OFFICE_DOCX', ?, 1, 'A') RETURNING id
                 """, Long.class, contestId, exerciseId);
         jdbcTemplate.update("""
                 INSERT INTO "ContestParticipant" (contest_id, user_id, added_by)
@@ -204,15 +204,17 @@ class OfficeStudentResultRedactionIntegrationTest {
 
     private int createExercise(int teacherId, String visibility) throws Exception {
         String referenceStorageId = UUID.randomUUID() + ".docx";
+        String starterStorageId = UUID.randomUUID() + ".docx";
         Files.write(storageRoot.resolve(referenceStorageId), docx(SENTINEL));
+        Files.write(storageRoot.resolve(starterStorageId), docx("STUDENT_STARTER_DOCUMENT"));
         return jdbcTemplate.queryForObject("""
                 INSERT INTO "OfficeExercise"
-                    (title, difficulty, description, teacher_doc_path, teacher_doc_name,
-                     visible, created_by, content_visibility)
-                VALUES ('Redaction exercise', 'EASY', 'security regression', ?,
-                        'reference.docx', TRUE, ?, ?)
+                    (title, difficulty, description, starter_doc_path, starter_doc_name,
+                     teacher_doc_path, teacher_doc_name, visible, created_by, content_visibility)
+                VALUES ('Redaction exercise', 'EASY', 'security regression', ?, 'starter.docx',
+                        ?, 'reference.docx', TRUE, ?, ?)
                 RETURNING id
-                """, Integer.class, referenceStorageId, teacherId, visibility);
+                """, Integer.class, starterStorageId, referenceStorageId, teacherId, visibility);
     }
 
     private void seedUnsafeInternalComparison(int submissionId) {
