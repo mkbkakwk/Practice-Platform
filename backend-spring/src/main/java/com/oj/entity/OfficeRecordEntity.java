@@ -12,6 +12,7 @@ public class OfficeRecordEntity {
     private Integer id;
     private Integer userId;
     private Integer questionId;
+    private Long contestProblemId;
     private String selected;    // JSON text array
     private Boolean correct;
     private LocalDateTime createdAt;
@@ -22,6 +23,8 @@ public class OfficeRecordEntity {
     public void setUserId(Integer userId) { this.userId = userId; }
     public Integer getQuestionId() { return questionId; }
     public void setQuestionId(Integer questionId) { this.questionId = questionId; }
+    public Long getContestProblemId() { return contestProblemId; }
+    public void setContestProblemId(Long contestProblemId) { this.contestProblemId = contestProblemId; }
     public String getSelected() { return selected; }
     public void setSelected(String selected) { this.selected = selected; }
     public Boolean getCorrect() { return correct; }

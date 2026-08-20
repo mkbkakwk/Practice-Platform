@@ -1,6 +1,7 @@
 package com.oj.dto;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public final class ContestDtos {
@@ -23,4 +24,12 @@ public final class ContestDtos {
             Long id, Integer userId, String username, Integer addedBy, Instant joinedAt) {}
 
     public record StudentOption(Integer id, String username, String role) {}
+
+    public record ChoiceSubmission(
+            Integer recordId, Long contestProblemId, List<String> selected,
+            boolean correct, LocalDateTime createdAt) {
+        public ChoiceSubmission {
+            selected = List.copyOf(selected);
+        }
+    }
 }

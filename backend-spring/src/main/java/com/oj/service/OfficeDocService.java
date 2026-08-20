@@ -101,7 +101,7 @@ public class OfficeDocService {
         OfficeExerciseEntity exercise = findExercise(id);
         boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
         boolean contestAllowed = ContentVisibility.CONTEST_ONLY.name().equals(exercise.getContentVisibility())
-                && contestAccess.canReadContestOnly(ContestProblemType.OFFICE, exercise.getId());
+                && contestAccess.canReadContestOnly(ContestProblemType.OFFICE_DOCX, exercise.getId());
         if ((!Boolean.TRUE.equals(exercise.getVisible())
                 || ContentVisibility.CONTEST_ONLY.name().equals(exercise.getContentVisibility()))
                 && !manager && !contestAllowed) {
@@ -164,6 +164,7 @@ public class OfficeDocService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (exercise.getTeacherDocPath() != null) candidatePaths.add(exercise.getTeacherDocPath());
+        if (exercise.getStarterDocPath() != null) candidatePaths.add(exercise.getStarterDocPath());
 
         int deletedSubmissions = submissionMapper.delete(
                 new QueryWrapper<OfficeDocSubmissionEntity>().eq("exercise_id", id));
@@ -214,6 +215,60 @@ public class OfficeDocService {
         return Map.of("teacherDocName", displayName);
     }
 
+    public Map<String, Object> uploadStarterDoc(int exerciseId, MultipartFile file) {
+        OfficeExerciseEntity exercise = findExercise(exerciseId);
+        CurrentUser.requireCanManage(exercise.getCreatedBy());
+        String displayName = validator.validateMetadata(file);
+        String oldPath = exercise.getStarterDocPath();
+        OfficeStorageService.StagedDocument staged = storage.stage(file, displayName);
+        OfficeStorageService.StoredDocument stored = null;
+        try {
+            validator.validateContainer(staged.path());
+            parser.parse(staged.path());
+            stored = storage.commit(staged);
+            exercise.setStarterDocPath(storage.path(stored));
+            exercise.setStarterDocName(displayName);
+            exerciseMapper.updateById(exercise);
+        } catch (OfficeDocumentException exception) {
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            throw documentApiException(exception);
+        } catch (RuntimeException exception) {
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            throw exception;
+        }
+        if (oldPath != null && !oldPath.equals(storage.path(stored))) deleteFileIfUnused(oldPath);
+        return Map.of("starterDocName", displayName);
+    }
+
+    public File getStarterDocFile(int exerciseId) {
+        OfficeExerciseEntity exercise = findExercise(exerciseId);
+        boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
+        if (!manager && (!Boolean.TRUE.equals(exercise.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility()))) {
+            throw ApiException.notFound("起始文档不存在");
+        }
+        return requireStarterDoc(exercise);
+    }
+
+    public String getStarterDocName(int exerciseId) {
+        OfficeExerciseEntity exercise = findExercise(exerciseId);
+        boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
+        if (!manager && (!Boolean.TRUE.equals(exercise.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility()))) {
+            throw ApiException.notFound("起始文档不存在");
+        }
+        return exercise.getStarterDocName();
+    }
+
+    public File requireStarterDoc(OfficeExerciseEntity exercise) {
+        if (exercise.getStarterDocPath() == null || exercise.getStarterDocPath().isBlank()) {
+            throw ApiException.notFound("起始文档不存在");
+        }
+        return requireStoredFile(exercise.getStarterDocPath(), "起始文档文件丢失");
+    }
+
     public File getTeacherDocFile(int exerciseId) {
         OfficeExerciseEntity exercise = findExercise(exerciseId);
         if (!Boolean.TRUE.equals(exercise.getVisible()) && !CurrentUser.canManage(exercise.getCreatedBy())) {
@@ -257,6 +312,9 @@ public class OfficeDocService {
         int exerciseId = exercise.getId();
         if (exercise.getTeacherDocPath() == null || exercise.getTeacherDocPath().isBlank()) {
             throw ApiException.badRequest("该练习尚未上传老师参考文档，暂无法提交");
+        }
+        if (exercise.getStarterDocPath() == null || exercise.getStarterDocPath().isBlank()) {
+            throw ApiException.badRequest("该练习尚未上传学生起始文档，暂无法提交");
         }
 
         String displayName = validator.validateMetadata(file);
@@ -413,6 +471,8 @@ public class OfficeDocService {
             item.put("visible", exercise.getVisible());
             item.put("contentVisibility", exercise.getContentVisibility());
             item.put("hasTeacherDoc", exercise.getTeacherDocPath() != null && !exercise.getTeacherDocPath().isBlank());
+            item.put("hasStarterDoc", exercise.getStarterDocPath() != null && !exercise.getStarterDocPath().isBlank());
+            item.put("starterDocName", exercise.getStarterDocName());
             item.put("createdBy", exercise.getCreatedBy());
             item.put("creatorUsername", exercise.getCreatedBy() == null ? null : creatorNames.get(exercise.getCreatedBy()));
             item.put("submissionCount", submissionCounts.getOrDefault(exercise.getId(), 0L));
@@ -496,7 +556,8 @@ public class OfficeDocService {
     private boolean deleteFileIfUnused(String storedPath) {
         if (storedPath == null || storedPath.isBlank()) return false;
         long exerciseRefs = exerciseMapper.selectCount(
-                new QueryWrapper<OfficeExerciseEntity>().eq("teacher_doc_path", storedPath));
+                new QueryWrapper<OfficeExerciseEntity>()
+                        .eq("teacher_doc_path", storedPath).or().eq("starter_doc_path", storedPath));
         long submissionRefs = submissionMapper.selectCount(
                 new QueryWrapper<OfficeDocSubmissionEntity>().eq("student_doc_path", storedPath));
         if (exerciseRefs > 0 || submissionRefs > 0) return false;

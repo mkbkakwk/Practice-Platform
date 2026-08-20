@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
@@ -31,12 +32,15 @@ public class ContestService {
     private final ContestParticipantMapper participantMapper;
     private final ContestProblemMapper contestProblemMapper;
     private final ProblemMapper problemMapper;
+    private final OfficeQuestionMapper questionMapper;
     private final OfficeExerciseMapper exerciseMapper;
     private final SubmissionMapper submissionMapper;
     private final OfficeDocSubmissionMapper officeSubmissionMapper;
+    private final OfficeRecordMapper officeRecordMapper;
     private final UserMapper userMapper;
     private final SubmissionService submissionService;
     private final OfficeDocService officeDocService;
+    private final OfficeService officeService;
     private final ProblemService problemService;
     private final Clock clock;
 
@@ -44,24 +48,30 @@ public class ContestService {
                           ContestParticipantMapper participantMapper,
                           ContestProblemMapper contestProblemMapper,
                           ProblemMapper problemMapper,
+                          OfficeQuestionMapper questionMapper,
                           OfficeExerciseMapper exerciseMapper,
                           SubmissionMapper submissionMapper,
                           OfficeDocSubmissionMapper officeSubmissionMapper,
+                          OfficeRecordMapper officeRecordMapper,
                           UserMapper userMapper,
                           SubmissionService submissionService,
                           OfficeDocService officeDocService,
+                          OfficeService officeService,
                           ProblemService problemService,
                           Clock clock) {
         this.contestMapper = contestMapper;
         this.participantMapper = participantMapper;
         this.contestProblemMapper = contestProblemMapper;
         this.problemMapper = problemMapper;
+        this.questionMapper = questionMapper;
         this.exerciseMapper = exerciseMapper;
         this.submissionMapper = submissionMapper;
         this.officeSubmissionMapper = officeSubmissionMapper;
+        this.officeRecordMapper = officeRecordMapper;
         this.userMapper = userMapper;
         this.submissionService = submissionService;
         this.officeDocService = officeDocService;
+        this.officeService = officeService;
         this.problemService = problemService;
         this.clock = clock;
     }
@@ -202,6 +212,8 @@ public class ContestService {
                 && (submissionMapper.selectCount(new QueryWrapper<SubmissionEntity>()
                         .in("contest_problem_id", contestProblemIds)) > 0
                 || officeSubmissionMapper.selectCount(new QueryWrapper<OfficeDocSubmissionEntity>()
+                        .in("contest_problem_id", contestProblemIds)) > 0
+                || officeRecordMapper.selectCount(new QueryWrapper<OfficeRecordEntity>()
                         .in("contest_problem_id", contestProblemIds)) > 0)) {
             throw ContestException.conflict("CONTEST_HAS_SUBMISSIONS", "已有比赛提交，不能删除");
         }
@@ -284,6 +296,9 @@ public class ContestService {
         if (type == ContestProblemType.ALGORITHM) {
             ProblemEntity problem = requireUsableAlgorithmProblem(request.getProblemId());
             item.setAlgorithmProblemId(problem.getId());
+        } else if (type == ContestProblemType.OFFICE_CHOICE) {
+            OfficeQuestionEntity question = requireUsableOfficeQuestion(request.getProblemId());
+            item.setOfficeQuestionId(question.getId());
         } else {
             OfficeExerciseEntity exercise = requireUsableOfficeExercise(request.getProblemId());
             item.setOfficeExerciseId(exercise.getId());
@@ -295,7 +310,7 @@ public class ContestService {
         }
         log.info("Contest action=problem-add contestId={} contestProblemId={} ownerId={} phase={}",
                 contestId, item.getId(), contest.getOwnerId(), ContestLifecycle.phase(contest, clock));
-        return problemItem(item, true, Map.of(), Map.of());
+        return problemItem(item, true, Map.of(), Map.of(), Map.of());
     }
 
     @Transactional
@@ -359,7 +374,7 @@ public class ContestService {
     public OfficeSubmissionDtos.StudentSubmission submitOffice(
             int contestId, long contestProblemId, MultipartFile file) {
         ContestProblemEntity item = validateSubmissionContext(contestId, contestProblemId,
-                ContestProblemType.OFFICE);
+                ContestProblemType.OFFICE_DOCX);
         OfficeExerciseEntity exercise = exerciseMapper.selectById(item.getOfficeExerciseId());
         if (exercise == null || !Boolean.TRUE.equals(exercise.getVisible())) {
             throw ContestException.conflict("CONTEST_PROBLEM_NOT_VISIBLE", "比赛题目当前不可用");
@@ -370,6 +385,41 @@ public class ContestService {
                 contestId, contestProblemId, submission.id(), CurrentUser.getId());
         return submission;
     }
+
+    @Transactional
+    public ContestDtos.ChoiceSubmission submitChoice(
+            int contestId, long contestProblemId, ContestChoiceSubmitRequest request) {
+        ContestProblemEntity item = validateSubmissionContext(contestId, contestProblemId,
+                ContestProblemType.OFFICE_CHOICE);
+        ContestDtos.ChoiceSubmission submission = officeService.submitContest(
+                item.getOfficeQuestionId(), request.getSelected(), contestProblemId);
+        log.info("Contest action=choice-submit contestId={} contestProblemId={} recordId={} userId={} phase=RUNNING",
+                contestId, contestProblemId, submission.recordId(), CurrentUser.getId());
+        return submission;
+    }
+
+    public StarterDocument contestStarter(int contestId, long contestProblemId) {
+        requireAuthenticated();
+        ContestEntity contest = requireContest(contestId);
+        if (!ContestStatus.PUBLISHED.name().equals(contest.getStatus())
+                || clock.instant().isBefore(contest.getStartAt())) {
+            throw ContestException.conflict("CONTEST_NOT_STARTED", "比赛尚未开始");
+        }
+        if (!isParticipant(contestId, CurrentUser.getId())) {
+            throw ContestException.forbidden("NOT_CONTEST_PARTICIPANT", "不是该比赛参赛者");
+        }
+        ContestProblemEntity item = requireContestProblem(contestId, contestProblemId);
+        if (!ContestProblemType.OFFICE_DOCX.name().equals(item.getProblemType())) {
+            throw ContestException.conflict("PROBLEM_TYPE_MISMATCH", "该题不是 DOCX 文件题");
+        }
+        OfficeExerciseEntity exercise = exerciseMapper.selectById(item.getOfficeExerciseId());
+        if (exercise == null || !Boolean.TRUE.equals(exercise.getVisible())) {
+            throw ContestException.conflict("CONTEST_PROBLEM_NOT_VISIBLE", "比赛题目当前不可用");
+        }
+        return new StarterDocument(officeDocService.requireStarterDoc(exercise), exercise.getStarterDocName());
+    }
+
+    public record StarterDocument(File file, String name) {}
 
     private ContestProblemEntity validateSubmissionContext(int contestId, long contestProblemId,
                                                            ContestProblemType expectedType) {
@@ -503,22 +553,32 @@ public class ContestService {
         List<ContestProblemEntity> items = contestProblems(contestId);
         Set<Integer> algorithmIds = items.stream().map(ContestProblemEntity::getAlgorithmProblemId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Integer> questionIds = items.stream().map(ContestProblemEntity::getOfficeQuestionId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Integer> officeIds = items.stream().map(ContestProblemEntity::getOfficeExerciseId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Integer, ProblemEntity> algorithms = algorithmIds.isEmpty() ? Map.of() : problemMapper.selectBatchIds(algorithmIds)
                 .stream().collect(Collectors.toMap(ProblemEntity::getId, Function.identity()));
+        Map<Integer, OfficeQuestionEntity> questions = questionIds.isEmpty() ? Map.of()
+                : questionMapper.selectBatchIds(questionIds).stream()
+                .collect(Collectors.toMap(OfficeQuestionEntity::getId, Function.identity()));
         Map<Integer, OfficeExerciseEntity> offices = officeIds.isEmpty() ? Map.of() : exerciseMapper.selectBatchIds(officeIds)
                 .stream().collect(Collectors.toMap(OfficeExerciseEntity::getId, Function.identity()));
         return items.stream()
-                .filter(item -> includeContestOnly || isPublic(item, algorithms, offices))
-                .map(item -> problemItem(item, includeContestOnly, algorithms, offices)).toList();
+                .filter(item -> includeContestOnly || isPublic(item, algorithms, questions, offices))
+                .map(item -> problemItem(item, includeContestOnly, algorithms, questions, offices)).toList();
     }
 
     private boolean isPublic(ContestProblemEntity item, Map<Integer, ProblemEntity> algorithms,
+                             Map<Integer, OfficeQuestionEntity> questions,
                              Map<Integer, OfficeExerciseEntity> offices) {
         if (ContestProblemType.ALGORITHM.name().equals(item.getProblemType())) {
             ProblemEntity problem = algorithms.get(item.getAlgorithmProblemId());
             return problem != null && ContentVisibility.PUBLIC.name().equals(problem.getContentVisibility());
+        }
+        if (ContestProblemType.OFFICE_CHOICE.name().equals(item.getProblemType())) {
+            OfficeQuestionEntity question = questions.get(item.getOfficeQuestionId());
+            return question != null && ContentVisibility.PUBLIC.name().equals(question.getContentVisibility());
         }
         OfficeExerciseEntity exercise = offices.get(item.getOfficeExerciseId());
         return exercise != null && ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility());
@@ -526,6 +586,7 @@ public class ContestService {
 
     private ContestDtos.ProblemItem problemItem(ContestProblemEntity item, boolean includeContent,
                                                 Map<Integer, ProblemEntity> algorithms,
+                                                Map<Integer, OfficeQuestionEntity> questions,
                                                 Map<Integer, OfficeExerciseEntity> offices) {
         if (ContestProblemType.ALGORITHM.name().equals(item.getProblemType())) {
             ProblemEntity problem = algorithms.get(item.getAlgorithmProblemId());
@@ -551,6 +612,26 @@ public class ContestService {
                     item.getDisplayOrder(), item.getLabel(), problem == null ? null : problem.getTitle(),
                     problem == null ? null : problem.getDifficulty(), problem == null ? null : problem.getSlug(), content);
         }
+        if (ContestProblemType.OFFICE_CHOICE.name().equals(item.getProblemType())) {
+            OfficeQuestionEntity question = questions.get(item.getOfficeQuestionId());
+            if (question == null) question = questionMapper.selectById(item.getOfficeQuestionId());
+            Object content = null;
+            if (includeContent && question != null) {
+                OfficeQuestionDetail detail = officeService.getContestQuestion(question.getId());
+                Map<String, Object> safe = new LinkedHashMap<>();
+                safe.put("id", detail.getId());
+                safe.put("appType", detail.getAppType());
+                safe.put("category", detail.getCategory());
+                safe.put("difficulty", detail.getDifficulty());
+                safe.put("questionType", detail.getQuestionType());
+                safe.put("content", detail.getContent());
+                safe.put("options", detail.getOptions());
+                content = safe;
+            }
+            return new ContestDtos.ProblemItem(item.getId(), item.getProblemType(), item.getOfficeQuestionId(),
+                    item.getDisplayOrder(), item.getLabel(), question == null ? null : question.getContent(),
+                    question == null ? null : question.getDifficulty(), null, content);
+        }
         OfficeExerciseEntity exercise = offices.get(item.getOfficeExerciseId());
         if (exercise == null) exercise = exerciseMapper.selectById(item.getOfficeExerciseId());
         Object content = null;
@@ -561,6 +642,8 @@ public class ContestService {
             safe.put("description", exercise.getDescription());
             safe.put("difficulty", exercise.getDifficulty());
             safe.put("hasReference", exercise.getTeacherDocPath() != null && !exercise.getTeacherDocPath().isBlank());
+            safe.put("hasStarter", exercise.getStarterDocPath() != null && !exercise.getStarterDocPath().isBlank());
+            safe.put("starterDocName", exercise.getStarterDocName());
             content = safe;
         }
         return new ContestDtos.ProblemItem(item.getId(), item.getProblemType(), item.getOfficeExerciseId(),
@@ -587,7 +670,25 @@ public class ContestService {
         if (!CurrentUser.canManage(exercise.getCreatedBy())) {
             throw ContestException.forbidden("CONTEST_PROBLEM_FORBIDDEN", "无权将该 DOCX 练习加入比赛");
         }
+        requireCompleteOfficeExercise(exercise);
         return exercise;
+    }
+
+    private OfficeQuestionEntity requireUsableOfficeQuestion(int questionId) {
+        OfficeQuestionEntity question = officeService.requireContestReady(questionId);
+        if (!CurrentUser.canManage(question.getCreatedBy())) {
+            throw ContestException.forbidden("CONTEST_PROBLEM_FORBIDDEN", "无权将该 Office 选择题加入比赛");
+        }
+        return question;
+    }
+
+    private void requireCompleteOfficeExercise(OfficeExerciseEntity exercise) {
+        if (exercise.getTeacherDocPath() == null || exercise.getTeacherDocPath().isBlank()
+                || exercise.getStarterDocPath() == null || exercise.getStarterDocPath().isBlank()) {
+            throw ContestException.conflict("CONTEST_PROBLEM_NOT_READY", "DOCX 比赛题需要起始文档和参考文档");
+        }
+        officeDocService.getTeacherDocFile(exercise.getId());
+        officeDocService.requireStarterDoc(exercise);
     }
 
     private void validatePublishProblems(List<ContestProblemEntity> problems) {
@@ -597,13 +698,14 @@ public class ContestService {
                 if (problem == null || !Boolean.TRUE.equals(problem.getVisible())) {
                     throw ContestException.conflict("CONTEST_PROBLEM_NOT_VISIBLE", "比赛包含不可用算法题");
                 }
+            } else if (ContestProblemType.OFFICE_CHOICE.name().equals(item.getProblemType())) {
+                officeService.requireContestReady(item.getOfficeQuestionId());
             } else {
                 OfficeExerciseEntity exercise = exerciseMapper.selectById(item.getOfficeExerciseId());
-                if (exercise == null || !Boolean.TRUE.equals(exercise.getVisible())
-                        || exercise.getTeacherDocPath() == null || exercise.getTeacherDocPath().isBlank()) {
-                    throw ContestException.conflict("CONTEST_PROBLEM_NOT_READY", "DOCX 比赛题缺少有效参考文档");
+                if (exercise == null || !Boolean.TRUE.equals(exercise.getVisible())) {
+                    throw ContestException.conflict("CONTEST_PROBLEM_NOT_READY", "比赛包含不可用 DOCX 题");
                 }
-                officeDocService.getTeacherDocFile(exercise.getId());
+                requireCompleteOfficeExercise(exercise);
             }
         }
     }

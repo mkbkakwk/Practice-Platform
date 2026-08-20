@@ -4,13 +4,18 @@ import com.oj.dto.*;
 import com.oj.judge.LanguageDef;
 import com.oj.service.ContestService;
 import jakarta.validation.Valid;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/contests")
@@ -133,5 +138,29 @@ public class ContestController {
             @RequestParam("file") MultipartFile file) {
         OfficeSubmissionDtos.StudentSubmission submission = service.submitOffice(contestId, contestProblemId, file);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("submission", submission));
+    }
+
+    @PostMapping("/{contestId}/problems/{contestProblemId}/choice-submissions")
+    public ResponseEntity<Map<String, Object>> submitChoice(
+            @PathVariable int contestId,
+            @PathVariable long contestProblemId,
+            @Valid @RequestBody ContestChoiceSubmitRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("submission", service.submitChoice(contestId, contestProblemId, request)));
+    }
+
+    @GetMapping("/{contestId}/problems/{contestProblemId}/starter")
+    public ResponseEntity<FileSystemResource> downloadStarter(
+            @PathVariable int contestId, @PathVariable long contestProblemId) {
+        ContestService.StarterDocument document = service.contestStarter(contestId, contestProblemId);
+        FileSystemResource resource = new FileSystemResource(document.file());
+        String filename = document.name() == null ? document.file().getName() : document.name();
+        String encoded = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encoded)
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                .body(resource);
     }
 }

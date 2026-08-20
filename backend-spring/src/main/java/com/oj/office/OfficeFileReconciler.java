@@ -53,7 +53,8 @@ public class OfficeFileReconciler {
         }
         long exerciseRefs = exercises.selectCount(
                 new QueryWrapper<OfficeExerciseEntity>()
-                        .in("teacher_doc_path", storageId, absolutePath));
+                        .and(query -> query.in("teacher_doc_path", storageId, absolutePath)
+                                .or().in("starter_doc_path", storageId, absolutePath)));
         long submissionRefs = submissions.selectCount(
                 new QueryWrapper<OfficeDocSubmissionEntity>()
                         .in("student_doc_path", storageId, absolutePath));

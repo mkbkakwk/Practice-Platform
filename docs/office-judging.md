@@ -51,10 +51,13 @@ file. Exercise deletion commits database deletion before file cleanup, and a
 scheduled reconciler removes only old, UUID-named, unreferenced managed files.
 It never follows symlinks or deletes user-provided paths.
 
-Reference documents use the same validator and parser before replacing the active
-reference. Only the owning teacher or an administrator may download a reference.
-Students may download only their own submissions; teachers may download submissions
-for exercises they own.
+Starter and reference documents are stored independently and both use the same
+validator and parser before replacing the active file. The starter is the
+student input document; the reference is the server-only judging answer. A DOCX
+exercise is not contest-ready and cannot accept submissions until both exist.
+Only the owning teacher or an administrator may download a reference. Students
+may download a PUBLIC starter (or a contest-gated CONTEST_ONLY starter) and only
+their own submissions; teachers may download submissions for exercises they own.
 
 ## Canonical model and normalization
 

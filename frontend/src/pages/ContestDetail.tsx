@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FileUp, Loader2, Send } from "lucide-react";
+import { Download, FileUp, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
   api,
@@ -8,6 +8,7 @@ import {
   isAbortError,
   type ContestDetail as ContestDetailModel,
   type ContestProblemItem,
+  type ContestChoiceSubmission,
   type StudentDocSubmission,
   type LanguageDef,
   type Submission,
@@ -32,10 +33,11 @@ interface ProblemDraft {
 }
 
 interface ProblemRunState {
-  busy: "submitting" | "polling" | null;
+  busy: "submitting" | "polling" | "downloading" | null;
   pollCount: number;
   submission?: Submission;
   officeSubmission?: StudentDocSubmission;
+  choiceSubmission?: ContestChoiceSubmission;
   notice?: string;
   error?: string;
 }
@@ -54,6 +56,7 @@ export default function ContestDetail() {
   const [drafts, setDrafts] = useState<Record<number, ProblemDraft>>({});
   const [runs, setRuns] = useState<Record<number, ProblemRunState>>({});
   const [files, setFiles] = useState<Record<number, File | null>>({});
+  const [choiceSelections, setChoiceSelections] = useState<Record<number, string[]>>({});
   const [now, setNow] = useState(() => Date.now());
   const joiningRef = useRef(false);
   const phaseRef = useRef<ContestDetailModel["contest"]["phase"] | null>(null);
@@ -270,6 +273,51 @@ export default function ContestDetail() {
     }
   }
 
+  async function submitChoice(problem: ContestProblemItem) {
+    const problemId = problem.contestProblemId;
+    if (busyProblemRef.current.has(problemId)) return;
+    const selected = choiceSelections[problemId] ?? [];
+    if (selected.length === 0) return;
+    busyProblemRef.current.add(problemId);
+    updateRun(problemId, { busy: "submitting", choiceSubmission: undefined, notice: undefined, error: undefined });
+    try {
+      const response = await api.submitContestChoice(contestId, problemId, selected);
+      updateRun(problemId, { busy: null, choiceSubmission: response.submission });
+      toast.success("作答已提交");
+    } catch (reason) {
+      updateRun(problemId, { busy: null, error: getApiErrorMessage(reason, "Office 选择题提交失败") });
+    } finally {
+      busyProblemRef.current.delete(problemId);
+    }
+  }
+
+  async function downloadStarter(problem: ContestProblemItem) {
+    const problemId = problem.contestProblemId;
+    if (busyProblemRef.current.has(problemId)) return;
+    busyProblemRef.current.add(problemId);
+    updateRun(problemId, { busy: "downloading", notice: undefined, error: undefined });
+    try {
+      const filename = String((problem.content as { starterDocName?: string } | null)?.starterDocName ?? "starter.docx");
+      await api.downloadContestStarter(contestId, problemId, filename);
+      updateRun(problemId, { busy: null });
+      toast.success("待修改文件已下载");
+    } catch (reason) {
+      updateRun(problemId, { busy: null, error: getApiErrorMessage(reason, "待修改文件下载失败") });
+    } finally {
+      busyProblemRef.current.delete(problemId);
+    }
+  }
+
+  function changeChoice(problem: ContestProblemItem, value: string, checked: boolean, multi: boolean) {
+    setChoiceSelections((current) => {
+      const previous = current[problem.contestProblemId] ?? [];
+      const next = multi
+        ? checked ? [...new Set([...previous, value])] : previous.filter((item) => item !== value)
+        : checked ? [value] : [];
+      return { ...current, [problem.contestProblemId]: next };
+    });
+  }
+
   function chooseFile(problemId: number, file: File | null) {
     if (!file) {
       setFiles((current) => ({ ...current, [problemId]: null }));
@@ -340,11 +388,15 @@ export default function ContestDetail() {
           draft={drafts[activeProblem.contestProblemId]}
           run={runs[activeProblem.contestProblemId]}
           file={files[activeProblem.contestProblemId] ?? null}
+          selectedChoices={choiceSelections[activeProblem.contestProblemId] ?? []}
           onLanguageChange={(language) => switchLanguage(activeProblem.contestProblemId, language)}
           onCodeChange={(code) => updateCode(activeProblem.contestProblemId, code)}
           onFileChange={(file) => chooseFile(activeProblem.contestProblemId, file)}
           onSubmitAlgorithm={() => void submitAlgorithm(activeProblem)}
           onSubmitOffice={() => void submitOffice(activeProblem)}
+          onChoiceChange={(value, checked, multi) => changeChoice(activeProblem, value, checked, multi)}
+          onSubmitChoice={() => void submitChoice(activeProblem)}
+          onDownloadStarter={() => void downloadStarter(activeProblem)}
         />}
       </div>
     </>}
@@ -361,7 +413,7 @@ function ProblemNavButton({ problem, active, compact = false, onClick }: {
     "rounded-md border text-left transition-colors",
     compact ? "min-w-36 px-3 py-2" : "w-full px-3 py-2",
     active ? "border-zinc-900 bg-zinc-900 text-white" : "border-transparent text-zinc-700 hover:bg-zinc-100",
-  )}><span className="mr-2 font-bold">{problem.label}</span><span className="text-sm">{problem.title}</span><span className={cn("ml-2 text-[10px]", active ? "text-zinc-300" : "text-zinc-500")}>{problem.problemType === "ALGORITHM" ? "算法" : "DOCX"} · {problem.difficulty}</span></button>;
+  )}><span className="mr-2 font-bold">{problem.label}</span><span className="text-sm">{problem.title}</span><span className={cn("ml-2 text-[10px]", active ? "text-zinc-300" : "text-zinc-500")}>{problemTypeLabel(problem.problemType)} · {problem.difficulty}</span></button>;
 }
 
 function ContestProblemPanel({
@@ -373,11 +425,15 @@ function ContestProblemPanel({
   draft,
   run,
   file,
+  selectedChoices,
   onLanguageChange,
   onCodeChange,
   onFileChange,
   onSubmitAlgorithm,
   onSubmitOffice,
+  onChoiceChange,
+  onSubmitChoice,
+  onDownloadStarter,
 }: {
   problem: ContestProblemItem;
   phase: ContestDetailModel["contest"]["phase"];
@@ -387,11 +443,15 @@ function ContestProblemPanel({
   draft?: ProblemDraft;
   run?: ProblemRunState;
   file: File | null;
+  selectedChoices: string[];
   onLanguageChange: (language: string) => void;
   onCodeChange: (code: string) => void;
   onFileChange: (file: File | null) => void;
   onSubmitAlgorithm: () => void;
   onSubmitOffice: () => void;
+  onChoiceChange: (value: string, checked: boolean, multi: boolean) => void;
+  onSubmitChoice: () => void;
+  onDownloadStarter: () => void;
 }) {
   const canSubmit = phase === "RUNNING" && participant;
   const content = problem.content as {
@@ -399,12 +459,19 @@ function ContestProblemPanel({
     inputFmt?: string;
     outputFmt?: string;
     samples?: Array<{ input: string; output: string }>;
+    appType?: string;
+    category?: string;
+    questionType?: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TRUE_FALSE";
+    content?: string;
+    options?: string[];
+    hasStarter?: boolean;
+    starterDocName?: string;
   } | null;
   const code = draft ? (draft.codeByLanguage[draft.language] ?? "") : "";
   const busy = run?.busy != null;
 
   return <Card className="min-w-0 p-5" data-testid={`contest-problem-${problem.contestProblemId}`}>
-    <div className="mb-4 flex items-center gap-2"><span className="rounded bg-zinc-900 px-2 py-1 text-xs font-bold text-white">{problem.label}</span><h2 className="text-lg font-semibold">{problem.title}</h2><span className="text-xs text-zinc-500">{problem.problemType === "ALGORITHM" ? "算法" : "DOCX"}</span></div>
+    <div className="mb-4 flex items-center gap-2"><span className="rounded bg-zinc-900 px-2 py-1 text-xs font-bold text-white">{problem.label}</span><h2 className="text-lg font-semibold">{problem.title}</h2><span className="text-xs text-zinc-500">{problemTypeLabel(problem.problemType)}</span></div>
     {content?.description && <Markdown>{content.description}</Markdown>}
     {content?.inputFmt && <section className="mt-4"><h3 className="text-sm font-semibold">输入</h3><Markdown>{content.inputFmt}</Markdown></section>}
     {content?.outputFmt && <section className="mt-4"><h3 className="text-sm font-semibold">输出</h3><Markdown>{content.outputFmt}</Markdown></section>}
@@ -417,7 +484,36 @@ function ContestProblemPanel({
       <Button disabled={busy || languages.length === 0 || !draft?.language || !code.trim()} onClick={onSubmitAlgorithm}><Send className="mr-1 h-4 w-4" />{run?.busy === "submitting" ? "提交中..." : run?.busy === "polling" ? `正在判题${run.pollCount ? ` (${run.pollCount})` : "..."}` : "提交代码"}</Button>
     </section>}
 
-    {canSubmit && problem.problemType === "OFFICE" && <section className="mt-5 space-y-3 border-t pt-5">
+    {problem.problemType === "OFFICE_CHOICE" && <section className="mt-5 space-y-3 border-t pt-5">
+      <p className="text-sm text-zinc-700">{content?.content}</p>
+      <p className="text-xs text-zinc-500">{content?.appType} · {content?.questionType}</p>
+      {canSubmit && <fieldset className="space-y-2" disabled={busy}>
+        <legend className="sr-only">选择答案</legend>
+        {(content?.options ?? []).map((option, index) => {
+          const value = content?.questionType === "TRUE_FALSE" ? (index === 0 ? "T" : "F") : String(index);
+          const multi = content?.questionType === "MULTI_CHOICE";
+          return <label key={value} className="flex cursor-pointer items-start gap-2 rounded border p-3 text-sm">
+            <input type={multi ? "checkbox" : "radio"} name={`choice-${problem.contestProblemId}`}
+              value={value} checked={selectedChoices.includes(value)}
+              onChange={(event) => onChoiceChange(value, event.target.checked, multi)} />
+            <span>{option}</span>
+          </label>;
+        })}
+        <Button disabled={busy || selectedChoices.length === 0} onClick={onSubmitChoice}>
+          {busy && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{busy ? "提交中..." : "提交答案"}
+        </Button>
+      </fieldset>}
+    </section>}
+
+    {problem.problemType === "OFFICE_DOCX" && content?.hasStarter && participant && (phase === "RUNNING" || phase === "ENDED") && <section className="mt-5 rounded border border-blue-200 bg-blue-50 p-4">
+      <p className="mb-2 text-sm font-medium text-blue-900">① 下载待修改文件 → ② 用 Word / WPS 修改 → ③ 上传结果</p>
+      <Button variant="outline" disabled={busy} onClick={onDownloadStarter}>
+        {run?.busy === "downloading" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Download className="mr-1 h-4 w-4" />}
+        {run?.busy === "downloading" ? "下载中..." : `下载 ${content.starterDocName ?? "starter.docx"}`}
+      </Button>
+    </section>}
+
+    {canSubmit && problem.problemType === "OFFICE_DOCX" && <section className="mt-5 space-y-3 border-t pt-5">
       <label className="block text-sm font-medium" htmlFor={`contest-docx-${problem.contestProblemId}`}>DOCX 文件</label>
       <input id={`contest-docx-${problem.contestProblemId}`} type="file" accept=".docx" disabled={busy} onChange={(event) => onFileChange(event.target.files?.[0] ?? null)} />
       {file && <p className="text-sm text-zinc-600">{file.name} · {formatFileSize(file.size)}</p>}
@@ -428,7 +524,16 @@ function ContestProblemPanel({
     {run?.error && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{run.error}</p>}
     {run?.submission && <SubmissionResultCard submission={run.submission} pendingMessage={run.notice} />}
     {run?.officeSubmission && <OfficeJudgeResult submission={run.officeSubmission} />}
+    {run?.choiceSubmission && <div className={cn("mt-4 rounded border p-4 text-sm font-medium",
+      run.choiceSubmission.correct ? "border-green-200 bg-green-50 text-green-800" : "border-amber-200 bg-amber-50 text-amber-800")}
+      role="status">{run.choiceSubmission.correct ? "回答正确" : "回答错误"} · Record #{run.choiceSubmission.recordId}</div>}
   </Card>;
+}
+
+function problemTypeLabel(type: ContestProblemItem["problemType"]) {
+  if (type === "ALGORITHM") return "算法";
+  if (type === "OFFICE_CHOICE") return "Office 选择题";
+  return "DOCX";
 }
 
 function SampleBox({ label, value }: { label: string; value: string }) {

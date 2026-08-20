@@ -11,6 +11,7 @@ public class OfficeQuestionListItem {
     private String questionType;
     private String content;
     private Boolean visible;
+    private String contentVisibility;
     private Integer createdBy;
     private String creatorUsername;
     private Long submissionCount;
@@ -19,7 +20,7 @@ public class OfficeQuestionListItem {
     public OfficeQuestionListItem() {}
 
     public OfficeQuestionListItem(Integer id, String appType, String category, String difficulty,
-                                  String questionType, String content, Boolean visible,
+                                  String questionType, String content, Boolean visible, String contentVisibility,
                                   Integer createdBy, String creatorUsername, Long submissionCount,
                                   LocalDateTime createdAt) {
         this.id = id;
@@ -29,6 +30,7 @@ public class OfficeQuestionListItem {
         this.questionType = questionType;
         this.content = content;
         this.visible = visible;
+        this.contentVisibility = contentVisibility;
         this.createdBy = createdBy;
         this.creatorUsername = creatorUsername;
         this.submissionCount = submissionCount;
@@ -49,6 +51,8 @@ public class OfficeQuestionListItem {
     public void setContent(String content) { this.content = content; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
     public Integer getCreatedBy() { return createdBy; }
     public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
     public String getCreatorUsername() { return creatorUsername; }

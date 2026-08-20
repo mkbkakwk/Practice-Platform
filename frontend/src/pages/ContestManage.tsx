@@ -11,6 +11,7 @@ import {
   type ContestStudentOption,
   type ContestUpsert,
   type DocExerciseListItem,
+  type OfficeQuestionListItem,
   type ProblemListItem,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -59,11 +60,12 @@ export default function ContestManage() {
   const [participants, setParticipants] = useState<ContestParticipant[]>([]);
   const [participantPage, setParticipantPage] = useState(1);
   const [participantTotal, setParticipantTotal] = useState(0);
-  const [catalogType, setCatalogType] = useState<"ALGORITHM" | "OFFICE">("ALGORITHM");
+  const [catalogType, setCatalogType] = useState<ContestProblemItem["problemType"]>("ALGORITHM");
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [catalogProblems, setCatalogProblems] = useState<ProblemListItem[]>([]);
   const [catalogDocs, setCatalogDocs] = useState<DocExerciseListItem[]>([]);
+  const [catalogQuestions, setCatalogQuestions] = useState<OfficeQuestionListItem[]>([]);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [selectedProblemIds, setSelectedProblemIds] = useState<Set<number>>(new Set());
   const [studentQuery, setStudentQuery] = useState("");
@@ -135,13 +137,18 @@ export default function ContestManage() {
     setCatalogLoading(true);
     const request = catalogType === "ALGORITHM"
       ? api.listManageProblems({ page: catalogPage, pageSize: CATALOG_PAGE_SIZE })
-      : api.listManageDocExercises({ page: catalogPage, pageSize: CATALOG_PAGE_SIZE });
+      : catalogType === "OFFICE_CHOICE"
+        ? api.listManageOfficeQuestions({ page: catalogPage, pageSize: CATALOG_PAGE_SIZE })
+        : api.listManageDocExercises({ page: catalogPage, pageSize: CATALOG_PAGE_SIZE });
     request.then((response) => {
       if (!active) return;
       if (catalogType === "ALGORITHM" && "problems" in response) {
         setCatalogProblems(response.problems);
         setCatalogTotal(response.total);
-      } else if (catalogType === "OFFICE" && "exercises" in response) {
+      } else if (catalogType === "OFFICE_CHOICE" && "questions" in response) {
+        setCatalogQuestions(response.questions);
+        setCatalogTotal(response.total);
+      } else if (catalogType === "OFFICE_DOCX" && "exercises" in response) {
         setCatalogDocs(response.exercises);
         setCatalogTotal(response.total);
       }
@@ -300,10 +307,15 @@ export default function ContestManage() {
   const studentPages = Math.max(1, Math.ceil(studentTotal / STUDENT_PAGE_SIZE));
   const existingIds = useMemo(() => new Set(detail?.problems.filter((item) => item.problemType === catalogType).map((item) => item.problemId) ?? []), [catalogType, detail]);
   const normalizedQuery = catalogQuery.trim().toLowerCase();
-  const catalogItems = (catalogType === "ALGORITHM" ? catalogProblems : catalogDocs).filter((item) => {
+  const catalogItems = (catalogType === "ALGORITHM"
+    ? catalogProblems.map((item) => ({ ...item, selectorTitle: item.title, selectorMeta: item.slug }))
+    : catalogType === "OFFICE_CHOICE"
+      ? catalogQuestions.map((item) => ({ ...item, selectorTitle: item.content, selectorMeta: `${item.appType} · ${item.questionType}` }))
+      : catalogDocs.map((item) => ({ ...item, selectorTitle: item.title, selectorMeta: item.hasStarterDoc && item.hasTeacherDoc ? "Starter + Reference 已齐全" : "缺少 Starter 或 Reference" })))
+    .filter((item) => {
     if (!normalizedQuery) return true;
-    const slug = "slug" in item ? item.slug : "";
-    return item.title.toLowerCase().includes(normalizedQuery) || slug.toLowerCase().includes(normalizedQuery);
+    return item.selectorTitle.toLowerCase().includes(normalizedQuery)
+      || item.selectorMeta.toLowerCase().includes(normalizedQuery);
   });
 
   if (loading) return <div className="py-20 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" /></div>;
@@ -323,12 +335,13 @@ export default function ContestManage() {
     {detail && <>
       <div className="my-4 flex flex-wrap gap-2">{detail.contest.status === "DRAFT" && <Button disabled={busy !== null} onClick={() => setConfirmAction({ kind: "publish" })}>{busy === "publishing" ? "发布中..." : "发布比赛"}</Button>}{detail.contest.phase !== "ENDED" && detail.contest.phase !== "CANCELLED" && <Button variant="destructive" disabled={busy !== null} onClick={() => setConfirmAction({ kind: "cancel" })}>{busy === "cancelling" ? "取消中..." : "取消比赛"}</Button>}{detail.contest.status === "DRAFT" && <Button variant="outline" disabled={busy !== null} onClick={() => setConfirmAction({ kind: "delete" })}>删除草稿</Button>}</div>
       <Card className="mb-4 p-5"><h2 className="mb-3 font-semibold">比赛题目（{detail.problems.length}）</h2><p className="mb-3 text-xs text-amber-700">PUBLIC 题目仍可从练习区提前查看；赛前保密请使用 CONTEST_ONLY。</p>
-        {detail.problems.length === 0 ? <p className="rounded bg-zinc-50 p-6 text-center text-sm text-zinc-500">暂无比赛题目，请从下方选择。</p> : detail.problems.map((item, index) => <div key={item.contestProblemId} className="flex items-center gap-2 border-t py-2 text-sm"><span className="w-8 font-bold">{item.label}</span><span className="flex-1">{item.title} · {item.problemType === "ALGORITHM" ? "算法" : "DOCX"}</span><Button aria-label={`上移 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null || index === 0} onClick={() => void move(item, -1)}><ArrowUp className="h-4 w-4" /></Button><Button aria-label={`下移 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null || index === detail.problems.length - 1} onClick={() => void move(item, 1)}><ArrowDown className="h-4 w-4" /></Button><Button aria-label={`移除 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null} onClick={() => setConfirmAction({ kind: "remove-problem", problem: item })}><Trash2 className="h-4 w-4 text-red-600" /></Button></div>)}
+        {detail.problems.length === 0 ? <p className="rounded bg-zinc-50 p-6 text-center text-sm text-zinc-500">暂无比赛题目，请从下方选择。</p> : detail.problems.map((item, index) => <div key={item.contestProblemId} className="flex items-center gap-2 border-t py-2 text-sm"><span className="w-8 font-bold">{item.label}</span><span className="flex-1">{item.title} · {contestTypeLabel(item.problemType)}</span><Button aria-label={`上移 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null || index === 0} onClick={() => void move(item, -1)}><ArrowUp className="h-4 w-4" /></Button><Button aria-label={`下移 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null || index === detail.problems.length - 1} onClick={() => void move(item, 1)}><ArrowDown className="h-4 w-4" /></Button><Button aria-label={`移除 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null} onClick={() => setConfirmAction({ kind: "remove-problem", problem: item })}><Trash2 className="h-4 w-4 text-red-600" /></Button></div>)}
 
-        {mutable && <div className="mt-5 rounded border p-4"><div className="flex flex-wrap items-end gap-3"><div><Label htmlFor="catalog-type">添加题型</Label><select id="catalog-type" value={catalogType} disabled={busy !== null} onChange={(event) => { setCatalogType(event.target.value as typeof catalogType); setCatalogPage(1); setCatalogQuery(""); }} className="mt-1 block h-9 rounded border px-3 text-sm"><option value="ALGORITHM">算法题</option><option value="OFFICE">DOCX 题</option></select></div><div className="min-w-60 flex-1"><Label htmlFor="catalog-search">搜索当前页</Label><div className="relative mt-1"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" /><Input id="catalog-search" className="pl-8" value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="标题或 slug" /></div></div></div>
+        {mutable && <div className="mt-5 rounded border p-4"><div className="flex flex-wrap items-end gap-3"><div><Label htmlFor="catalog-type">添加题型</Label><select id="catalog-type" value={catalogType} disabled={busy !== null} onChange={(event) => { setCatalogType(event.target.value as typeof catalogType); setCatalogPage(1); setCatalogQuery(""); }} className="mt-1 block h-9 rounded border px-3 text-sm"><option value="ALGORITHM">算法题</option><option value="OFFICE_CHOICE">Office 选择题</option><option value="OFFICE_DOCX">DOCX 文件题</option></select></div><div className="min-w-60 flex-1"><Label htmlFor="catalog-search">搜索当前页</Label><div className="relative mt-1"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" /><Input id="catalog-search" className="pl-8" value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="标题或元数据" /></div></div></div>
           {catalogLoading ? <div className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-zinc-400" /></div> : catalogItems.length === 0 ? <p className="py-8 text-center text-sm text-zinc-500">当前页没有可选题目</p> : <div className="mt-3 divide-y">{catalogItems.map((item) => {
-            const unavailable = existingIds.has(item.id) || item.visible === false || ("hasTeacherDoc" in item && !item.hasTeacherDoc);
-            return <label key={item.id} className={cn("flex items-start gap-3 py-3", unavailable && "opacity-50")}><Checkbox checked={selectedProblemIds.has(item.id)} disabled={unavailable || busy !== null} onCheckedChange={(checked) => setSelectedProblemIds((current) => { const next = new Set(current); if (checked) next.add(item.id); else next.delete(item.id); return next; })} aria-label={`选择 ${item.title}`} /><span className="flex-1"><span className="block font-medium">{item.title}</span><span className="text-xs text-zinc-500">#{item.id}{"slug" in item ? ` · ${item.slug}` : ""} · {item.difficulty} · {item.contentVisibility}{"hasTeacherDoc" in item ? ` · ${item.hasTeacherDoc ? "已有参考文档" : "缺少参考文档"}` : ""}{existingIds.has(item.id) ? " · 已在比赛中" : ""}</span></span></label>})}</div>}
+            const unavailable = existingIds.has(item.id) || item.visible === false
+              || ("hasTeacherDoc" in item && (!item.hasTeacherDoc || !item.hasStarterDoc));
+            return <label key={item.id} className={cn("flex items-start gap-3 py-3", unavailable && "opacity-50")}><Checkbox checked={selectedProblemIds.has(item.id)} disabled={unavailable || busy !== null} onCheckedChange={(checked) => setSelectedProblemIds((current) => { const next = new Set(current); if (checked) next.add(item.id); else next.delete(item.id); return next; })} aria-label={`选择 ${item.selectorTitle}`} /><span className="flex-1"><span className="block font-medium">{item.selectorTitle}</span><span className="text-xs text-zinc-500">#{item.id} · {item.selectorMeta} · {item.difficulty} · {item.contentVisibility}{existingIds.has(item.id) ? " · 已在比赛中" : ""}</span></span></label>})}</div>}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><PageControls page={catalogPage} totalPages={catalogPages} onPage={setCatalogPage} disabled={catalogLoading || busy !== null} /><Button disabled={selectedProblemIds.size === 0 || busy !== null} onClick={() => void addSelectedProblems()}><Plus className="mr-1 h-4 w-4" />{busy === "adding-problems" ? "添加中..." : `添加 ${selectedProblemIds.size} 道题`}</Button></div>
         </div>}
       </Card>
@@ -362,7 +375,8 @@ function ConfirmDialog({ action, detail, onOpenChange, onConfirm, busy }: {
   busy: boolean;
 }) {
   const algorithmCount = detail?.problems.filter((item) => item.problemType === "ALGORITHM").length ?? 0;
-  const officeCount = detail?.problems.filter((item) => item.problemType === "OFFICE").length ?? 0;
+  const choiceCount = detail?.problems.filter((item) => item.problemType === "OFFICE_CHOICE").length ?? 0;
+  const docxCount = detail?.problems.filter((item) => item.problemType === "OFFICE_DOCX").length ?? 0;
   let title = "确认操作";
   let description: React.ReactNode = "此操作需要确认。";
   let confirmLabel = "确认";
@@ -370,7 +384,7 @@ function ConfirmDialog({ action, detail, onOpenChange, onConfirm, busy }: {
   if (action?.kind === "publish" && detail) {
     title = "发布比赛";
     confirmLabel = "确认发布比赛";
-    description = <span className="space-y-1"><span className="block">比赛：{detail.contest.title}</span><span className="block">时间：{formatLocal(detail.contest.startAt)} → {formatLocal(detail.contest.endAt)}</span><span className="block">参赛方式：{detail.contest.accessType}</span><span className="block">题目：{detail.problems.length}（Algorithm {algorithmCount} / DOCX {officeCount}）</span></span>;
+    description = <span className="space-y-1"><span className="block">比赛：{detail.contest.title}</span><span className="block">时间：{formatLocal(detail.contest.startAt)} → {formatLocal(detail.contest.endAt)}</span><span className="block">参赛方式：{detail.contest.accessType}</span><span className="block">题目：{detail.problems.length}（Algorithm {algorithmCount} / Office 选择 {choiceCount} / DOCX {docxCount}）</span></span>;
   } else if (action?.kind === "cancel") {
     title = "取消比赛？";
     confirmLabel = "确认取消比赛";
@@ -393,6 +407,12 @@ function ConfirmDialog({ action, detail, onOpenChange, onConfirm, busy }: {
     description = `将 ${action.participant.username} 从比赛参赛者中移除。`;
   }
   return <AlertDialog open={action !== null} onOpenChange={onOpenChange}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{title}</AlertDialogTitle><AlertDialogDescription asChild><div>{description}</div></AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>返回检查</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={onConfirm} className={destructive ? "bg-red-600 text-white hover:bg-red-700" : ""}>{confirmLabel}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>;
+}
+
+function contestTypeLabel(type: ContestProblemItem["problemType"]) {
+  if (type === "ALGORITHM") return "算法";
+  if (type === "OFFICE_CHOICE") return "Office 选择题";
+  return "DOCX";
 }
 
 function validateForm(form: ContestUpsert): FormErrors {

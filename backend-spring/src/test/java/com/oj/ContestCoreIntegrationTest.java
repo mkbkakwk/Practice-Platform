@@ -12,7 +12,9 @@ import com.oj.mapper.OfficeDocSubmissionMapper;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.service.ContestService;
 import com.oj.service.OfficeDocService;
+import com.oj.service.OfficeService;
 import com.oj.service.ProblemService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.junit.jupiter.api.AfterEach;
@@ -27,6 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -50,7 +53,9 @@ class ContestCoreIntegrationTest {
     @Autowired private SubmissionMapper submissions;
     @Autowired private OfficeDocSubmissionMapper officeSubmissions;
     @Autowired private OfficeDocService officeDocs;
+    @Autowired private OfficeService office;
     @Autowired private ProblemService problems;
+    @Autowired private ObjectMapper objectMapper;
     @MockBean private Clock clock;
 
     private int teacher;
@@ -161,8 +166,9 @@ class ContestCoreIntegrationTest {
         as(teacher, "teacher", "TEACHER");
         int contestId = contests.create(request("invite", "INVITE_ONLY")).getId();
         contests.addProblem(contestId, problemRequest("ALGORITHM", algorithmProblem));
-        ContestDtos.ProblemItem office = contests.addProblem(contestId, problemRequest("OFFICE", officeExercise));
+        officeDocs.uploadStarterDoc(officeExercise, docx("starter"));
         officeDocs.uploadTeacherDoc(officeExercise, docx("reference"));
+        ContestDtos.ProblemItem office = contests.addProblem(contestId, problemRequest("OFFICE_DOCX", officeExercise));
 
         as(otherTeacher, "other-teacher", "TEACHER");
         assertThatThrownBy(() -> contests.addParticipant(contestId, student)).isInstanceOf(ContestException.class);
@@ -219,14 +225,15 @@ class ContestCoreIntegrationTest {
         as(teacher, "teacher", "TEACHER");
         int contestId = contests.create(request("Concurrent join", "OPEN")).getId();
         ContestDtos.ProblemItem first = contests.addProblem(contestId, problemRequest("ALGORITHM", algorithmProblem));
-        ContestDtos.ProblemItem second = contests.addProblem(contestId, problemRequest("OFFICE", officeExercise));
+        officeDocs.uploadStarterDoc(officeExercise, docx("starter"));
+        officeDocs.uploadTeacherDoc(officeExercise, docx("reference"));
+        ContestDtos.ProblemItem second = contests.addProblem(contestId, problemRequest("OFFICE_DOCX", officeExercise));
         assertThatThrownBy(() -> contests.addProblem(contestId, problemRequest("ALGORITHM", algorithmProblem)))
                 .isInstanceOf(ContestException.class);
         assertThat(contests.reorderProblems(contestId,
                 List.of(second.contestProblemId(), first.contestProblemId())))
                 .extracting(ContestDtos.ProblemItem::displayOrder).containsExactly(1, 2);
 
-        officeDocs.uploadTeacherDoc(officeExercise, docx("reference"));
         contests.publish(contestId);
         try (var executor = Executors.newFixedThreadPool(10)) {
             List<Callable<Void>> calls = new ArrayList<>();
@@ -309,9 +316,10 @@ class ContestCoreIntegrationTest {
     @Test
     void docxContestSubmissionReusesSecureDeterministicJudge() throws Exception {
         as(teacher, "teacher", "TEACHER");
+        officeDocs.uploadStarterDoc(officeExercise, docx("starter"));
         officeDocs.uploadTeacherDoc(officeExercise, docx("expected"));
         int contestId = contests.create(request("DOCX contest", "INVITE_ONLY")).getId();
-        ContestDtos.ProblemItem item = contests.addProblem(contestId, problemRequest("OFFICE", officeExercise));
+        ContestDtos.ProblemItem item = contests.addProblem(contestId, problemRequest("OFFICE_DOCX", officeExercise));
         contests.addParticipant(contestId, student);
         contests.publish(contestId);
         setNow(START);
@@ -334,22 +342,175 @@ class ContestCoreIntegrationTest {
     }
 
     @Test
+    void officeChoiceContestSupportsAllQuestionTypesWithoutExposingAnswers() throws Exception {
+        int single = officeQuestion("SINGLE_CHOICE", "[\"Alpha\",\"Beta\"]", "1");
+        int multiple = officeQuestion("MULTI_CHOICE", "[\"One\",\"Two\",\"Three\"]", "0,2");
+        int truth = officeQuestion("TRUE_FALSE", "[\"正确\",\"错误\"]", "T");
+        int practice = officeQuestion("SINGLE_CHOICE", "[\"Public A\",\"Public B\"]", "1", "PUBLIC");
+        as(teacher, "teacher", "TEACHER");
+        int contestId = contests.create(request("Office choices", "INVITE_ONLY")).getId();
+        ContestDtos.ProblemItem singleItem = contests.addProblem(contestId, problemRequest("OFFICE_CHOICE", single));
+        ContestDtos.ProblemItem multiItem = contests.addProblem(contestId, problemRequest("OFFICE_CHOICE", multiple));
+        ContestDtos.ProblemItem truthItem = contests.addProblem(contestId, problemRequest("OFFICE_CHOICE", truth));
+        contests.addParticipant(contestId, student);
+        contests.publish(contestId);
+
+        as(student, "student", "USER");
+        OfficeSubmitResult practiceResult = office.submit(practiceChoice(practice, "1"));
+        assertThat(practiceResult.getCorrect()).isTrue();
+        assertThat(jdbc.queryForObject("""
+                SELECT contest_problem_id IS NULL FROM "OfficeRecord"
+                WHERE question_id=? ORDER BY id DESC LIMIT 1
+                """, Boolean.class, practice)).isTrue();
+        assertThat(contests.detail(contestId).problems()).isEmpty();
+        assertThatThrownBy(() -> office.submit(practiceChoice(single, "1")))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> contests.submitChoice(contestId, singleItem.contestProblemId(), choice("1")))
+                .isInstanceOf(ContestException.class).hasMessageContaining("尚未开始");
+
+        setNow(START);
+        ContestDtos.Detail visible = contests.detail(contestId);
+        String detailJson = objectMapper.writeValueAsString(visible);
+        assertThat(visible.problems()).hasSize(3);
+        assertThat(detailJson)
+                .doesNotContain("answer")
+                .doesNotContain("explanation")
+                .doesNotContain("SECRET_OFFICE_EXPLANATION");
+
+        ContestDtos.ChoiceSubmission singleResult = contests.submitChoice(
+                contestId, singleItem.contestProblemId(), choice("1"));
+        ContestDtos.ChoiceSubmission multiResult = contests.submitChoice(
+                contestId, multiItem.contestProblemId(), choice("2", "0"));
+        ContestDtos.ChoiceSubmission truthResult = contests.submitChoice(
+                contestId, truthItem.contestProblemId(), choice("T"));
+        ContestDtos.ChoiceSubmission wrongResult = contests.submitChoice(
+                contestId, singleItem.contestProblemId(), choice("0"));
+
+        assertThat(singleResult.correct()).isTrue();
+        assertThat(multiResult.correct()).isTrue();
+        assertThat(truthResult.correct()).isTrue();
+        assertThat(wrongResult.correct()).isFalse();
+        assertThat(singleResult.createdAt()).isNotNull();
+        assertThat(objectMapper.writeValueAsString(singleResult))
+                .doesNotContain("answer")
+                .doesNotContain("explanation")
+                .doesNotContain("SECRET_OFFICE_EXPLANATION");
+        assertThat(objectMapper.writeValueAsString(wrongResult))
+                .doesNotContain("answer")
+                .doesNotContain("explanation")
+                .doesNotContain("SECRET_OFFICE_EXPLANATION");
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM "OfficeRecord"
+                WHERE contest_problem_id IN (?, ?, ?)
+                """, Long.class, singleItem.contestProblemId(), multiItem.contestProblemId(),
+                truthItem.contestProblemId())).isEqualTo(4);
+        assertThat(office.stats().getTotalAnswered()).isEqualTo(1);
+
+        assertThatThrownBy(() -> contests.submitChoice(
+                contestId, singleItem.contestProblemId(), choice("99")))
+                .isInstanceOf(ApiException.class).hasMessageContaining("答案格式");
+
+        as(otherStudent, "other-student", "USER");
+        assertThatThrownBy(() -> contests.submitChoice(contestId, singleItem.contestProblemId(), choice("1")))
+                .isInstanceOf(ContestException.class).hasMessageContaining("参赛者");
+        as(teacher, "teacher", "TEACHER");
+        assertThatThrownBy(() -> office.hardDelete(single))
+                .isInstanceOf(ApiException.class).hasMessageContaining("已加入比赛");
+        as(student, "student", "USER");
+        assertThatThrownBy(() -> contests.submitOffice(contestId, singleItem.contestProblemId(), docx("wrong type")))
+                .isInstanceOf(ContestException.class).hasMessageContaining("入口不匹配");
+    }
+
+    @Test
+    void docxStarterAndReferenceRemainSeparateAndContestGated() throws Exception {
+        as(teacher, "teacher", "TEACHER");
+        int incompleteContest = contests.create(request("Incomplete DOCX", "OPEN")).getId();
+        assertThatThrownBy(() -> contests.addProblem(
+                incompleteContest, problemRequest("OFFICE_DOCX", officeExercise)))
+                .isInstanceOf(ContestException.class).hasMessageContaining("起始文档和参考文档");
+        officeDocs.uploadStarterDoc(officeExercise, docx("STARTER_SENTINEL_66"));
+        assertThatThrownBy(() -> contests.addProblem(
+                incompleteContest, problemRequest("OFFICE_DOCX", officeExercise)))
+                .isInstanceOf(ContestException.class).hasMessageContaining("起始文档和参考文档");
+        officeDocs.uploadTeacherDoc(officeExercise, docx("REFERENCE_SENTINEL_66"));
+        ContestDtos.ProblemItem item = contests.addProblem(
+                incompleteContest, problemRequest("OFFICE_DOCX", officeExercise));
+        contests.addParticipant(incompleteContest, student);
+        contests.publish(incompleteContest);
+
+        as(student, "student", "USER");
+        assertThatThrownBy(() -> officeDocs.getStarterDocFile(officeExercise))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> officeDocs.getTeacherDocFile(officeExercise))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> contests.contestStarter(incompleteContest, item.contestProblemId()))
+                .isInstanceOf(ContestException.class).hasMessageContaining("尚未开始");
+
+        setNow(START);
+        ContestService.StarterDocument starter = contests.contestStarter(
+                incompleteContest, item.contestProblemId());
+        assertThat(starter.name()).isEqualTo("submission.docx");
+        try (XWPFDocument document = new XWPFDocument(new FileInputStream(starter.file()))) {
+            String text = document.getParagraphs().stream().map(XWPFParagraph::getText)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            assertThat(text).contains("STARTER_SENTINEL_66").doesNotContain("REFERENCE_SENTINEL_66");
+        }
+        String starterPath = jdbc.queryForObject(
+                "SELECT starter_doc_path FROM \"OfficeExercise\" WHERE id=?", String.class, officeExercise);
+        String referencePath = jdbc.queryForObject(
+                "SELECT teacher_doc_path FROM \"OfficeExercise\" WHERE id=?", String.class, officeExercise);
+        assertThat(starterPath).isNotEqualTo(referencePath);
+
+        as(otherStudent, "other-student", "USER");
+        assertThatThrownBy(() -> contests.contestStarter(incompleteContest, item.contestProblemId()))
+                .isInstanceOf(ContestException.class).hasMessageContaining("参赛者");
+    }
+
+    @Test
     void databaseConstraintsProtectAssociationsAndImmutableContext() {
         as(teacher, "teacher", "TEACHER");
         int contestId = contests.create(request("constraints", "OPEN")).getId();
         ContestDtos.ProblemItem item = contests.addProblem(contestId, problemRequest("ALGORITHM", algorithmProblem));
+        int incompleteChoice = officeQuestion("MULTI_CHOICE", "[\"One\",\"Two\"]", "");
+        assertThatThrownBy(() -> contests.addProblem(
+                contestId, problemRequest("OFFICE_CHOICE", incompleteChoice)))
+                .isInstanceOf(ApiException.class).hasMessageContaining("正确答案");
+        int choiceQuestion = officeQuestion("TRUE_FALSE", "[\"正确\",\"错误\"]", "T");
+        ContestDtos.ProblemItem choiceItem = contests.addProblem(
+                contestId, problemRequest("OFFICE_CHOICE", choiceQuestion));
+        assertThatThrownBy(() -> contests.addProblem(
+                contestId, problemRequest("OFFICE_CHOICE", choiceQuestion)))
+                .isInstanceOf(ContestException.class).hasMessageContaining("已在比赛");
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO "ContestProblem" (contest_id, problem_type, office_question_id, display_order)
+                VALUES (?, 'OFFICE_CHOICE', 999999, 8)
+                """, contestId)).isInstanceOf(org.springframework.dao.DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO "ContestProblem" (contest_id, problem_type, office_exercise_id, display_order)
+                VALUES (?, 'OFFICE_DOCX', 999999, 9)
+                """, contestId)).isInstanceOf(org.springframework.dao.DataAccessException.class);
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO "ContestProblem" (contest_id, problem_type, algorithm_problem_id,
                     office_exercise_id, display_order)
                 VALUES (?, 'ALGORITHM', NULL, ?, 9)
                 """, contestId, officeExercise)).isInstanceOf(org.springframework.dao.DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO "ContestProblem" (contest_id, problem_type, office_question_id,
+                    display_order)
+                VALUES (?, 'OFFICE_DOCX', ?, 9)
+                """, contestId, choiceQuestion)).isInstanceOf(org.springframework.dao.DataAccessException.class);
 
         contests.publish(contestId);
         as(student, "student", "USER");
         contests.join(contestId);
         setNow(START);
         int submissionId = contests.submitAlgorithm(contestId, item.contestProblemId(), algorithmSubmission());
+        ContestDtos.ChoiceSubmission choiceSubmission = contests.submitChoice(
+                contestId, choiceItem.contestProblemId(), choice("T"));
         assertThatThrownBy(() -> jdbc.update("UPDATE \"Submission\" SET contest_problem_id=NULL WHERE id=?", submissionId))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update(
+                "UPDATE \"OfficeRecord\" SET contest_problem_id=NULL WHERE id=?", choiceSubmission.recordId()))
                 .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
@@ -403,6 +564,19 @@ class ContestCoreIntegrationTest {
         return request;
     }
 
+    private ContestChoiceSubmitRequest choice(String... selected) {
+        ContestChoiceSubmitRequest request = new ContestChoiceSubmitRequest();
+        request.setSelected(List.of(selected));
+        return request;
+    }
+
+    private OfficeSubmitRequest practiceChoice(int questionId, String... selected) {
+        OfficeSubmitRequest request = new OfficeSubmitRequest();
+        request.setQuestionId(questionId);
+        request.setSelected(List.of(selected));
+        return request;
+    }
+
     private int user(String username, String role) {
         return jdbc.queryForObject("""
                 INSERT INTO "User" (username, password, role)
@@ -422,6 +596,21 @@ class ContestCoreIntegrationTest {
                 INSERT INTO "OfficeExercise" (title, description, created_by, content_visibility)
                 VALUES ('DOCX', 'description', ?, ?) RETURNING id
                 """, Integer.class, owner, visibility);
+    }
+
+    private int officeQuestion(String type, String options, String answer) {
+        return officeQuestion(type, options, answer, "CONTEST_ONLY");
+    }
+
+    private int officeQuestion(String type, String options, String answer, String visibility) {
+        return jdbc.queryForObject("""
+                INSERT INTO "OfficeQuestion"
+                    (app_type, category, difficulty, question_type, content, options,
+                     answer, explanation, visible, content_visibility, created_by)
+                VALUES ('WORD', 'contest', 'EASY', ?, ?, ?, ?,
+                        'SECRET_OFFICE_EXPLANATION', TRUE, ?, ?)
+                RETURNING id
+                """, Integer.class, type, type + " prompt", options, answer, visibility, teacher);
     }
 
     private MockMultipartFile docx(String text) throws Exception {

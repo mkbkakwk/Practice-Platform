@@ -89,6 +89,18 @@ public class OfficeDocController {
         return fileResponse(file, service.getTeacherDocName(id));
     }
 
+    @PostMapping("/exercises/{id}/starter")
+    public Map<String, Object> uploadStarterDoc(
+            @PathVariable int id, @RequestParam("file") MultipartFile file) {
+        return service.uploadStarterDoc(id, file);
+    }
+
+    @GetMapping("/exercises/{id}/starter")
+    public ResponseEntity<FileSystemResource> downloadStarterDoc(@PathVariable int id) {
+        File file = service.getStarterDocFile(id);
+        return fileResponse(file, service.getStarterDocName(id));
+    }
+
     @PostMapping("/exercises/{id}/submit")
     public OfficeSubmissionDtos.StudentSubmissionResponse submitDoc(
             @PathVariable int id, @RequestParam("file") MultipartFile file) {
@@ -133,6 +145,7 @@ public class OfficeDocController {
                 .replace("+", "%20");
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encoded)
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                 .contentType(MediaType.parseMediaType(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
                 .body(resource);

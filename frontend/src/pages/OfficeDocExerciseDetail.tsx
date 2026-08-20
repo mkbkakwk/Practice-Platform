@@ -32,11 +32,13 @@ export default function OfficeDocExerciseDetail() {
   const { user } = useAuth();
   const exerciseId = Number(id);
   const fileRef = useRef<HTMLInputElement>(null);
+  const starterDownloadRef = useRef(false);
 
   const [exercise, setExercise] = useState<DocExerciseDetail | null>(null);
   const [submission, setSubmission] = useState<StudentDocSubmission | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [downloadingStarter, setDownloadingStarter] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,6 +72,21 @@ export default function OfficeDocExerciseDetail() {
     }
   }
 
+  async function handleStarterDownload() {
+    if (!exercise?.starterDocName || starterDownloadRef.current) return;
+    starterDownloadRef.current = true;
+    setDownloadingStarter(true);
+    setError(null);
+    try {
+      await api.downloadStarterDoc(exerciseId, exercise.starterDocName);
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : "下载起始文档失败");
+    } finally {
+      starterDownloadRef.current = false;
+      setDownloadingStarter(false);
+    }
+  }
+
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
   }
@@ -96,6 +113,16 @@ export default function OfficeDocExerciseDetail() {
         <div className="prose prose-sm max-w-none">
           <Markdown>{exercise.description}</Markdown>
         </div>
+        {exercise.starterDocName && (
+          <div className="mt-4 border-t pt-3">
+            <h3 className="mb-2 text-sm font-semibold text-zinc-700">① 下载待修改文件</h3>
+            <Button variant="outline" size="sm" disabled={downloadingStarter} onClick={() => void handleStarterDownload()}>
+              {downloadingStarter ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Download className="mr-1 h-4 w-4" />}
+              {downloadingStarter ? "下载中..." : `下载 ${exercise.starterDocName}`}
+            </Button>
+            <p className="mt-3 text-sm text-zinc-600">② 在本地 Word / WPS 中按上述要求修改文件</p>
+          </div>
+        )}
         {exercise.teacherDocName && (user?.role === "TEACHER" || user?.role === "ADMIN") && (
           <div className="mt-4 border-t pt-3">
             <span onClick={() => void api.downloadTeacherDoc(exerciseId, exercise.teacherDocName!)}>
@@ -109,7 +136,7 @@ export default function OfficeDocExerciseDetail() {
 
       {/* Upload area */}
       <Card className="mb-4 p-5">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-700">上传你的文档</h2>
+        <h2 className="mb-3 text-sm font-semibold text-zinc-700">③ 上传修改后的 DOCX</h2>
         <p className="mb-3 text-xs text-zinc-500">请上传 .docx 格式的 Word 文档（最大 10MB）</p>
         <input
           ref={fileRef}
@@ -122,12 +149,12 @@ export default function OfficeDocExerciseDetail() {
             e.target.value = "";
           }}
         />
-        <Button onClick={() => fileRef.current?.click()} disabled={uploading || !exercise.teacherDocName}>
+        <Button onClick={() => fileRef.current?.click()} disabled={uploading || !exercise.teacherDocName || !exercise.starterDocName}>
           {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
           {uploading ? "上传中..." : "选择 .docx 文件上传"}
         </Button>
-        {!exercise.teacherDocName && (
-          <p className="mt-2 text-xs text-red-500">老师尚未上传参考文档，暂无法提交</p>
+        {(!exercise.teacherDocName || !exercise.starterDocName) && (
+          <p className="mt-2 text-xs text-red-500">练习尚未同时准备起始文档和参考文档，暂无法提交</p>
         )}
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       </Card>
