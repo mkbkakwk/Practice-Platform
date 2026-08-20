@@ -2,5 +2,6 @@ package com.oj.contest;
 
 public enum ContestProblemType {
     ALGORITHM,
-    OFFICE
+    OFFICE_CHOICE,
+    OFFICE_DOCX
 }

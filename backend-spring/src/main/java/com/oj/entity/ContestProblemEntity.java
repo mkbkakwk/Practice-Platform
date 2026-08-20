@@ -13,6 +13,7 @@ public class ContestProblemEntity {
     private Integer contestId;
     private String problemType;
     private Integer algorithmProblemId;
+    private Integer officeQuestionId;
     private Integer officeExerciseId;
     private Integer displayOrder;
     private String label;
@@ -26,6 +27,8 @@ public class ContestProblemEntity {
     public void setProblemType(String problemType) { this.problemType = problemType; }
     public Integer getAlgorithmProblemId() { return algorithmProblemId; }
     public void setAlgorithmProblemId(Integer algorithmProblemId) { this.algorithmProblemId = algorithmProblemId; }
+    public Integer getOfficeQuestionId() { return officeQuestionId; }
+    public void setOfficeQuestionId(Integer officeQuestionId) { this.officeQuestionId = officeQuestionId; }
     public Integer getOfficeExerciseId() { return officeExerciseId; }
     public void setOfficeExerciseId(Integer officeExerciseId) { this.officeExerciseId = officeExerciseId; }
     public Integer getDisplayOrder() { return displayOrder; }

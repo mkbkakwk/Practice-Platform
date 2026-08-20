@@ -17,6 +17,7 @@ public class OfficeQuestionUpsertRequest {
     private String answer;
     private String explanation;
     private Boolean visible;
+    private String contentVisibility;
     public String getAppType() { return appType; }
     public void setAppType(String appType) { this.appType = appType; }
     public String getCategory() { return category; }
@@ -35,4 +36,6 @@ public class OfficeQuestionUpsertRequest {
     public void setExplanation(String explanation) { this.explanation = explanation; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
 }

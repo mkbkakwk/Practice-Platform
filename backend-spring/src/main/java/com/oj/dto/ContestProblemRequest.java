@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class ContestProblemRequest {
-    @NotBlank @Pattern(regexp = "ALGORITHM|OFFICE", message = "比赛题型无效")
+    @NotBlank @Pattern(regexp = "ALGORITHM|OFFICE_CHOICE|OFFICE_DOCX", message = "比赛题型无效")
     private String problemType;
     @NotNull
     private Integer problemId;
