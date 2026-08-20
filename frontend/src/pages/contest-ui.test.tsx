@@ -500,6 +500,26 @@ describe("contest stage UI", () => {
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it("uses a non-layout native file input and keeps a long selected DOCX name width-safe", async () => {
+    const user = userEvent.setup();
+    renderDetail(detail({ phase: "RUNNING", participant: true }, [problems[2]]));
+    const input = await screen.findByLabelText("DOCX 文件");
+    expect(input).toHaveClass("sr-only");
+    const triggerClick = vi.spyOn(input, "click");
+    await user.click(screen.getByRole("button", { name: "选择 DOCX 文件" }));
+    expect(triggerClick).toHaveBeenCalledTimes(1);
+    triggerClick.mockRestore();
+
+    const name = "very-long-document-name-that-must-not-widen-the-mobile-contest-workspace-stage66-answer.docx";
+    const file = new File(["docx"], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    await user.upload(input, file);
+    const filename = screen.getByText(name);
+    expect(filename).toHaveClass("truncate");
+    expect(filename.parentElement).toHaveClass("min-w-0", "max-w-full");
+    expect(screen.getByText("1 KiB")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "提交 DOCX" })).toBeEnabled();
+  });
+
   it("prevents a synchronous double click from uploading the same DOCX twice", async () => {
     const user = userEvent.setup();
     renderDetail(detail({ phase: "RUNNING", participant: true }, [problems[2]]));
