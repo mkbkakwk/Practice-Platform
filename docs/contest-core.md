@@ -1,7 +1,7 @@
 # Contest core
 
-Stage 6 adds the contest business boundary without introducing ranking or a
-second judging pipeline. PostgreSQL is the state source of truth, and an
+Stage 6/6.6 adds the contest business boundary without introducing ranking or
+a second judging pipeline. PostgreSQL is the state source of truth, and an
 injected UTC `Clock` is the time source of truth.
 
 ## Data model
@@ -10,14 +10,19 @@ injected UTC `Clock` is the time source of truth.
   `OPEN|INVITE_ONLY`, and `TIMESTAMPTZ` start/end timestamps.
 - `ContestParticipant` links one student to one contest and records who added
   them and when. `(contest_id, user_id)` is unique.
-- `ContestProblem` links either one algorithm `Problem` or one DOCX
-  `OfficeExercise`. A database `CHECK`, foreign keys, partial unique indexes,
-  and deterministic `display_order` prevent ambiguous or duplicate links.
-- Algorithm `Submission` and `OfficeDocSubmission` carry an optional immutable
-  `contest_problem_id`. Practice submissions keep it `NULL`.
+- `ContestProblem` has exactly one type and target: `ALGORITHM` references a
+  `Problem`, `OFFICE_CHOICE` references an `OfficeQuestion`, and `OFFICE_DOCX`
+  references an `OfficeExercise`. A database `CHECK`, foreign keys, partial
+  unique indexes, and deterministic `display_order` prevent ambiguous or
+  duplicate links.
+- Algorithm `Submission`, DOCX `OfficeDocSubmission`, and choice `OfficeRecord`
+  carry an optional immutable `contest_problem_id`. Practice submissions keep
+  it `NULL`.
 
-The migration is Flyway V7. Historical Problem and OfficeExercise rows receive
-`content_visibility=PUBLIC`, preserving practice behavior.
+Contest core starts at Flyway V7. V8 adds the two Office contest types, maps
+historical `OFFICE` contest rows to `OFFICE_DOCX`, and preserves existing DOCX
+reference paths. Historical questions remain `PUBLIC`; existing DOCX exercises
+do not silently treat their reference document as a student starter.
 
 ## Lifecycle and time
 
@@ -60,7 +65,7 @@ invite-only contests and drafts are hidden.
 
 ## Problem visibility
 
-Both algorithm Problems and DOCX OfficeExercises use:
+Algorithm Problems, OfficeQuestions, and DOCX OfficeExercises use:
 
 - `PUBLIC`: remains available in the ordinary practice area. Adding it to a
   contest does not hide it, so teachers must not assume it is secret.
@@ -70,8 +75,10 @@ Both algorithm Problems and DOCX OfficeExercises use:
   the end; unrelated students never gain access.
 
 The Contest DTO never exposes algorithm test cases, DOCX reference paths/files,
-answers, or user authentication fields. During an upcoming contest, hidden
-contest-only problem bodies are not returned.
+choice answers/explanations, or user authentication fields. During an upcoming
+contest, hidden contest-only problem bodies are not returned. A running choice
+submission reports only correct/incorrect and never returns the correct answer
+or explanation.
 
 ## Submission integration
 
@@ -79,7 +86,9 @@ Contest endpoints derive context from the URL and database relationship:
 
 ```text
 POST /api/contests/{contestId}/problems/{contestProblemId}/submissions
+POST /api/contests/{contestId}/problems/{contestProblemId}/choice-submissions
 POST /api/contests/{contestId}/problems/{contestProblemId}/office-submissions
+GET  /api/contests/{contestId}/problems/{contestProblemId}/starter
 ```
 
 The server verifies contest, phase, participant, association, underlying type,
@@ -88,9 +97,17 @@ submission endpoints.
 
 Algorithm contests reuse the existing atomic `Submission + judge_outbox`
 transaction and therefore continue through RabbitMQ, idempotent Workers, the
-Runner, and per-submission Docker sandbox. DOCX contests reuse Stage 5 file
-validation, storage lifecycle, canonical comparison, structured scoring, and
-sanitized failure handling.
+Runner, and per-submission Docker sandbox. Choice contests reuse the existing
+single/multiple/true-false evaluator while persisting contest context. DOCX
+contests reuse Stage 5 file validation, storage lifecycle, canonical comparison,
+structured scoring, and sanitized failure handling.
+
+Each usable DOCX exercise has two independent validated files. The starter is
+the student-downloadable document to edit; the reference is the server-only
+answer used for judging and authorized review. PUBLIC starters are available
+from the ordinary exercise endpoint. CONTEST_ONLY starters are available only
+through the contest endpoint after start to participants (and remain readable
+after end); the reference is never exposed to students.
 
 ## Intentionally unsupported
 

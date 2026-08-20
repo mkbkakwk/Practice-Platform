@@ -26,7 +26,7 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 1. **算法评测（Online Judge）** —— 消息队列 + Worker 池异步评测，支持 Python/JS/C/C++/Java
 2. **Office 选择题练习** —— Word/Excel/PPT 操作题，单选/多选/判断，即时判分
 3. **文档排版练习** —— 学生上传 .docx，系统用 Apache POI 自动解析格式并与老师参考文档逐段比对，有差异的老师人工复核
-4. **基础比赛** —— OPEN / INVITE_ONLY 参赛、服务端 UTC 生命周期、算法与 DOCX 比赛提交
+4. **基础比赛** —— OPEN / INVITE_ONLY 参赛、服务端 UTC 生命周期、算法/Office 选择题/DOCX 混合比赛
 
 采用 **管理员 / 老师 / 学生** 三角色权限体系，各司其职。
 
@@ -57,7 +57,7 @@ Practice Platform 是一套面向教学和自学场景的在线练习系统。�
 | 🏆 排行榜 | 按通过题数排名 |
 | 📝 Office 选择题 | Word/Excel/PPT 分类、单选/多选/判断、即时判分+解析、答题统计 |
 | 📄 文档排版练习 | 学生上传 .docx → POI 解析格式 → 和老师文档逐段比对 → 老师复核打分 |
-| 🗓️ 基础比赛 | 草稿/发布/取消、公开或邀请参赛、算法与 DOCX 比赛题、`[start,end)` 提交边界 |
+| 🗓️ 基础比赛 | 草稿/发布/取消、公开或邀请参赛、算法/Office 选择题/DOCX 比赛题、`[start,end)` 提交边界 |
 | ⚙️ 管理后台 | 算法题可视化表单（Markdown+LaTeX预览）、Office 题库管理、用户角色管理 |
 | 🛡️ 错误处理 | 前端 ErrorBoundary 友好错误页 + 统一日志 |
 
@@ -190,9 +190,10 @@ Flyway 是唯一的数据库结构来源，迁移文件位于
 2. V2–V4 增加数据约束、索引与会话版本；
 3. V5 增加可靠判题 Outbox / lease 状态；
 4. V6 增加可靠 DOCX 判题字段；
-5. V7 增加 Contest、参赛/题目关系、内容可见性与不可变提交上下文。
+5. V7 增加 Contest、参赛/题目关系、内容可见性与不可变提交上下文；
+6. V8 拆分 Office 选择题与 DOCX 比赛类型，并增加独立 Starter/Reference 文档及 Choice 比赛上下文。
 
-全新空库执行 V1–V7。由旧 `schema.sql` 创建的非空数据库会在版本 1
+全新空库执行 V1–V8。由旧 `schema.sql` 创建的非空数据库会在版本 1
 建立 baseline，然后执行后续迁移；不会重复建表或自动插入演示数据。
 Backend 是唯一迁移执行方，Worker 明确禁用 SQL 初始化。
 
@@ -378,12 +379,16 @@ practice-platform/
 | PUT | `/api/office/docs/exercises/:id/visibility` | 🔒 所有者/管理员 | 启用或停用排版练习 |
 | DELETE | `/api/office/docs/exercises/:id` | 🔒 所有者/管理员 | 彻底删除排版练习 |
 | POST | `/api/office/docs/exercises/:id/teacher-doc` | 🔒 老师/管理员 | 上传老师参考文档 |
+| POST | `/api/office/docs/exercises/:id/starter` | 🔒 老师/管理员 | 上传学生起始文档 |
+| GET | `/api/office/docs/exercises/:id/starter` | ✅ / 所有者 | 下载 PUBLIC 起始文档或管理自有文档 |
 | POST | `/api/office/docs/exercises/:id/submit` | ✅ | 学生上传 .docx |
 | GET | `/api/contests` | ✅ | 按角色分页列出可访问比赛 |
 | GET | `/api/contests/:id` | ✅ | 比赛阶段、参赛状态与安全题目 DTO |
 | POST | `/api/contests/:id/join` | ✅ 学生 | 开始前加入 OPEN 比赛 |
 | POST | `/api/contests/:id/problems/:contestProblemId/submissions` | ✅ 参赛者 | 运行阶段算法提交 |
+| POST | `/api/contests/:id/problems/:contestProblemId/choice-submissions` | ✅ 参赛者 | 运行阶段 Office 选择题提交 |
 | POST | `/api/contests/:id/problems/:contestProblemId/office-submissions` | ✅ 参赛者 | 运行阶段 DOCX 提交 |
+| GET | `/api/contests/:id/problems/:contestProblemId/starter` | ✅ 参赛者 | 开赛后下载比赛 DOCX Starter |
 | GET | `/api/office/docs/submissions` | ✅ | 学生看自己；教师看自建练习；管理员看全部 |
 | PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
 
@@ -618,7 +623,7 @@ docker compose build
 - [x] 用户角色管理（管理员可改任意用户角色）
 - [ ] SQL 练习模块
 - [ ] SSE 实时推送评测结果（替代轮询）
-- [x] 基础比赛（OPEN / INVITE_ONLY、算法与 DOCX 比赛提交）
+- [x] 基础比赛（OPEN / INVITE_ONLY、算法/Office 选择题/DOCX 混合比赛提交）
 - [ ] 比赛排行榜、计分、罚时、封榜与 Rejudge
 - [ ] 题目数据导入 / 导出
 - [ ] 代码防作弊相似度检测
