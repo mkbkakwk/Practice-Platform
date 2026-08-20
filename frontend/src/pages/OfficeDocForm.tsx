@@ -15,6 +15,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const fileRef = useRef<HTMLInputElement>(null);
+  const starterFileRef = useRef<HTMLInputElement>(null);
   const [currentId, setCurrentId] = useState<number | null>(mode === "edit" ? Number(id) : null);
   const [title, setTitle] = useState("");
   const [difficulty, setDifficulty] = useState("EASY");
@@ -22,7 +23,9 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
   const [visible, setVisible] = useState(true);
   const [contentVisibility, setContentVisibility] = useState<"PUBLIC" | "CONTEST_ONLY">("PUBLIC");
   const [teacherDocName, setTeacherDocName] = useState<string | null>(null);
+  const [starterDocName, setStarterDocName] = useState<string | null>(null);
   const [teacherFile, setTeacherFile] = useState<File | null>(null);
+  const [starterFile, setStarterFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -41,6 +44,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
       setVisible(exercise.visible);
       setContentVisibility(exercise.contentVisibility ?? "PUBLIC");
       setTeacherDocName(exercise.teacherDocName);
+      setStarterDocName(exercise.starterDocName);
     }).catch((exception) => active && setError(exception instanceof ApiError ? exception.message : "加载失败"))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -81,6 +85,21 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
     }
   }
 
+  async function handleUploadStarter() {
+    if (!starterFile || !currentId) return;
+    setUploading(true); setError(null);
+    try {
+      await api.uploadStarterDoc(currentId, starterFile);
+      setStarterDocName(starterFile.name);
+      setStarterFile(null);
+      if (starterFileRef.current) starterFileRef.current.value = "";
+    } catch (exception) {
+      setError(exception instanceof ApiError ? exception.message : "上传起始文档失败");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
 
   return (
@@ -100,13 +119,23 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
       </form>
 
       {currentId && <Card className="mt-5 p-5">
-        <h2 className="mb-2 text-sm font-semibold">参考文档</h2>
+        <h2 className="mb-2 text-sm font-semibold">学生待修改文件（Starter）</h2>
+        {starterDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{starterDocName}</p>}
+        <p className="mb-3 text-xs text-zinc-500">学生会下载此文件并在本地修改。它与教师参考文档独立存储。</p>
+        <input ref={starterFileRef} aria-label="学生待修改文件" type="file" accept=".docx" className="hidden" onChange={(event) => setStarterFile(event.target.files?.[0] ?? null)} />
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => starterFileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{starterFile && <span className="text-sm text-zinc-600">{starterFile.name}</span>}{starterDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadStarterDoc(currentId, starterDocName)}>下载检查</Button>}</div>
+        {starterFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadStarter()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Starter"}</Button>}
+      </Card>}
+
+      {currentId && <Card className="mt-5 p-5">
+        <h2 className="mb-2 text-sm font-semibold">教师参考文档（Reference）</h2>
         {teacherDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{teacherDocName}</p>}
         <p className="mb-3 text-xs text-zinc-500">上传新文件会替换当前参考文档；旧文件在确认未被其他记录使用后清理。</p>
-        <input ref={fileRef} type="file" accept=".docx" className="hidden" onChange={(event) => setTeacherFile(event.target.files?.[0] ?? null)} />
-        <div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-zinc-600">{teacherFile.name}</span>}</div>
-        {teacherFile && <Button className="mt-3" size="sm" onClick={() => void handleUploadTeacher()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传参考文档"}</Button>}
+        <input ref={fileRef} aria-label="教师参考文档" type="file" accept=".docx" className="hidden" onChange={(event) => setTeacherFile(event.target.files?.[0] ?? null)} />
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-zinc-600">{teacherFile.name}</span>}{teacherDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadTeacherDoc(currentId, teacherDocName)}>下载检查</Button>}</div>
+        {teacherFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadTeacher()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Reference"}</Button>}
       </Card>}
+      {currentId && <p className="mt-3 text-sm text-zinc-600">完成状态：{starterDocName && teacherDocName ? "Starter 与 Reference 已齐全，可用于公开练习或比赛。" : "尚未完成；使用前必须同时上传 Starter 与 Reference。"}</p>}
       {currentId && <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => navigate("/admin/office-doc")}>完成</Button><Button asChild><a href={`#/office/docs/${currentId}`}>查看练习</a></Button></div>}
     </div>
   );

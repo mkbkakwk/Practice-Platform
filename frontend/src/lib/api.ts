@@ -217,6 +217,7 @@ export interface OfficeQuestionListItem {
   questionType: OfficeQuestionType;
   content: string;
   visible?: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   createdBy: number | null;
   creatorUsername: string | null;
   submissionCount: number;
@@ -235,6 +236,7 @@ export interface OfficeQuestionDetail {
   answer?: string;
   explanation?: string;
   visible?: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   createdBy: number | null;
   creatorUsername: string | null;
   createdAt: string;
@@ -250,6 +252,7 @@ export interface OfficeQuestionUpsert {
   answer: string;
   explanation?: string;
   visible: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
 }
 
 export interface OfficeSubmitResult {
@@ -278,6 +281,8 @@ export interface DocExerciseListItem {
   visible: boolean;
   contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   hasTeacherDoc: boolean;
+  hasStarterDoc: boolean;
+  starterDocName: string | null;
   createdBy: number | null;
   creatorUsername: string | null;
   submissionCount: number;
@@ -290,6 +295,7 @@ export interface DocExerciseDetail {
   difficulty: "EASY" | "MEDIUM" | "HARD";
   description: string;
   teacherDocName: string | null;
+  starterDocName: string | null;
   visible: boolean;
   contentVisibility: "PUBLIC" | "CONTEST_ONLY";
   createdBy: number | null;
@@ -387,7 +393,7 @@ export interface ContestSummary {
 
 export interface ContestProblemItem {
   contestProblemId: number;
-  problemType: "ALGORITHM" | "OFFICE";
+  problemType: "ALGORITHM" | "OFFICE_CHOICE" | "OFFICE_DOCX";
   problemId: number;
   displayOrder: number;
   label: string;
@@ -422,6 +428,14 @@ export interface ContestUpsert {
   startAt: string;
   endAt: string;
   accessType: ContestAccessType;
+}
+
+export interface ContestChoiceSubmission {
+  recordId: number;
+  contestProblemId: number;
+  selected: string[];
+  correct: boolean;
+  createdAt: string;
 }
 
 export interface OfficeJudgeResultDetail {
@@ -646,6 +660,16 @@ export const api = {
   },
   downloadTeacherDoc: (exerciseId: number, filename: string) =>
     downloadFile(`/office/docs/exercises/${exerciseId}/teacher-doc`, filename),
+  uploadStarterDoc: (exerciseId: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<{ starterDocName: string }>(`/office/docs/exercises/${exerciseId}/starter`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  downloadStarterDoc: (exerciseId: number, filename: string) =>
+    downloadFile(`/office/docs/exercises/${exerciseId}/starter`, filename),
   submitDocExercise: (exerciseId: number, file: File) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -720,7 +744,7 @@ export const api = {
   removeContestParticipant: (id: number, userId: number) => request<{ removed: boolean }>(
     `/contests/${id}/participants/${userId}`, { method: "DELETE" },
   ),
-  addContestProblem: (id: number, problemType: "ALGORITHM" | "OFFICE", problemId: number, label?: string) =>
+  addContestProblem: (id: number, problemType: ContestProblemItem["problemType"], problemId: number, label?: string) =>
     request<{ contestProblem: ContestProblemItem }>(`/contests/${id}/problems`, {
       method: "POST",
       body: JSON.stringify({ problemType, problemId, label }),
@@ -748,6 +772,13 @@ export const api = {
       { method: "POST", body: fd },
     );
   },
+  submitContestChoice: (contestId: number, contestProblemId: number, selected: string[]) =>
+    request<{ submission: ContestChoiceSubmission }>(
+      `/contests/${contestId}/problems/${contestProblemId}/choice-submissions`,
+      { method: "POST", body: JSON.stringify({ selected }) },
+    ),
+  downloadContestStarter: (contestId: number, contestProblemId: number, filename: string) =>
+    downloadFile(`/contests/${contestId}/problems/${contestProblemId}/starter`, filename),
 
   // ---- admin user management ----
   listUsers: (params: { page?: number; pageSize?: number } = {}) => {
