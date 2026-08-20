@@ -30,6 +30,18 @@ describe("responsive navbar", () => {
     expect(within(mobile).queryByRole("link", { name: /用户/ })).not.toBeInTheDocument();
   });
 
+  it("keeps tablet widths on the compact navigation until the extra-large breakpoint", () => {
+    render(<MemoryRouter><Navbar /></MemoryRouter>);
+
+    const desktop = screen.getByRole("navigation", { name: "主导航" });
+    const trigger = screen.getByRole("button", { name: "打开导航菜单" });
+
+    expect(desktop).toHaveClass("hidden", "xl:flex");
+    expect(desktop).not.toHaveClass("md:flex");
+    expect(trigger).toHaveClass("xl:hidden");
+    expect(trigger).not.toHaveClass("md:hidden");
+  });
+
   it("offers the complete student navigation without management links", async () => {
     auth.user = { id: 10, username: "student", role: "USER" };
     const user = userEvent.setup();
