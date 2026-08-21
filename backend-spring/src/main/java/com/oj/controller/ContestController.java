@@ -3,6 +3,8 @@ package com.oj.controller;
 import com.oj.dto.*;
 import com.oj.judge.LanguageDef;
 import com.oj.service.ContestService;
+import com.oj.service.ContestStandingService;
+import com.oj.service.ContestRejudgeService;
 import jakarta.validation.Valid;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
@@ -21,9 +23,14 @@ import java.nio.charset.StandardCharsets;
 @RequestMapping("/api/contests")
 public class ContestController {
     private final ContestService service;
+    private final ContestStandingService standings;
+    private final ContestRejudgeService rejudge;
 
-    public ContestController(ContestService service) {
+    public ContestController(ContestService service, ContestStandingService standings,
+                             ContestRejudgeService rejudge) {
         this.service = service;
+        this.standings = standings;
+        this.rejudge = rejudge;
     }
 
     @GetMapping
@@ -42,6 +49,11 @@ public class ContestController {
     @GetMapping("/{contestId}")
     public Map<String, Object> detail(@PathVariable int contestId) {
         return Map.of("detail", service.detail(contestId));
+    }
+
+    @GetMapping("/{contestId}/standings")
+    public Map<String, Object> standings(@PathVariable int contestId) {
+        return Map.of("standings", standings.standings(contestId));
     }
 
     @PostMapping
@@ -147,6 +159,38 @@ public class ContestController {
             @Valid @RequestBody ContestChoiceSubmitRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("submission", service.submitChoice(contestId, contestProblemId, request)));
+    }
+
+    @PostMapping("/{contestId}/rejudge/submissions/{submissionId}")
+    public ResponseEntity<Map<String, Object>> rejudgeSubmission(@PathVariable int contestId,
+                                                                  @PathVariable int submissionId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("batch", rejudge.rejudgeSubmission(contestId, submissionId)));
+    }
+
+    @PostMapping("/{contestId}/problems/{contestProblemId}/rejudge")
+    public ResponseEntity<Map<String, Object>> rejudgeProblem(@PathVariable int contestId,
+                                                               @PathVariable long contestProblemId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("batch", rejudge.rejudgeProblem(contestId, contestProblemId)));
+    }
+
+    @PostMapping("/{contestId}/rejudge")
+    public ResponseEntity<Map<String, Object>> rejudgeContest(@PathVariable int contestId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("batch", rejudge.rejudgeContest(contestId)));
+    }
+
+    @GetMapping("/{contestId}/rejudge/batches/{batchId}")
+    public Map<String, Object> rejudgeBatch(@PathVariable int contestId, @PathVariable long batchId) {
+        return Map.of("batch", rejudge.batch(contestId, batchId));
+    }
+
+    @GetMapping("/{contestId}/rejudge/submissions")
+    public Map<String, Object> rejudgeableSubmissions(@PathVariable int contestId,
+                                                        @RequestParam(defaultValue = "1") int page,
+                                                        @RequestParam(defaultValue = "20") int pageSize) {
+        return rejudge.rejudgeableSubmissions(contestId, Math.max(1, page), Math.min(50, Math.max(1, pageSize)));
     }
 
     @GetMapping("/{contestId}/problems/{contestProblemId}/starter")

@@ -10,7 +10,7 @@ public final class ContestDtos {
     public record Summary(
             Integer id, String title, String description, String status, String phase,
             String accessType, Integer ownerId, String ownerUsername,
-            Instant startAt, Instant endAt, boolean participant,
+            String scoringMode, Instant startAt, Instant endAt, Instant freezeAt, boolean participant,
             Instant createdAt, Instant updatedAt) {}
 
     public record Detail(Summary contest, List<ProblemItem> problems) {}
@@ -32,4 +32,32 @@ public final class ContestDtos {
             selected = List.copyOf(selected);
         }
     }
+
+    public record Standing(
+            Integer contestId, String scoringMode, String phase, boolean frozen, boolean managerView, Instant freezeAt,
+            Instant generatedAt, List<StandingEntry> entries) {}
+
+    public record StandingEntry(
+            int rank, Integer userId, String username, int totalScore, int solved,
+            int penaltyMinutes, List<StandingProblem> problems) {}
+
+    public record StandingProblem(
+            Long contestProblemId, String label, Integer score, boolean solved,
+            int attempts, Integer penaltyMinutes) {}
+
+    public record RejudgeBatch(
+            Long id, Integer contestId, Long contestProblemId, Integer requestedSubmissionId,
+            Integer requestedBy, String status, int totalCount, int queuedCount,
+            int completedCount, int failedCount, Instant createdAt, Instant completedAt) {}
+
+    public record RejudgeBatchItem(
+            Long id, Integer submissionId, int judgeGeneration, String status,
+            Instant createdAt, Instant completedAt) {}
+
+    public record RejudgeBatchDetail(RejudgeBatch batch, List<RejudgeBatchItem> items) {}
+
+    /** Manager-only, intentionally minimal algorithm submission view for targeted rejudge. */
+    public record RejudgeableSubmission(
+            Integer id, Long contestProblemId, String problemLabel, Integer userId,
+            String username, String verdict, int judgeGeneration, Instant createdAt) {}
 }

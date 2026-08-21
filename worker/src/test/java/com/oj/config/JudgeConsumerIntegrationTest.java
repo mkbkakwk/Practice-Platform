@@ -61,9 +61,15 @@ class JudgeConsumerIntegrationTest {
         when(router.malformed(anyString(), anyInt())).thenReturn(true);
         originalJudgeService = (JudgeService) ReflectionTestUtils.getField(
                 judgeConsumer, "judgeService");
-        jdbcTemplate.update("DELETE FROM \"Submission\"");
-        jdbcTemplate.update("DELETE FROM \"Problem\"");
-        jdbcTemplate.update("DELETE FROM \"User\"");
+        // Worker tests share the disposable Docker database with the backend
+        // suite.  V7/V9 introduce contest and history FKs, so clear the entire
+        // related fixture graph rather than assuming only plain submissions.
+        jdbcTemplate.execute("""
+                TRUNCATE TABLE rejudge_batch_item, rejudge_batch, algorithm_judge_history,
+                    judge_outbox, "OfficeDocSubmission", "OfficeRecord", "Submission",
+                    "ContestProblem", "ContestParticipant", "Contest", "OfficeExercise",
+                    "OfficeQuestion", "Problem", "User" RESTART IDENTITY CASCADE
+                """);
         jdbcTemplate.update("""
                 INSERT INTO "Problem" (id, slug, title, description, test_cases)
                 VALUES (10, 'worker-problem-10', 'Worker problem 10', 'test',
@@ -288,6 +294,53 @@ class JudgeConsumerIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT verdict FROM \"Submission\" WHERE id=?", String.class, submissionId))
                 .isEqualTo("AC");
+    }
+
+    @Test
+    void staleGenerationCompletionCannotOverwriteTheNewerRejudgeResult() {
+        int userId = insertUser("stale_generation");
+        int submissionId = insertSubmission(userId, 10, "PENDING");
+        UUID generationZeroToken = UUID.randomUUID();
+        assertThat(submissions.claim(submissionId, 0, generationZeroToken, java.time.Duration.ofMinutes(10)).status())
+                .isEqualTo(com.oj.reliability.JudgeClaim.Status.CLAIMED);
+
+        // This is the transactionally persisted state produced when a manager
+        // queues generation 1 while a generation-0 worker is still running.
+        jdbcTemplate.update("""
+                UPDATE "Submission"
+                SET judge_generation = 1, verdict = 'PENDING', judge_token = NULL, judge_lease_until = NULL
+                WHERE id = ?
+                """, submissionId);
+        UUID generationOneToken = UUID.randomUUID();
+        assertThat(submissions.claim(submissionId, 1, generationOneToken, java.time.Duration.ofMinutes(10)).status())
+                .isEqualTo(com.oj.reliability.JudgeClaim.Status.CLAIMED);
+        assertThat(submissions.complete(submissionId, 1, generationOneToken, result("AC"))).isEqualTo(1);
+
+        // The old Runner completion has the old generation and must not mutate
+        // either the current result or the generation-one audit history.
+        assertThat(submissions.complete(submissionId, 0, generationZeroToken, result("WA"))).isZero();
+        assertThat(jdbcTemplate.queryForMap("SELECT judge_generation, verdict FROM \"Submission\" WHERE id=?", submissionId))
+                .containsEntry("judge_generation", 1)
+                .containsEntry("verdict", "AC");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM algorithm_judge_history
+                WHERE submission_id = ? AND judge_generation = 1
+                """, Integer.class, submissionId)).isEqualTo(1);
+    }
+
+    @Test
+    void duplicateCompletionForTheSameGenerationCreatesOneHistoryRow() {
+        int userId = insertUser("dup_generation");
+        int submissionId = insertSubmission(userId, 10, "PENDING");
+        UUID token = UUID.randomUUID();
+        assertThat(submissions.claim(submissionId, 0, token, java.time.Duration.ofMinutes(10)).status())
+                .isEqualTo(com.oj.reliability.JudgeClaim.Status.CLAIMED);
+        assertThat(submissions.complete(submissionId, 0, token, result("AC"))).isEqualTo(1);
+        assertThat(submissions.complete(submissionId, 0, token, result("AC"))).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM algorithm_judge_history
+                WHERE submission_id = ? AND judge_generation = 0
+                """, Integer.class, submissionId)).isEqualTo(1);
     }
 
     @Test

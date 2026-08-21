@@ -21,6 +21,7 @@ public class SubmissionEntity {
     private String message;
     private Integer passed;
     private Integer total;
+    private Integer judgeGeneration;
     private LocalDateTime createdAt;
 
     public Integer getId() { return id; }
@@ -47,6 +48,8 @@ public class SubmissionEntity {
     public void setPassed(Integer passed) { this.passed = passed; }
     public Integer getTotal() { return total; }
     public void setTotal(Integer total) { this.total = total; }
+    public Integer getJudgeGeneration() { return judgeGeneration; }
+    public void setJudgeGeneration(Integer judgeGeneration) { this.judgeGeneration = judgeGeneration; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

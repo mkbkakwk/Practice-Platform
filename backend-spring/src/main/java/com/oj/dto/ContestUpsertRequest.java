@@ -18,6 +18,9 @@ public class ContestUpsertRequest {
     private Instant endAt;
     @NotBlank @Pattern(regexp = "OPEN|INVITE_ONLY", message = "比赛访问模式无效")
     private String accessType = "OPEN";
+    @NotBlank @Pattern(regexp = "SCORE|ICPC", message = "比赛计分模式无效")
+    private String scoringMode = "SCORE";
+    private Instant freezeAt;
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -29,4 +32,8 @@ public class ContestUpsertRequest {
     public void setEndAt(Instant endAt) { this.endAt = endAt; }
     public String getAccessType() { return accessType; }
     public void setAccessType(String accessType) { this.accessType = accessType; }
+    public String getScoringMode() { return scoringMode; }
+    public void setScoringMode(String scoringMode) { this.scoringMode = scoringMode; }
+    public Instant getFreezeAt() { return freezeAt; }
+    public void setFreezeAt(Instant freezeAt) { this.freezeAt = freezeAt; }
 }

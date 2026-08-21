@@ -58,7 +58,7 @@ class OfficeStudentResultRedactionIntegrationTest {
     @BeforeEach
     void resetState() throws Exception {
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
@@ -73,7 +73,7 @@ class OfficeStudentResultRedactionIntegrationTest {
         cleanStorage();
         Files.createDirectories(storageRoot);
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);

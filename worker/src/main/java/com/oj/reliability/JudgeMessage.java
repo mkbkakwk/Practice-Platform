@@ -4,7 +4,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 
-public record JudgeMessage(UUID eventId, int submissionId, int schemaVersion, int deliveryAttempt) {
+public record JudgeMessage(UUID eventId, int submissionId, int judgeGeneration,
+                           int schemaVersion, int deliveryAttempt) {
+
+    /** Legacy in-process constructor: messages written before V9 are generation zero. */
+    public JudgeMessage(UUID eventId, int submissionId, int schemaVersion, int deliveryAttempt) {
+        this(eventId, submissionId, 0, schemaVersion, deliveryAttempt);
+    }
 
     public static JudgeMessage from(Map<String, Object> payload) {
         Object submissionValue = payload.get("submissionId");
@@ -24,16 +30,17 @@ public record JudgeMessage(UUID eventId, int submissionId, int schemaVersion, in
         } else {
             eventId = UUID.fromString(eventValue.toString());
         }
+        int judgeGeneration = number(payload.get("judgeGeneration"), 0);
         int schemaVersion = number(payload.get("schemaVersion"), 1);
         int deliveryAttempt = number(payload.get("deliveryAttempt"), 0);
-        if (schemaVersion != 1 || deliveryAttempt < 0) {
+        if (judgeGeneration < 0 || schemaVersion != 1 || deliveryAttempt < 0) {
             throw new IllegalArgumentException("judge message version or attempt is invalid");
         }
-        return new JudgeMessage(eventId, submissionId, schemaVersion, deliveryAttempt);
+        return new JudgeMessage(eventId, submissionId, judgeGeneration, schemaVersion, deliveryAttempt);
     }
 
     public JudgeMessage retry(int nextAttempt) {
-        return new JudgeMessage(eventId, submissionId, schemaVersion, nextAttempt);
+        return new JudgeMessage(eventId, submissionId, judgeGeneration, schemaVersion, nextAttempt);
     }
 
     private static int number(Object value, int fallback) {

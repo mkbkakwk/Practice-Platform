@@ -81,7 +81,7 @@ public class JudgeConsumer {
         UUID judgeToken = UUID.randomUUID();
         JudgeClaim claim;
         try {
-            claim = submissions.claim(message.submissionId(), judgeToken, properties.getLease());
+            claim = submissions.claim(message.submissionId(), message.judgeGeneration(), judgeToken, properties.getLease());
         } catch (RuntimeException exception) {
             log.warn("Judge claim unavailable eventId={} submissionId={} attempt={} type={}",
                     message.eventId(), message.submissionId(), deliveryAttempt,
@@ -99,6 +99,11 @@ public class JudgeConsumer {
             case FINAL -> {
                 log.info("Judge duplicate ignored final submission eventId={} submissionId={} attempt={}",
                         message.eventId(), message.submissionId(), deliveryAttempt);
+                channel.basicAck(deliveryTag, false);
+            }
+            case STALE -> {
+                log.info("Judge stale generation ignored eventId={} submissionId={} generation={}",
+                        message.eventId(), message.submissionId(), message.judgeGeneration());
                 channel.basicAck(deliveryTag, false);
             }
             case BUSY -> scheduleBusy(message, deliveryTag, channel);
@@ -138,16 +143,20 @@ public class JudgeConsumer {
         }
 
         try {
-            int updated = submissions.complete(message.submissionId(), claim.judgeToken(), result);
+            int updated = submissions.complete(message.submissionId(), message.judgeGeneration(), claim.judgeToken(), result);
             if (updated == 1) {
                 log.info("Judge result committed eventId={} submissionId={} judgeToken={} requestId={} verdict={}",
                         message.eventId(), message.submissionId(), claim.judgeToken(),
                         result.requestId, result.verdict);
                 channel.basicAck(deliveryTag, false);
             } else {
-                log.warn("Judge result ownership lost eventId={} submissionId={} judgeToken={}",
+                // A generation may have been superseded while the Runner was
+                // executing.  Retrying this already-computed result cannot make
+                // it authoritative again: claim() will reject it as stale (or
+                // final).  Acknowledge instead of adding needless retry traffic.
+                log.info("Judge result ownership lost; completion is stale or duplicate eventId={} submissionId={} judgeToken={}",
                         message.eventId(), message.submissionId(), claim.judgeToken());
-                scheduleBusy(message, deliveryTag, channel);
+                channel.basicAck(deliveryTag, false);
             }
         } catch (RuntimeException exception) {
             log.warn("Judge result commit unavailable eventId={} submissionId={} judgeToken={} type={}",
@@ -184,7 +193,7 @@ public class JudgeConsumer {
             boolean permanent) throws IOException {
         int attempt = message.deliveryAttempt();
         if (!permanent && attempt + 1 < properties.getMaxRetries()) {
-            submissions.releaseForRetry(message.submissionId(), judgeToken, category);
+            submissions.releaseForRetry(message.submissionId(), message.judgeGeneration(), judgeToken, category);
             JudgeMessage retry = message.retry(attempt + 1);
             if (router.retry(retry, category)) {
                 log.info("Judge retry scheduled eventId={} submissionId={} nextAttempt={} category={}",
@@ -198,11 +207,11 @@ public class JudgeConsumer {
 
         int totalAttempts = attempt + 1;
         if (!router.deadLetter(message, totalAttempts, category)) {
-            submissions.releaseForRetry(message.submissionId(), judgeToken, category);
+            submissions.releaseForRetry(message.submissionId(), message.judgeGeneration(), judgeToken, category);
             channel.basicReject(deliveryTag, false);
             return;
         }
-        int failed = submissions.markFailed(message.submissionId(), judgeToken, category);
+        int failed = submissions.markFailed(message.submissionId(), message.judgeGeneration(), judgeToken, category);
         if (failed != 1) {
             log.warn("Judge final-failure ownership lost eventId={} submissionId={} judgeToken={} category={}",
                     message.eventId(), message.submissionId(), judgeToken, category);

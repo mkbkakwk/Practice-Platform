@@ -134,9 +134,10 @@ public class ContestService {
     public ContestEntity create(ContestUpsertRequest request) {
         CurrentUser.requireContentManager();
         validateTimes(request.getStartAt(), request.getEndAt());
+        validateFreeze(request.getStartAt(), request.getEndAt(), request.getFreezeAt());
         ContestAccessType accessType = parseAccessType(request.getAccessType());
         ContestEntity contest = new ContestEntity();
-        apply(contest, request, accessType);
+        apply(contest, request, accessType, parseScoringMode(request.getScoringMode()));
         contest.setOwnerId(CurrentUser.getId());
         contest.setStatus(ContestStatus.DRAFT.name());
         contestMapper.insert(contest);
@@ -150,11 +151,21 @@ public class ContestService {
         requireManage(contest);
         requireConfigMutable(contest);
         validateTimes(request.getStartAt(), request.getEndAt());
+        ContestScoringMode scoringMode = parseScoringMode(request.getScoringMode());
+        validateFreeze(request.getStartAt(), request.getEndAt(), request.getFreezeAt());
+        if (!Objects.equals(contest.getScoringMode(), scoringMode.name()) && hasContestSubmissions(contestId)) {
+            throw ContestException.conflict("SCORING_MODE_HAS_SUBMISSIONS", "已有比赛提交，不能修改计分模式");
+        }
+        if (!ContestStatus.DRAFT.name().equals(contest.getStatus())
+                && (!Objects.equals(contest.getScoringMode(), scoringMode.name())
+                || !Objects.equals(contest.getFreezeAt(), request.getFreezeAt()))) {
+            throw ContestException.conflict("CONTEST_LOCKED", "比赛发布后不能修改计分模式或封榜时间");
+        }
         if (ContestStatus.PUBLISHED.name().equals(contest.getStatus())
                 && !request.getStartAt().isAfter(clock.instant())) {
             throw ContestException.conflict("CONTEST_LOCKED", "已发布比赛的开始时间必须仍在未来");
         }
-        apply(contest, request, parseAccessType(request.getAccessType()));
+        apply(contest, request, parseAccessType(request.getAccessType()), scoringMode);
         contest.setUpdatedAt(clock.instant());
         contestMapper.updateById(contest);
         log.info("Contest action=update contestId={} ownerId={} phase={}", contestId,
@@ -177,7 +188,7 @@ public class ContestService {
         if (problems.isEmpty()) {
             throw ContestException.conflict("CONTEST_EMPTY", "比赛至少需要一道题目");
         }
-        validatePublishProblems(problems);
+        validatePublishProblems(contest, problems);
         contest.setStatus(ContestStatus.PUBLISHED.name());
         contest.setUpdatedAt(clock.instant());
         contestMapper.updateById(contest);
@@ -288,6 +299,10 @@ public class ContestService {
             throw ContestException.conflict("CONTEST_PROBLEM_LIMIT", "比赛题目数量超过上限");
         }
         ContestProblemType type = ContestProblemType.valueOf(request.getProblemType());
+        if (ContestScoringMode.ICPC.name().equals(contest.getScoringMode())
+                && type != ContestProblemType.ALGORITHM) {
+            throw ContestException.conflict("ICPC_ALGORITHM_ONLY", "ICPC 比赛只允许添加算法题");
+        }
         ContestProblemEntity item = new ContestProblemEntity();
         item.setContestId(contestId);
         item.setProblemType(type.name());
@@ -535,7 +550,9 @@ public class ContestService {
     private ContestDtos.Summary summary(ContestEntity contest, boolean participant, String ownerUsername) {
         return new ContestDtos.Summary(contest.getId(), contest.getTitle(), contest.getDescription(),
                 contest.getStatus(), ContestLifecycle.phase(contest, clock).name(), contest.getAccessType(),
-                contest.getOwnerId(), ownerUsername, contest.getStartAt(), contest.getEndAt(), participant,
+                contest.getOwnerId(), ownerUsername,
+                contest.getScoringMode() == null ? ContestScoringMode.SCORE.name() : contest.getScoringMode(),
+                contest.getStartAt(), contest.getEndAt(), contest.getFreezeAt(), participant,
                 contest.getCreatedAt(), contest.getUpdatedAt());
     }
 
@@ -547,6 +564,18 @@ public class ContestService {
     private List<ContestProblemEntity> contestProblems(int contestId) {
         return contestProblemMapper.selectList(new QueryWrapper<ContestProblemEntity>()
                 .eq("contest_id", contestId).orderByAsc("display_order").orderByAsc("id"));
+    }
+
+    private boolean hasContestSubmissions(int contestId) {
+        Long count = submissionMapper.selectCount(new QueryWrapper<SubmissionEntity>()
+                .inSql("contest_problem_id", "SELECT id FROM \"ContestProblem\" WHERE contest_id = " + contestId));
+        if (count != null && count > 0) return true;
+        Long choiceCount = officeRecordMapper.selectCount(new QueryWrapper<OfficeRecordEntity>()
+                .inSql("contest_problem_id", "SELECT id FROM \"ContestProblem\" WHERE contest_id = " + contestId));
+        if (choiceCount != null && choiceCount > 0) return true;
+        Long docxCount = officeSubmissionMapper.selectCount(new QueryWrapper<OfficeDocSubmissionEntity>()
+                .inSql("contest_problem_id", "SELECT id FROM \"ContestProblem\" WHERE contest_id = " + contestId));
+        return docxCount != null && docxCount > 0;
     }
 
     private List<ContestDtos.ProblemItem> problemItems(int contestId, boolean includeContestOnly) {
@@ -691,7 +720,11 @@ public class ContestService {
         officeDocService.requireStarterDoc(exercise);
     }
 
-    private void validatePublishProblems(List<ContestProblemEntity> problems) {
+    private void validatePublishProblems(ContestEntity contest, List<ContestProblemEntity> problems) {
+        if (ContestScoringMode.ICPC.name().equals(contest.getScoringMode())
+                && problems.stream().anyMatch(item -> !ContestProblemType.ALGORITHM.name().equals(item.getProblemType()))) {
+            throw ContestException.conflict("ICPC_ALGORITHM_ONLY", "ICPC 比赛只能包含算法题");
+        }
         for (ContestProblemEntity item : problems) {
             if (ContestProblemType.ALGORITHM.name().equals(item.getProblemType())) {
                 ProblemEntity problem = problemMapper.selectById(item.getAlgorithmProblemId());
@@ -737,6 +770,12 @@ public class ContestService {
         }
     }
 
+    private void validateFreeze(Instant startAt, Instant endAt, Instant freezeAt) {
+        if (freezeAt != null && (!startAt.isBefore(freezeAt) || !freezeAt.isBefore(endAt))) {
+            throw ContestException.conflict("INVALID_FREEZE_TIME", "封榜时间必须位于比赛开始和结束之间");
+        }
+    }
+
     private ContestAccessType parseAccessType(String accessType) {
         try {
             return ContestAccessType.valueOf(accessType);
@@ -745,12 +784,23 @@ public class ContestService {
         }
     }
 
-    private void apply(ContestEntity contest, ContestUpsertRequest request, ContestAccessType accessType) {
+    private ContestScoringMode parseScoringMode(String scoringMode) {
+        try {
+            return ContestScoringMode.valueOf(scoringMode);
+        } catch (RuntimeException exception) {
+            throw ApiException.badRequest("比赛计分模式无效");
+        }
+    }
+
+    private void apply(ContestEntity contest, ContestUpsertRequest request, ContestAccessType accessType,
+                       ContestScoringMode scoringMode) {
         contest.setTitle(request.getTitle().trim());
         contest.setDescription(request.getDescription() == null ? "" : request.getDescription());
         contest.setStartAt(request.getStartAt());
         contest.setEndAt(request.getEndAt());
         contest.setAccessType(accessType.name());
+        contest.setScoringMode(scoringMode.name());
+        contest.setFreezeAt(request.getFreezeAt());
     }
 
     private Map<Integer, String> userNames(Set<Integer> ids) {
