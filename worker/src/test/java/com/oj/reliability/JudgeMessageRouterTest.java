@@ -12,6 +12,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -76,6 +77,18 @@ class JudgeMessageRouterTest {
         assertThat(new String(encoded.getBody(), java.nio.charset.StandardCharsets.UTF_8))
                 .contains("\"attemptCount\":3")
                 .contains("\"failedAt\":\"2026-08-13T00:00:00Z\"");
+    }
+
+    @Test
+    void legacyMessageWithoutGenerationDefaultsToGenerationZero() {
+        UUID eventId = UUID.randomUUID();
+
+        JudgeMessage message = JudgeMessage.from(Map.of(
+                "eventId", eventId.toString(), "submissionId", 42,
+                "schemaVersion", 1, "deliveryAttempt", 2));
+
+        assertThat(message.judgeGeneration()).isZero();
+        assertThat(message.retry(3).judgeGeneration()).isZero();
     }
 
     private void completePublishWith(boolean ack) {

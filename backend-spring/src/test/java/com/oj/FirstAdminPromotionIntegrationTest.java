@@ -47,7 +47,7 @@ class FirstAdminPromotionIntegrationTest {
     @BeforeEach
     void resetDatabase() {
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
@@ -56,7 +56,7 @@ class FirstAdminPromotionIntegrationTest {
     @AfterEach
     void cleanDatabase() {
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);

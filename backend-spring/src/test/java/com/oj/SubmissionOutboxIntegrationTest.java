@@ -39,7 +39,7 @@ class SubmissionOutboxIntegrationTest {
     void resetDatabase() {
         reset(outboxRepository);
         jdbc.execute("""
-                TRUNCATE TABLE "judge_outbox", "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
                     "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
@@ -85,7 +85,7 @@ class SubmissionOutboxIntegrationTest {
         int userId = insertFixture("outbox_rollback");
         CurrentUser.set(userId, "outbox_rollback", "USER");
         doThrow(new IllegalStateException("fault injection"))
-                .when(outboxRepository).insert(any(), anyInt(), any());
+                .when(outboxRepository).insert(any(), anyInt(), anyInt(), any());
 
         assertThatThrownBy(() -> submissionService.submit(request()))
                 .isInstanceOf(IllegalStateException.class)

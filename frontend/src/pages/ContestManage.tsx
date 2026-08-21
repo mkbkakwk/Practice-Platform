@@ -10,6 +10,8 @@ import {
   type ContestProblemItem,
   type ContestStudentOption,
   type ContestUpsert,
+  type RejudgeBatchDetail,
+  type RejudgeableSubmission,
   type DocExerciseListItem,
   type OfficeQuestionListItem,
   type ProblemListItem,
@@ -34,7 +36,7 @@ import { cn } from "@/lib/utils";
 import { phaseClass } from "./ContestList";
 
 const initialForm: ContestUpsert = {
-  title: "", description: "", startAt: "", endAt: "", accessType: "OPEN",
+  title: "", description: "", startAt: "", endAt: "", accessType: "OPEN", scoringMode: "SCORE", freezeAt: null,
 };
 const PARTICIPANT_PAGE_SIZE = 20;
 const CATALOG_PAGE_SIZE = 20;
@@ -45,9 +47,10 @@ type ConfirmAction =
   | { kind: "cancel" }
   | { kind: "delete" }
   | { kind: "remove-problem"; problem: ContestProblemItem }
-  | { kind: "remove-participant"; participant: ContestParticipant };
+  | { kind: "remove-participant"; participant: ContestParticipant }
+  | { kind: "rejudge"; contestProblemId?: number; submissionId?: number };
 
-type FormErrors = Partial<Record<"title" | "startAt" | "endAt", string>>;
+type FormErrors = Partial<Record<"title" | "startAt" | "endAt" | "freezeAt", string>>;
 
 export default function ContestManage() {
   const { id } = useParams<{ id: string }>();
@@ -78,9 +81,15 @@ export default function ContestManage() {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [error, setError] = useState("");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [rejudgeBatch, setRejudgeBatch] = useState<RejudgeBatchDetail | null>(null);
+  const [rejudgeableSubmissions, setRejudgeableSubmissions] = useState<RejudgeableSubmission[]>([]);
+  const [rejudgeSubmissionPage, setRejudgeSubmissionPage] = useState(1);
+  const [rejudgeSubmissionTotal, setRejudgeSubmissionTotal] = useState(0);
   const busyRef = useRef(false);
 
   const mutable = !detail || detail.contest.phase === "DRAFT" || detail.contest.phase === "UPCOMING";
+  const scoringMutable = !detail || detail.contest.phase === "DRAFT";
+  const rejudgeAllowed = detail?.contest.phase === "RUNNING" || detail?.contest.phase === "ENDED";
   const dirty = JSON.stringify(form) !== JSON.stringify(savedForm);
 
   async function loadDetail(currentId: number) {
@@ -95,6 +104,8 @@ export default function ContestManage() {
       startAt: toLocalInput(nextDetail.contest.startAt),
       endAt: toLocalInput(nextDetail.contest.endAt),
       accessType: nextDetail.contest.accessType,
+      scoringMode: nextDetail.contest.scoringMode,
+      freezeAt: nextDetail.contest.freezeAt ? toLocalInput(nextDetail.contest.freezeAt) : null,
     };
     setDetail(nextDetail);
     setForm(nextForm);
@@ -244,6 +255,10 @@ export default function ContestManage() {
 
   async function addSelectedProblems() {
     if (!contestId || busyRef.current || selectedProblemIds.size === 0) return;
+    if (form.scoringMode === "ICPC" && catalogType !== "ALGORITHM") {
+      setError("ICPC 比赛只允许添加算法题。");
+      return;
+    }
     busyRef.current = true;
     setBusy("adding-problems");
     setError("");
@@ -274,6 +289,49 @@ export default function ContestManage() {
     if (added) await loadParticipants(contestId, participantPage);
   }
 
+  async function startRejudge(contestProblemId?: number, submissionId?: number) {
+    if (!contestId || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(submissionId ? `rejudge-submission-${submissionId}` : contestProblemId ? `rejudge-${contestProblemId}` : "rejudge-all");
+    try {
+      const response = submissionId
+        ? await api.rejudgeContestSubmission(contestId, submissionId)
+        : contestProblemId
+          ? await api.rejudgeContestProblem(contestId, contestProblemId)
+          : await api.rejudgeContest(contestId);
+      setRejudgeBatch(response.batch);
+      toast.success("重判批次已创建");
+    } catch (reason) {
+      setError(getApiErrorMessage(reason, "创建重判失败"));
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!contestId || !rejudgeBatch || !["PENDING", "RUNNING"].includes(rejudgeBatch.batch.status)) return;
+    const timer = window.setInterval(() => {
+      api.getRejudgeBatch(contestId, rejudgeBatch.batch.id)
+        .then((response) => setRejudgeBatch(response.batch))
+        .catch((reason) => setError(getApiErrorMessage(reason, "重判进度刷新失败")));
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [contestId, rejudgeBatch]);
+
+  useEffect(() => {
+    if (!contestId || !rejudgeAllowed) return;
+    let active = true;
+    api.listRejudgeableContestSubmissions(contestId, { page: rejudgeSubmissionPage, pageSize: 20 })
+      .then((response) => {
+        if (!active) return;
+        setRejudgeableSubmissions(response.submissions);
+        setRejudgeSubmissionTotal(response.total);
+      })
+      .catch((reason) => active && setError(getApiErrorMessage(reason, "重判提交加载失败")));
+    return () => { active = false; };
+  }, [contestId, rejudgeAllowed, rejudgeSubmissionPage, rejudgeBatch?.batch.id]);
+
   async function confirm() {
     if (!confirmAction || !contestId || busyRef.current || !detail) return;
     const action = confirmAction;
@@ -299,12 +357,15 @@ export default function ContestManage() {
       await runAction(`removing-problem-${action.problem.contestProblemId}`, () => api.removeContestProblem(contestId, action.problem.contestProblemId), "题目已移除");
     } else if (action.kind === "remove-participant") {
       await runAction(`removing-participant-${action.participant.userId}`, () => api.removeContestParticipant(contestId, action.participant.userId), "参赛者已移除");
+    } else if (action.kind === "rejudge") {
+      await startRejudge(action.contestProblemId, action.submissionId);
     }
   }
 
   const participantPages = Math.max(1, Math.ceil(participantTotal / PARTICIPANT_PAGE_SIZE));
   const catalogPages = Math.max(1, Math.ceil(catalogTotal / CATALOG_PAGE_SIZE));
   const studentPages = Math.max(1, Math.ceil(studentTotal / STUDENT_PAGE_SIZE));
+  const rejudgeSubmissionPages = Math.max(1, Math.ceil(rejudgeSubmissionTotal / 20));
   const existingIds = useMemo(() => new Set(detail?.problems.filter((item) => item.problemType === catalogType).map((item) => item.problemId) ?? []), [catalogType, detail]);
   const normalizedQuery = catalogQuery.trim().toLowerCase();
   const catalogItems = (catalogType === "ALGORITHM"
@@ -328,16 +389,19 @@ export default function ContestManage() {
       <Field label="开始时间" htmlFor="contest-start" error={formErrors.startAt}><Input id="contest-start" type="datetime-local" value={form.startAt} disabled={!mutable || busy !== null} onChange={(event) => setForm({ ...form, startAt: event.target.value })} /><p className="mt-1 text-xs text-zinc-500">按你的本地时间显示，系统会自动统一处理时区。</p></Field>
       <Field label="结束时间" htmlFor="contest-end" error={formErrors.endAt}><Input id="contest-end" type="datetime-local" value={form.endAt} disabled={!mutable || busy !== null} onChange={(event) => setForm({ ...form, endAt: event.target.value })} /></Field>
       <div><Label htmlFor="contest-access">参赛模式</Label><select id="contest-access" disabled={!mutable || busy !== null} value={form.accessType} onChange={(event) => setForm({ ...form, accessType: event.target.value as ContestUpsert["accessType"] })} className="mt-1 h-9 w-full rounded border px-3 text-sm"><option value="OPEN">OPEN（公开报名）</option><option value="INVITE_ONLY">INVITE_ONLY（邀请制）</option></select><p className="mt-1 text-xs text-zinc-500">{form.accessType === "OPEN" ? "学生可以在开赛前自行加入。" : "仅由老师或管理员添加参赛者。"}</p></div>
+      <div><Label htmlFor="contest-scoring">计分模式</Label><select id="contest-scoring" disabled={!scoringMutable || busy !== null} value={form.scoringMode} onChange={(event) => { const scoringMode = event.target.value as ContestUpsert["scoringMode"]; setForm({ ...form, scoringMode }); if (scoringMode === "ICPC") { setCatalogType("ALGORITHM"); setSelectedProblemIds(new Set()); } }} className="mt-1 h-9 w-full rounded border px-3 text-sm"><option value="SCORE">SCORE（每题最高分）</option><option value="ICPC">ICPC（算法题，解题数/罚时）</option></select><p className="mt-1 text-xs text-zinc-500">{form.scoringMode === "ICPC" ? "ICPC 模式仅允许算法题。" : "SCORE 支持算法、选择题和 DOCX。"}</p></div>
+      <Field label="封榜时间（可选）" htmlFor="contest-freeze" error={formErrors.freezeAt}><Input id="contest-freeze" type="datetime-local" value={form.freezeAt ?? ""} disabled={!scoringMutable || busy !== null} onChange={(event) => setForm({ ...form, freezeAt: event.target.value || null })} /><p className="mt-1 text-xs text-zinc-500">仅草稿可设置；必须位于开始和结束时间之间。</p></Field>
       <div className="flex items-end"><Button disabled={busy !== null || !mutable}>{busy === "saving" ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" />保存中...</> : contestId ? "保存设置" : "创建比赛"}</Button></div>
     </Card></form>
     {dirty && mutable && <p className="mt-2 text-xs text-amber-700">修改尚未保存。</p>}
 
     {detail && <>
       <div className="my-4 flex flex-wrap gap-2">{detail.contest.status === "DRAFT" && <Button disabled={busy !== null} onClick={() => setConfirmAction({ kind: "publish" })}>{busy === "publishing" ? "发布中..." : "发布比赛"}</Button>}{detail.contest.phase !== "ENDED" && detail.contest.phase !== "CANCELLED" && <Button variant="destructive" disabled={busy !== null} onClick={() => setConfirmAction({ kind: "cancel" })}>{busy === "cancelling" ? "取消中..." : "取消比赛"}</Button>}{detail.contest.status === "DRAFT" && <Button variant="outline" disabled={busy !== null} onClick={() => setConfirmAction({ kind: "delete" })}>删除草稿</Button>}</div>
+      {rejudgeAllowed && <Card className="mb-4 p-5"><h2 className="font-semibold">算法题重判</h2><p className="mt-1 text-sm text-zinc-500">重判会创建新 generation；旧任务结果不会覆盖新结果。Office 题暂不支持重判。</p><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" disabled={busy !== null || !detail.problems.some((item) => item.problemType === "ALGORITHM")} onClick={() => setConfirmAction({ kind: "rejudge" })}>{busy === "rejudge-all" ? "创建中..." : "重判全部算法提交"}</Button>{detail.problems.filter((item) => item.problemType === "ALGORITHM").map((item) => <Button key={item.contestProblemId} variant="outline" size="sm" disabled={busy !== null} onClick={() => setConfirmAction({ kind: "rejudge", contestProblemId: item.contestProblemId })}>{busy === `rejudge-${item.contestProblemId}` ? "创建中..." : `重判 ${item.label}`}</Button>)}</div>{rejudgeableSubmissions.length > 0 && <div className="mt-4 rounded border"><p className="border-b px-3 py-2 text-sm font-medium">单个算法提交（{rejudgeSubmissionTotal}）</p>{rejudgeableSubmissions.map((submission) => <div key={submission.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"><span>{submission.problemLabel} · {submission.username} · #{submission.id} · {submission.verdict}</span><Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setConfirmAction({ kind: "rejudge", submissionId: submission.id })}>{busy === `rejudge-submission-${submission.id}` ? "创建中..." : "重判此提交"}</Button></div>)}<div className="border-t px-3 py-2"><PageControls page={rejudgeSubmissionPage} totalPages={rejudgeSubmissionPages} onPage={setRejudgeSubmissionPage} disabled={busy !== null} /></div></div>}{rejudgeBatch && <p className="mt-3 rounded bg-zinc-50 p-3 text-sm" role="status">批次 #{rejudgeBatch.batch.id} · {rejudgeBatch.batch.status} · 已完成 {rejudgeBatch.batch.completedCount} / {rejudgeBatch.batch.totalCount}{rejudgeBatch.batch.failedCount ? ` · 失败 ${rejudgeBatch.batch.failedCount}` : ""}</p>}</Card>}
       <Card className="mb-4 p-5"><h2 className="mb-3 font-semibold">比赛题目（{detail.problems.length}）</h2><p className="mb-3 text-xs text-amber-700">PUBLIC 题目仍可从练习区提前查看；赛前保密请使用 CONTEST_ONLY。</p>
         {detail.problems.length === 0 ? <p className="rounded bg-zinc-50 p-6 text-center text-sm text-zinc-500">暂无比赛题目，请从下方选择。</p> : detail.problems.map((item, index) => <div key={item.contestProblemId} className="flex items-center gap-2 border-t py-2 text-sm"><span className="w-8 font-bold">{item.label}</span><span className="flex-1">{item.title} · {contestTypeLabel(item.problemType)}</span><Button aria-label={`上移 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null || index === 0} onClick={() => void move(item, -1)}><ArrowUp className="h-4 w-4" /></Button><Button aria-label={`下移 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null || index === detail.problems.length - 1} onClick={() => void move(item, 1)}><ArrowDown className="h-4 w-4" /></Button><Button aria-label={`移除 ${item.title}`} size="sm" variant="ghost" disabled={!mutable || busy !== null} onClick={() => setConfirmAction({ kind: "remove-problem", problem: item })}><Trash2 className="h-4 w-4 text-red-600" /></Button></div>)}
 
-        {mutable && <div className="mt-5 rounded border p-4"><div className="flex flex-wrap items-end gap-3"><div><Label htmlFor="catalog-type">添加题型</Label><select id="catalog-type" value={catalogType} disabled={busy !== null} onChange={(event) => { setCatalogType(event.target.value as typeof catalogType); setCatalogPage(1); setCatalogQuery(""); }} className="mt-1 block h-9 rounded border px-3 text-sm"><option value="ALGORITHM">算法题</option><option value="OFFICE_CHOICE">Office 选择题</option><option value="OFFICE_DOCX">DOCX 文件题</option></select></div><div className="min-w-60 flex-1"><Label htmlFor="catalog-search">搜索当前页</Label><div className="relative mt-1"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" /><Input id="catalog-search" className="pl-8" value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="标题或元数据" /></div></div></div>
+        {mutable && <div className="mt-5 rounded border p-4"><div className="flex flex-wrap items-end gap-3"><div><Label htmlFor="catalog-type">添加题型</Label><select id="catalog-type" value={catalogType} disabled={busy !== null} onChange={(event) => { setCatalogType(event.target.value as typeof catalogType); setCatalogPage(1); setCatalogQuery(""); }} className="mt-1 block h-9 rounded border px-3 text-sm"><option value="ALGORITHM">算法题</option>{form.scoringMode === "SCORE" && <><option value="OFFICE_CHOICE">Office 选择题</option><option value="OFFICE_DOCX">DOCX 文件题</option></>}</select></div><div className="min-w-60 flex-1"><Label htmlFor="catalog-search">搜索当前页</Label><div className="relative mt-1"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" /><Input id="catalog-search" className="pl-8" value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="标题或元数据" /></div></div></div>
           {catalogLoading ? <div className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-zinc-400" /></div> : catalogItems.length === 0 ? <p className="py-8 text-center text-sm text-zinc-500">当前页没有可选题目</p> : <div className="mt-3 divide-y">{catalogItems.map((item) => {
             const unavailable = existingIds.has(item.id) || item.visible === false
               || ("hasTeacherDoc" in item && (!item.hasTeacherDoc || !item.hasStarterDoc));
@@ -405,6 +469,14 @@ function ConfirmDialog({ action, detail, onOpenChange, onConfirm, busy }: {
     confirmLabel = "确认移除";
     destructive = true;
     description = `将 ${action.participant.username} 从比赛参赛者中移除。`;
+  } else if (action?.kind === "rejudge") {
+    title = "确认重判？";
+    confirmLabel = "确认创建重判";
+    description = action.submissionId
+      ? `将重新判定 Submission #${action.submissionId}。已有成绩可能发生变化。`
+      : action.contestProblemId
+        ? "将重新判定该算法题的全部提交。已有成绩可能发生变化。"
+        : "将重新判定本比赛全部算法提交。Office 题不会被重判，已有成绩可能发生变化。";
   }
   return <AlertDialog open={action !== null} onOpenChange={onOpenChange}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{title}</AlertDialogTitle><AlertDialogDescription asChild><div>{description}</div></AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>返回检查</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={onConfirm} className={destructive ? "bg-red-600 text-white hover:bg-red-700" : ""}>{confirmLabel}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>;
 }
@@ -424,6 +496,13 @@ function validateForm(form: ContestUpsert): FormErrors {
   else if (start <= Date.now()) errors.startAt = "开始时间必须晚于当前时间。";
   if (!form.endAt || !Number.isFinite(end)) errors.endAt = "请选择结束时间。";
   else if (Number.isFinite(start) && end <= start) errors.endAt = "结束时间必须晚于开始时间。";
+  if (form.freezeAt) {
+    const freeze = Date.parse(form.freezeAt);
+    if (!Number.isFinite(freeze)) errors.freezeAt = "请选择有效的封榜时间。";
+    else if (Number.isFinite(start) && freeze <= start || Number.isFinite(end) && freeze >= end) {
+      errors.freezeAt = "封榜时间必须位于开始和结束时间之间。";
+    }
+  }
   return errors;
 }
 
@@ -434,7 +513,8 @@ function toLocalInput(value: string) {
 }
 
 function toApiForm(form: ContestUpsert): ContestUpsert {
-  return { ...form, title: form.title.trim(), startAt: new Date(form.startAt).toISOString(), endAt: new Date(form.endAt).toISOString() };
+  return { ...form, title: form.title.trim(), startAt: new Date(form.startAt).toISOString(),
+    endAt: new Date(form.endAt).toISOString(), freezeAt: form.freezeAt ? new Date(form.freezeAt).toISOString() : null };
 }
 
 function formatLocal(value: string) {

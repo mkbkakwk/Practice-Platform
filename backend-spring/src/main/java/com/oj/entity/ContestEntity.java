@@ -14,9 +14,11 @@ public class ContestEntity {
     private String description;
     private String status;
     private String accessType;
+    private String scoringMode;
     private Integer ownerId;
     private Instant startAt;
     private Instant endAt;
+    private Instant freezeAt;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -30,12 +32,16 @@ public class ContestEntity {
     public void setStatus(String status) { this.status = status; }
     public String getAccessType() { return accessType; }
     public void setAccessType(String accessType) { this.accessType = accessType; }
+    public String getScoringMode() { return scoringMode; }
+    public void setScoringMode(String scoringMode) { this.scoringMode = scoringMode; }
     public Integer getOwnerId() { return ownerId; }
     public void setOwnerId(Integer ownerId) { this.ownerId = ownerId; }
     public Instant getStartAt() { return startAt; }
     public void setStartAt(Instant startAt) { this.startAt = startAt; }
     public Instant getEndAt() { return endAt; }
     public void setEndAt(Instant endAt) { this.endAt = endAt; }
+    public Instant getFreezeAt() { return freezeAt; }
+    public void setFreezeAt(Instant freezeAt) { this.freezeAt = freezeAt; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

@@ -26,6 +26,7 @@ import AdminUserList from "@/pages/AdminUserList";
 import ContestList from "@/pages/ContestList";
 import ContestDetail from "@/pages/ContestDetail";
 import ContestManage from "@/pages/ContestManage";
+import ContestStandings from "@/pages/ContestStandings";
 import { Toaster } from "sonner";
 
 function Layout({ label, children }: { label?: string; children: React.ReactNode }) {
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/leaderboard" element={<Layout label="排行榜"><Leaderboard /></Layout>} />
             <Route path="/contests" element={<Layout label="比赛"><ContestList /></Layout>} />
             <Route path="/contests/:id" element={<Layout label="比赛详情"><ContestDetail /></Layout>} />
+            <Route path="/contests/:id/standings" element={<Layout label="比赛排名"><ContestStandings /></Layout>} />
             <Route path="/office" element={<Layout label="Office 练习"><OfficeList /></Layout>} />
             <Route path="/office/:id" element={<Layout label="Office 练习"><OfficePractice /></Layout>} />
             <Route path="/office/docs" element={<Layout label="排版练习"><OfficeDocList /></Layout>} />

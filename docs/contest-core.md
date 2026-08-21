@@ -109,8 +109,10 @@ from the ordinary exercise endpoint. CONTEST_ONLY starters are available only
 through the contest endpoint after start to participants (and remain readable
 after end); the reference is never exposed to students.
 
-## Intentionally unsupported
+## Stage 7 extensions
 
-Stage 6 does not implement leaderboards, points, penalty time, ICPC/OI scoring,
-freeze/unfreeze, rejudge, virtual participation, teams, announcements, or
-post-contest public release. These require separate Stage 7 designs.
+Stage 7 adds SCORE/ICPC scoring, derived standings, server-authorized freeze
+views, and generation-safe algorithm rejudge. The full semantics and the
+intentional deferral of Office historical rejudge are documented in
+[Contest scoring](contest-scoring.md). Virtual participation, teams,
+announcements, and post-contest public release remain out of scope.

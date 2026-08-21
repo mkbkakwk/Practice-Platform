@@ -191,9 +191,10 @@ Flyway 是唯一的数据库结构来源，迁移文件位于
 3. V5 增加可靠判题 Outbox / lease 状态；
 4. V6 增加可靠 DOCX 判题字段；
 5. V7 增加 Contest、参赛/题目关系、内容可见性与不可变提交上下文；
-6. V8 拆分 Office 选择题与 DOCX 比赛类型，并增加独立 Starter/Reference 文档及 Choice 比赛上下文。
+6. V8 拆分 Office 选择题与 DOCX 比赛类型，并增加独立 Starter/Reference 文档及 Choice 比赛上下文；
+7. V9 增加比赛 SCORE/ICPC 计分、派生排行榜、封榜时间、算法重判 generation/history 与审计批次。
 
-全新空库执行 V1–V8。由旧 `schema.sql` 创建的非空数据库会在版本 1
+全新空库执行 V1–V9。由旧 `schema.sql` 创建的非空数据库会在版本 1
 建立 baseline，然后执行后续迁移；不会重复建表或自动插入演示数据。
 Backend 是唯一迁移执行方，Worker 明确禁用 SQL 初始化。
 
@@ -384,16 +385,20 @@ practice-platform/
 | POST | `/api/office/docs/exercises/:id/submit` | ✅ | 学生上传 .docx |
 | GET | `/api/contests` | ✅ | 按角色分页列出可访问比赛 |
 | GET | `/api/contests/:id` | ✅ | 比赛阶段、参赛状态与安全题目 DTO |
+| GET | `/api/contests/:id/standings` | ✅ 参赛者 / 管理者 | 权限驱动的 SCORE/ICPC 排名与封榜视图 |
 | POST | `/api/contests/:id/join` | ✅ 学生 | 开始前加入 OPEN 比赛 |
 | POST | `/api/contests/:id/problems/:contestProblemId/submissions` | ✅ 参赛者 | 运行阶段算法提交 |
 | POST | `/api/contests/:id/problems/:contestProblemId/choice-submissions` | ✅ 参赛者 | 运行阶段 Office 选择题提交 |
 | POST | `/api/contests/:id/problems/:contestProblemId/office-submissions` | ✅ 参赛者 | 运行阶段 DOCX 提交 |
 | GET | `/api/contests/:id/problems/:contestProblemId/starter` | ✅ 参赛者 | 开赛后下载比赛 DOCX Starter |
+| POST | `/api/contests/:id/rejudge` | 🔒 所有者/管理员 | 重判全比赛算法提交 |
+| POST | `/api/contests/:id/problems/:contestProblemId/rejudge` | 🔒 所有者/管理员 | 重判一道算法比赛题 |
+| POST | `/api/contests/:id/rejudge/submissions/:submissionId` | 🔒 所有者/管理员 | 重判一个算法提交 |
 | GET | `/api/office/docs/submissions` | ✅ | 学生看自己；教师看自建练习；管理员看全部 |
 | PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
 
 排版判题仅支持经过安全验证的 DOCX；上传限制、确定性评分属性、结果格式和存储生命周期见 [Office DOCX judging](docs/office-judging.md)。
-比赛生命周期、可见性和权限边界见 [Contest core](docs/contest-core.md)。
+比赛生命周期、可见性和权限边界见 [Contest core](docs/contest-core.md)；计分、封榜和重判语义见 [Contest scoring](docs/contest-scoring.md)。
 | GET | `/api/users` | 🔒 管理员 | 用户列表 |
 | PUT | `/api/users/:id/role` | 🔒 管理员 | 修改用户角色 |
 | DELETE | `/api/users/:id` | 🔒 管理员 | 删除无历史记录的用户（最后管理员受保护） |
@@ -624,7 +629,7 @@ docker compose build
 - [ ] SQL 练习模块
 - [ ] SSE 实时推送评测结果（替代轮询）
 - [x] 基础比赛（OPEN / INVITE_ONLY、算法/Office 选择题/DOCX 混合比赛提交）
-- [ ] 比赛排行榜、计分、罚时、封榜与 Rejudge
+- [x] 比赛排行榜、SCORE/ICPC 计分、罚时、封榜与算法 Rejudge
 - [ ] 题目数据导入 / 导出
 - [ ] 代码防作弊相似度检测
 

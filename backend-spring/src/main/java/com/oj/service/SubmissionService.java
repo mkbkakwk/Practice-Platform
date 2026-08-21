@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.UUID;
 
 @Service
 public class SubmissionService {
@@ -91,14 +90,14 @@ public class SubmissionService {
         submission.setMemoryKb(0);
         submission.setPassed(0);
         submission.setTotal(0);
+        submission.setJudgeGeneration(0);
         submission.setMessage("排队中");
         submissionMapper.insert(submission);
 
         try {
-            UUID eventId = UUID.randomUUID();
-            String payload = objectMapper.writeValueAsString(
-                    JudgeMessage.initial(eventId, submission.getId()));
-            outboxRepository.insert(eventId, submission.getId(), payload);
+            JudgeMessage message = JudgeMessage.initial(submission.getId(), 0);
+            String payload = objectMapper.writeValueAsString(message);
+            outboxRepository.insert(message.eventId(), submission.getId(), 0, payload);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Unable to persist judge event", exception);
         }

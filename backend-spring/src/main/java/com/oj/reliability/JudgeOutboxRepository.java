@@ -17,11 +17,17 @@ public class JudgeOutboxRepository {
         this.jdbc = jdbc;
     }
 
-    public void insert(UUID eventId, int submissionId, String payload) {
+    public void insert(UUID eventId, int submissionId, int judgeGeneration, String payload) {
         jdbc.update("""
-                INSERT INTO judge_outbox (event_id, event_type, submission_id, payload)
-                VALUES (?, 'JUDGE_REQUESTED', ?, ?::jsonb)
-                """, eventId, submissionId, payload);
+                INSERT INTO judge_outbox (event_id, event_type, submission_id, judge_generation, payload)
+                VALUES (?, 'JUDGE_REQUESTED', ?, ?, ?::jsonb)
+                ON CONFLICT (submission_id, event_type, judge_generation) DO NOTHING
+                """, eventId, submissionId, judgeGeneration, payload);
+    }
+
+    /** Compatibility overload for generation-zero callers and legacy reliability tests. */
+    public void insert(UUID eventId, int submissionId, String payload) {
+        insert(eventId, submissionId, 0, payload);
     }
 
     @Transactional
