@@ -6,12 +6,14 @@ import {
   api,
   type ContestDetail as ContestDetailModel,
   type ContestProblemItem,
+  type ContestStanding,
   type ContestSummary,
   type LanguageDef,
 } from "@/lib/api";
 import ContestList from "./ContestList";
 import ContestDetail, { CONTEST_REFRESH_MS } from "./ContestDetail";
 import ContestManage from "./ContestManage";
+import ContestStandings from "./ContestStandings";
 
 const auth = vi.hoisted(() => ({
   user: { id: 10, username: "student", role: "USER" as const } as
@@ -42,8 +44,10 @@ const baseContest: ContestSummary = {
   accessType: "OPEN",
   ownerId: 2,
   ownerUsername: "teacher",
+  scoringMode: "SCORE",
   startAt: "2026-09-01T01:00:00Z",
   endAt: "2026-09-01T03:00:00Z",
+  freezeAt: null,
   participant: false,
   createdAt: "2026-08-01T00:00:00Z",
   updatedAt: "2026-08-01T00:00:00Z",
@@ -178,6 +182,7 @@ function mockManage(value: ContestDetailModel, participantTotal = 0) {
   vi.spyOn(api, "listManageOfficeQuestions").mockResolvedValue({ total: 0, page: 1, pageSize: 20, questions: [] });
   vi.spyOn(api, "listManageDocExercises").mockResolvedValue({ total: 0, page: 1, pageSize: 20, exercises: [] });
   vi.spyOn(api, "searchContestStudents").mockResolvedValue({ total: 1, page: 1, pageSize: 10, students: [{ id: 10, username: "stage_student", role: "USER" }] });
+  vi.spyOn(api, "listRejudgeableContestSubmissions").mockResolvedValue({ total: 0, page: 1, pageSize: 20, submissions: [] });
 }
 
 describe("contest stage UI", () => {
@@ -749,5 +754,68 @@ describe("contest stage UI", () => {
     expect(screen.getByRole("button", { name: "保存设置" })).toBeDisabled();
     expect(screen.queryByLabelText("添加题型")).not.toBeInTheDocument();
     expect(catalog).not.toHaveBeenCalled();
+  });
+
+  it("renders frozen SCORE standings without any post-freeze live values", async () => {
+    const frozen: ContestStanding = {
+      contestId: 7, scoringMode: "SCORE", phase: "RUNNING", frozen: true, managerView: false,
+      freezeAt: "2026-09-01T02:00:00Z", generatedAt: "2026-09-01T02:01:00Z",
+      entries: [{ rank: 1, userId: 10, username: "student", totalScore: 100, solved: 0, penaltyMinutes: 0,
+        problems: [{ contestProblemId: 71, label: "A", score: 100, solved: true, attempts: 1, penaltyMinutes: null }] }],
+    };
+    vi.spyOn(api, "getContestStandings").mockResolvedValue({ standings: frozen });
+    render(<MemoryRouter initialEntries={["/contests/7/standings"]}><Routes><Route path="/contests/:id/standings" element={<ContestStandings />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText("比赛已封榜；当前排名仅展示封榜前提交。")).toBeInTheDocument();
+    expect(screen.getAllByText("100")).toHaveLength(2);
+    expect(screen.queryByText("管理员实时榜单")).not.toBeInTheDocument();
+  });
+
+  it("renders ICPC standings and the manager live-view banner", async () => {
+    const live: ContestStanding = {
+      contestId: 7, scoringMode: "ICPC", phase: "RUNNING", frozen: false, managerView: true,
+      freezeAt: "2026-09-01T02:00:00Z", generatedAt: "2026-09-01T02:01:00Z",
+      entries: [{ rank: 1, userId: 2, username: "teacher", totalScore: 1, solved: 1, penaltyMinutes: 42,
+        problems: [{ contestProblemId: 71, label: "A", score: 100, solved: true, attempts: 2, penaltyMinutes: 42 }] }],
+    };
+    vi.spyOn(api, "getContestStandings").mockResolvedValue({ standings: live });
+    render(<MemoryRouter initialEntries={["/contests/7/standings"]}><Routes><Route path="/contests/:id/standings" element={<ContestStandings />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText("ICPC：解题数优先，罚时次之")).toBeInTheDocument();
+    expect(screen.getByText("管理员实时榜单：学生视图会在封榜后隐藏封榜后的提交。")).toBeInTheDocument();
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.getByText("AC · 42分")).toBeInTheDocument();
+  });
+
+  it("limits an ICPC draft catalog to algorithms and validates the freeze window", async () => {
+    auth.user = { id: 2, username: "teacher", role: "TEACHER" };
+    render(<MemoryRouter initialEntries={["/admin/contests/new"]}><Routes><Route path="/admin/contests/:id" element={<ContestManage />} /></Routes></MemoryRouter>);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("计分模式"), "ICPC");
+    expect(screen.getByText("ICPC 模式仅允许算法题。")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("标题"), { target: { value: "ICPC" } });
+    fireEvent.change(screen.getByLabelText("开始时间"), { target: { value: "2030-09-01T10:00" } });
+    fireEvent.change(screen.getByLabelText("结束时间"), { target: { value: "2030-09-01T12:00" } });
+    fireEvent.change(screen.getByLabelText("封榜时间（可选）"), { target: { value: "2030-09-01T12:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建比赛" }));
+    expect(screen.getByText("封榜时间必须位于开始和结束时间之间。")).toBeInTheDocument();
+  });
+
+  it("requires rejudge confirmation, sends one request, and reports progress", async () => {
+    auth.user = { id: 2, username: "teacher", role: "TEACHER" };
+    mockManage(detail({ phase: "RUNNING", participant: false }, problems));
+    const request = vi.spyOn(api, "rejudgeContest").mockResolvedValue({ batch: {
+      batch: { id: 91, contestId: 7, contestProblemId: null, requestedSubmissionId: null, requestedBy: 2,
+        status: "RUNNING", totalCount: 3, queuedCount: 2, completedCount: 1, failedCount: 0,
+        createdAt: "2026-09-01T01:00:00Z", completedAt: null }, items: [],
+    } });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/admin/contests/7"]}><Routes><Route path="/admin/contests/:id" element={<ContestManage />} /></Routes></MemoryRouter>);
+    await user.click(await screen.findByRole("button", { name: "重判全部算法提交" }));
+    expect(request).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("button", { name: "确认创建重判" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("status")).toHaveTextContent("批次 #91 · RUNNING · 已完成 1 / 3");
+    expect(screen.getByText(/Office 题暂不支持重判/)).toBeInTheDocument();
   });
 });

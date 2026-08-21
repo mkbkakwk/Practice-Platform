@@ -374,6 +374,7 @@ export interface ReviewerDocSubmission {
 // ---- Contest core ----
 export type ContestPhase = "DRAFT" | "UPCOMING" | "RUNNING" | "ENDED" | "CANCELLED";
 export type ContestAccessType = "OPEN" | "INVITE_ONLY";
+export type ContestScoringMode = "SCORE" | "ICPC";
 
 export interface ContestSummary {
   id: number;
@@ -384,8 +385,10 @@ export interface ContestSummary {
   accessType: ContestAccessType;
   ownerId: number;
   ownerUsername: string | null;
+  scoringMode: ContestScoringMode;
   startAt: string;
   endAt: string;
+  freezeAt: string | null;
   participant: boolean;
   createdAt: string;
   updatedAt: string;
@@ -428,6 +431,8 @@ export interface ContestUpsert {
   startAt: string;
   endAt: string;
   accessType: ContestAccessType;
+  scoringMode: ContestScoringMode;
+  freezeAt: string | null;
 }
 
 export interface ContestChoiceSubmission {
@@ -435,6 +440,76 @@ export interface ContestChoiceSubmission {
   contestProblemId: number;
   selected: string[];
   correct: boolean;
+  createdAt: string;
+}
+
+export interface ContestStandingProblem {
+  contestProblemId: number;
+  label: string;
+  score: number | null;
+  solved: boolean;
+  attempts: number;
+  penaltyMinutes: number | null;
+}
+
+export interface ContestStandingEntry {
+  rank: number;
+  userId: number;
+  username: string;
+  totalScore: number;
+  solved: number;
+  penaltyMinutes: number;
+  problems: ContestStandingProblem[];
+}
+
+export interface ContestStanding {
+  contestId: number;
+  scoringMode: ContestScoringMode;
+  phase: ContestPhase;
+  frozen: boolean;
+  managerView: boolean;
+  freezeAt: string | null;
+  generatedAt: string;
+  entries: ContestStandingEntry[];
+}
+
+export interface RejudgeBatchItem {
+  id: number;
+  submissionId: number;
+  judgeGeneration: number;
+  status: "QUEUED" | "COMPLETED" | "FAILED" | "STALE";
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface RejudgeBatch {
+  id: number;
+  contestId: number;
+  contestProblemId: number | null;
+  requestedSubmissionId: number | null;
+  requestedBy: number;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+  totalCount: number;
+  queuedCount: number;
+  completedCount: number;
+  failedCount: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface RejudgeBatchDetail {
+  batch: RejudgeBatch;
+  items: RejudgeBatchItem[];
+}
+
+export interface RejudgeableSubmission {
+  id: number;
+  contestProblemId: number;
+  problemLabel: string;
+  userId: number;
+  username: string;
+  verdict: string;
+  judgeGeneration: number;
   createdAt: string;
 }
 
@@ -709,6 +784,7 @@ export const api = {
     );
   },
   getContest: (id: number) => request<{ detail: ContestDetail }>(`/contests/${id}`),
+  getContestStandings: (id: number) => request<{ standings: ContestStanding }>(`/contests/${id}/standings`),
   searchContestStudents: (params: { query?: string; page?: number; pageSize?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.query) q.set("query", params.query);
@@ -777,6 +853,22 @@ export const api = {
       `/contests/${contestId}/problems/${contestProblemId}/choice-submissions`,
       { method: "POST", body: JSON.stringify({ selected }) },
     ),
+  rejudgeContestSubmission: (contestId: number, submissionId: number) =>
+    request<{ batch: RejudgeBatchDetail }>(`/contests/${contestId}/rejudge/submissions/${submissionId}`, { method: "POST" }),
+  rejudgeContestProblem: (contestId: number, contestProblemId: number) =>
+    request<{ batch: RejudgeBatchDetail }>(`/contests/${contestId}/problems/${contestProblemId}/rejudge`, { method: "POST" }),
+  rejudgeContest: (contestId: number) =>
+    request<{ batch: RejudgeBatchDetail }>(`/contests/${contestId}/rejudge`, { method: "POST" }),
+  listRejudgeableContestSubmissions: (contestId: number, params: { page?: number; pageSize?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    return request<{ total: number; page: number; pageSize: number; submissions: RejudgeableSubmission[] }>(
+      `/contests/${contestId}/rejudge/submissions${q.size ? `?${q}` : ""}`,
+    );
+  },
+  getRejudgeBatch: (contestId: number, batchId: number) =>
+    request<{ batch: RejudgeBatchDetail }>(`/contests/${contestId}/rejudge/batches/${batchId}`),
   downloadContestStarter: (contestId: number, contestProblemId: number, filename: string) =>
     downloadFile(`/contests/${contestId}/problems/${contestProblemId}/starter`, filename),
 

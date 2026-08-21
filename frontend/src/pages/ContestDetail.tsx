@@ -370,6 +370,7 @@ export default function ContestDetail() {
     <Card className="mb-4 p-5"><Markdown>{contest.description || "暂无比赛说明。"}</Markdown><div className="mt-3 flex flex-wrap gap-3 text-sm text-zinc-500"><span>{contest.accessType === "OPEN" ? "公开报名" : "邀请制"}</span><span>{contest.participant ? "已参赛" : "未参赛"}</span></div>
       {canJoin && <Button className="mt-4" disabled={joining} onClick={() => void join()}>{joining && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{joining ? "加入中..." : "加入比赛"}</Button>}
       {contest.accessType === "INVITE_ONLY" && !contest.participant && user?.role === "USER" && <p className="mt-3 text-sm text-amber-700">邀请制比赛仅对受邀学生开放。</p>}
+      {(contest.phase === "RUNNING" || contest.phase === "ENDED") && <Link className="mt-4 inline-block text-sm font-medium text-blue-700 hover:underline" to={`/contests/${contest.id}/standings`}>查看排名 →</Link>}
     </Card>
     {contest.phase === "UPCOMING" && <p className="mb-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">比赛尚未开始；CONTEST_ONLY 题目正文将在服务端确认开赛且你是参赛者后开放。</p>}
     {contest.phase === "CANCELLED" && <p className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">比赛已取消，历史信息保留，但不能创建新提交。</p>}
