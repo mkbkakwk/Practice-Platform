@@ -27,6 +27,7 @@ import ContestList from "@/pages/ContestList";
 import ContestDetail from "@/pages/ContestDetail";
 import ContestManage from "@/pages/ContestManage";
 import ContestStandings from "@/pages/ContestStandings";
+import ContestAnalytics from "@/pages/ContestAnalytics";
 import { Toaster } from "sonner";
 
 function Layout({ label, children }: { label?: string; children: React.ReactNode }) {
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="/admin/users" element={<Layout label="用户管理"><AdminGuard><AdminUserList /></AdminGuard></Layout>} />
             <Route path="/admin/contests/new" element={<Layout label="创建比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
             <Route path="/admin/contests/:id" element={<Layout label="管理比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
+            <Route path="/admin/contests/:id/analytics" element={<Layout label="比赛数据分析"><TeacherGuard><ContestAnalytics /></TeacherGuard></Layout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster richColors position="top-center" />
