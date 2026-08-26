@@ -5,6 +5,7 @@ import com.oj.judge.LanguageDef;
 import com.oj.service.ContestService;
 import com.oj.service.ContestStandingService;
 import com.oj.service.ContestRejudgeService;
+import com.oj.service.ContestAnalyticsService;
 import jakarta.validation.Valid;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
@@ -25,12 +26,14 @@ public class ContestController {
     private final ContestService service;
     private final ContestStandingService standings;
     private final ContestRejudgeService rejudge;
+    private final ContestAnalyticsService analytics;
 
     public ContestController(ContestService service, ContestStandingService standings,
-                             ContestRejudgeService rejudge) {
+                             ContestRejudgeService rejudge, ContestAnalyticsService analytics) {
         this.service = service;
         this.standings = standings;
         this.rejudge = rejudge;
+        this.analytics = analytics;
     }
 
     @GetMapping
@@ -54,6 +57,20 @@ public class ContestController {
     @GetMapping("/{contestId}/standings")
     public Map<String, Object> standings(@PathVariable int contestId) {
         return Map.of("standings", standings.standings(contestId));
+    }
+
+    @GetMapping("/{contestId}/analytics")
+    public Map<String, Object> analytics(@PathVariable int contestId) {
+        return Map.of("analytics", analytics.analytics(contestId));
+    }
+
+    @GetMapping("/{contestId}/analytics/participants")
+    public Map<String, Object> analyticsParticipants(@PathVariable int contestId,
+                                                      @RequestParam(defaultValue = "1") int page,
+                                                      @RequestParam(defaultValue = "20") int pageSize,
+                                                      @RequestParam(defaultValue = "") String query) {
+        return Map.of("participants", analytics.participants(contestId, Math.max(1, page),
+                Math.min(50, Math.max(1, pageSize)), query));
     }
 
     @PostMapping
