@@ -473,6 +473,16 @@ export interface ContestStanding {
   entries: ContestStandingEntry[];
 }
 
+export interface ContestAnalyticsProblem {
+  contestProblemId: number; label: string; displayOrder: number; title: string; problemType: ContestProblemItem["problemType"];
+  submissionCount: number; uniqueSubmitterCount: number; participationRate: number; successParticipantCount: number; successRate: number; infrastructureFailureCount: number;
+  validJudgedSubmissionCount: number | null; acceptedSubmissionCount: number | null; submissionAcceptanceRate: number | null;
+  correctSubmissionCount: number | null; validSubmissionCount: number | null; correctSubmissionRate: number | null;
+  scoredParticipantCount: number | null; averageBestScore: number | null; medianBestScore: number | null; perfectScoreParticipantCount: number | null; perfectScoreRate: number | null; needsReviewSubmissionCount: number | null;
+}
+export interface ContestAnalytics { contestId: number; title: string; scoringMode: ContestScoringMode; phase: ContestPhase; generatedAt: string; overview: { participantCount:number; activeParticipantCount:number; inactiveParticipantCount:number; totalSubmissionCount:number; algorithmSubmissionCount:number; choiceSubmissionCount:number; docxSubmissionCount:number; firstSubmissionAt:string|null; lastSubmissionAt:string|null; averageTotalScore:number|null; maxTotalScore:number|null; minTotalScore:number|null; fullScoreParticipantCount:number|null; averageSolved:number|null; maxSolved:number|null; averagePenaltyAmongSolvedParticipants:number|null; }; problems: ContestAnalyticsProblem[]; timeline: {startAt:string;endAt:string;submissionCount:number;algorithmCount:number;choiceCount:number;docxCount:number;successCount:number}[]; distribution:{label:string;participantCount:number}[]; }
+export interface ContestAnalyticsParticipant { userId:number; username:string; rank:number|null; totalSubmissionCount:number; submittedProblemCount:number; successfulProblemCount:number; lastSubmissionAt:string|null; totalScore:number|null; solved:number|null; penaltyMinutes:number|null; }
+
 export interface RejudgeBatchItem {
   id: number;
   submissionId: number;
@@ -785,6 +795,22 @@ export const api = {
   },
   getContest: (id: number) => request<{ detail: ContestDetail }>(`/contests/${id}`),
   getContestStandings: (id: number) => request<{ standings: ContestStanding }>(`/contests/${id}/standings`),
+  getContestAnalytics: (id: number, signal?: AbortSignal) =>
+    request<{ analytics: ContestAnalytics }>(`/contests/${id}/analytics`, { signal }),
+  getContestAnalyticsParticipants: (
+    id: number,
+    params: { page?: number; pageSize?: number; query?: string } = {},
+    signal?: AbortSignal,
+  ) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.pageSize) q.set("pageSize", String(params.pageSize));
+    if (params.query) q.set("query", params.query);
+    return request<{ participants: { page: number; pageSize: number; total: number; participants: ContestAnalyticsParticipant[] } }>(
+      `/contests/${id}/analytics/participants?${q}`,
+      { signal },
+    );
+  },
   searchContestStudents: (params: { query?: string; page?: number; pageSize?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.query) q.set("query", params.query);

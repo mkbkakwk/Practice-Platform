@@ -381,7 +381,7 @@ export default function ContestManage() {
 
   if (loading) return <div className="py-20 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-zinc-400" /></div>;
   return <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-    <div className="mb-5 flex items-center justify-between"><div><Link className="text-sm text-zinc-500 hover:underline" to="/contests">← 返回比赛</Link><h1 className="mt-2 text-2xl font-bold">{contestId ? "管理比赛" : "创建比赛"}</h1></div>{detail && <span className={cn("rounded px-3 py-1 text-sm font-semibold", phaseClass(detail.contest.phase))}>{detail.contest.phase}</span>}</div>
+    <div className="mb-5 flex items-center justify-between gap-3"><div><Link className="text-sm text-zinc-500 hover:underline" to="/contests">← 返回比赛</Link><h1 className="mt-2 text-2xl font-bold">{contestId ? "管理比赛" : "创建比赛"}</h1></div><div className="flex items-center gap-3">{contestId && <Link className="text-sm font-medium text-blue-700 hover:underline" to={`/admin/contests/${contestId}/analytics`}>数据分析 →</Link>}{detail && <span className={cn("rounded px-3 py-1 text-sm font-semibold", phaseClass(detail.contest.phase))}>{detail.contest.phase}</span>}</div></div>
     {error && <p role="alert" className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     <form onSubmit={save}><Card className="grid gap-4 p-5 md:grid-cols-2">
       <Field label="标题" htmlFor="contest-title" error={formErrors.title} className="md:col-span-2"><Input id="contest-title" value={form.title} disabled={!mutable || busy !== null} onChange={(event) => setForm({ ...form, title: event.target.value })} /></Field>

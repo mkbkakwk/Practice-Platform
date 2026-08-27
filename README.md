@@ -386,6 +386,8 @@ practice-platform/
 | GET | `/api/contests` | ✅ | 按角色分页列出可访问比赛 |
 | GET | `/api/contests/:id` | ✅ | 比赛阶段、参赛状态与安全题目 DTO |
 | GET | `/api/contests/:id/standings` | ✅ 参赛者 / 管理者 | 权限驱动的 SCORE/ICPC 排名与封榜视图 |
+| GET | `/api/contests/:id/analytics` | 🔒 所有者/管理员 | 派生的比赛概览、题目指标、趋势与分布 |
+| GET | `/api/contests/:id/analytics/participants` | 🔒 所有者/管理员 | 分页、可搜索的参赛者分析 |
 | POST | `/api/contests/:id/join` | ✅ 学生 | 开始前加入 OPEN 比赛 |
 | POST | `/api/contests/:id/problems/:contestProblemId/submissions` | ✅ 参赛者 | 运行阶段算法提交 |
 | POST | `/api/contests/:id/problems/:contestProblemId/choice-submissions` | ✅ 参赛者 | 运行阶段 Office 选择题提交 |
@@ -398,7 +400,7 @@ practice-platform/
 | PUT | `/api/office/docs/submissions/:id/review` | 🔒 所有者/管理员 | 复核打分 |
 
 排版判题仅支持经过安全验证的 DOCX；上传限制、确定性评分属性、结果格式和存储生命周期见 [Office DOCX judging](docs/office-judging.md)。
-比赛生命周期、可见性和权限边界见 [Contest core](docs/contest-core.md)；计分、封榜和重判语义见 [Contest scoring](docs/contest-scoring.md)。
+比赛生命周期、可见性和权限边界见 [Contest core](docs/contest-core.md)；计分、封榜和重判语义见 [Contest scoring](docs/contest-scoring.md)；管理端派生统计语义见 [Contest analytics](docs/contest-analytics.md)。
 | GET | `/api/users` | 🔒 管理员 | 用户列表 |
 | PUT | `/api/users/:id/role` | 🔒 管理员 | 修改用户角色 |
 | DELETE | `/api/users/:id` | 🔒 管理员 | 删除无历史记录的用户（最后管理员受保护） |
