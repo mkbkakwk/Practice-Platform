@@ -51,6 +51,10 @@ oj:
   cors:
     origin: ${CORS_ORIGIN:*}
   promote-first-admin: ${PROMOTE_FIRST_ADMIN:false}
+  build:
+    git-sha: ${APP_GIT_SHA:unknown}
+    version: ${APP_VERSION:dev}
+    time: ${APP_BUILD_TIME:unknown}
   rabbitmq:
     exchange: ${OJ_RABBITMQ_EXCHANGE:oj.judge}
     routing-key: ${OJ_RABBITMQ_ROUTING_KEY:oj.judge.submit}

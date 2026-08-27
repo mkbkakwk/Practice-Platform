@@ -87,6 +87,7 @@ public class JwtInterceptor implements HandlerInterceptor {
         }
         if (!"GET".equalsIgnoreCase(method)) return false;
         if ("/api/health".equals(path)
+                || "/api/readiness".equals(path)
                 || "/api/submissions/meta/languages".equals(path)
                 || "/api/problems".equals(path)
                 || "/api/users/leaderboard".equals(path)) {
