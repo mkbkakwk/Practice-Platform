@@ -571,6 +571,15 @@ FORMAL_ENV_FILE=.env.production \
 仓库只保存不含秘密的 Release Manifest 模板，机器相关恢复清单和备份仍
 保存在 Git 工作区之外。
 
+### 发布拓扑与健康检查
+
+正式 Release Compose 包含 Frontend、Backend、PostgreSQL、RabbitMQ、Runner
+和远程 Worker。Worker 必须使用可信 Runner，不允许在正式拓扑中回退到本地
+判题；Runner 是唯一可访问 Docker socket 的应用服务。公开的
+`/api/health` 只返回最小 liveness 状态，`/api/readiness` 用于容器 readiness。
+安全的构建版本与 Flyway 证据仅通过管理员版本接口提供。完整语义见
+[`docs/ops-readiness.md`](docs/ops-readiness.md)。
+
 前端认证回归测试使用 Vitest、React Testing Library 和 jsdom，在容器内模拟 API、路由、`localStorage` 和文件下载。当前覆盖登录状态恢复、登录成功、受保护请求 401、登录接口 401、并发 401 去重、403 保持登录、携带 Authorization 的文档下载，以及 Token/`tokenVersion` 不进入可见 DOM。该范围不依赖真实浏览器或当前部署，因此没有引入 Playwright。
 
 测试全部通过后可只构建正式镜像进行验证：
