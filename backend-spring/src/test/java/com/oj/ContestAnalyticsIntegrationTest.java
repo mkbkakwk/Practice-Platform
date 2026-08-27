@@ -225,6 +225,29 @@ class ContestAnalyticsIntegrationTest {
                 .doesNotContainAnyElementsOf(second.participants().stream().map(ContestDtos.AnalyticsParticipant::userId).toList());
         assertThat(analytics.participants(contest, 1, 20, "docx-1").participants()).singleElement()
                 .extracting(ContestDtos.AnalyticsParticipant::username).isEqualTo("docx-1");
+
+        int oddContest = contest("SCORE", START.plusSeconds(45), null);
+        int oddExercise = exercise();
+        long oddProblem = problem(oddContest, "OFFICE_DOCX", null, null, oddExercise, "A");
+        for (int score : new int[]{70, 80, 100}) {
+            int user = user("odd-docx-" + score, "USER");
+            participant(oddContest, user);
+            jdbc.update("""
+                    INSERT INTO "OfficeDocSubmission" (user_id, exercise_id, contest_problem_id,
+                    student_doc_path, student_doc_name, status, score, created_at)
+                    VALUES (?, ?, ?, '/tmp/a.docx', 'a.docx', 'NEEDS_REVIEW', ?, ?)
+                    """, user, oddExercise, oddProblem, score, local(START.plusSeconds(score)));
+        }
+        ContestDtos.ProblemAnalytics oddMetric = analytics.analytics(oddContest).problems().get(0);
+        assertThat(oddMetric).extracting(ContestDtos.ProblemAnalytics::averageBestScore,
+                ContestDtos.ProblemAnalytics::medianBestScore).containsExactly(250d / 3d, 80d);
+
+        int emptyContest = contest("SCORE", START.plusSeconds(45), null);
+        problem(emptyContest, "OFFICE_DOCX", null, null, exercise(), "A");
+        ContestDtos.ProblemAnalytics emptyMetric = analytics.analytics(emptyContest).problems().get(0);
+        assertThat(emptyMetric).extracting(ContestDtos.ProblemAnalytics::scoredParticipantCount,
+                ContestDtos.ProblemAnalytics::averageBestScore, ContestDtos.ProblemAnalytics::medianBestScore)
+                .containsExactly(0, null, null);
     }
 
     @Test
@@ -240,12 +263,17 @@ class ContestAnalyticsIntegrationTest {
         String adminToken = token(admin, "admin", "ADMIN");
         String body = mockMvc.perform(get("/api/contests/{id}/analytics", contest).header("Authorization", "Bearer " + ownerToken))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        assertThat(body).doesNotContain("teacherText", "compareResult", "autoResult", "correctAnswer", "explanation", "sourceCode", "storagePath");
+        assertThat(body).doesNotContain("teacherText", "compareResult", "autoResult", "correctAnswer", "explanation",
+                "sourceCode", "storagePath", "storageKey", "teacherReference", "SECRET_TEACHER_REFERENCE");
         mockMvc.perform(get("/api/contests/{id}/analytics/participants", contest).header("Authorization", "Bearer " + ownerToken)).andExpect(status().isOk());
         mockMvc.perform(get("/api/contests/{id}/analytics", contest).header("Authorization", "Bearer " + adminToken)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/contests/{id}/analytics/participants", contest).header("Authorization", "Bearer " + adminToken)).andExpect(status().isOk());
         mockMvc.perform(get("/api/contests/{id}/analytics", contest).header("Authorization", "Bearer " + studentToken)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/contests/{id}/analytics/participants", contest).header("Authorization", "Bearer " + studentToken)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/contests/{id}/analytics", contest).header("Authorization", "Bearer " + otherToken)).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/contests/{id}/analytics/participants", contest).header("Authorization", "Bearer " + otherToken)).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/contests/{id}/analytics", contest)).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/contests/{id}/analytics/participants", contest)).andExpect(status().isUnauthorized());
     }
 
     @Test
