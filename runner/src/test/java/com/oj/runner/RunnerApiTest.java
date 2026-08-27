@@ -75,6 +75,25 @@ class RunnerApiTest {
     }
 
     @Test
+    void readinessFailsClosedWhenSandboxIsUnavailableWhileLivenessRemainsUp() throws Exception {
+        mockMvc.perform(get("/api/liveness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+        mockMvc.perform(get("/api/readiness"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value("DOWN"));
+    }
+
+    @Test
+    void readinessIsUpWhenTheExistingSandboxCapabilityIsAvailable() throws Exception {
+        doReturn(true).when(sandboxExecutor).available();
+
+        mockMvc.perform(get("/api/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
     void missingAuthorizationReturns401() throws Exception {
         mockMvc.perform(post("/api/v1/jobs")
                         .contentType(MediaType.APPLICATION_JSON)

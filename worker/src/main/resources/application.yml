@@ -1,11 +1,9 @@
 server:
-  port: 0   # worker does not serve HTTP
+  port: ${WORKER_HEALTH_PORT:8081}
 
 spring:
   application:
     name: oj-worker
-  main:
-    web-application-type: none
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/oj}
     username: ${POSTGRES_USER:oj}

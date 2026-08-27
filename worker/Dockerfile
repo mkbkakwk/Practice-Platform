@@ -36,8 +36,11 @@ RUN mvn -B -q package -DskipTests
 # sandbox images controlled by the Runner.
 FROM eclipse-temurin:21-jre-jammy AS runtime
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/target/oj-worker.jar /app/app.jar
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 ENV JUDGE_WORKSPACE=/tmp/oj-judge
-EXPOSE 0
+EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

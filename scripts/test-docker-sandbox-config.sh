@@ -86,8 +86,8 @@ grep -Fq 'RUNNER_SANDBOX_MODE: docker' <<<"$runner" \
   || fail "Runner must use the Docker sandbox executor"
 grep -Fq 'RUNNER_MAX_CONCURRENT_JOBS: ${RUNNER_MAX_CONCURRENCY:-4}' <<<"$runner" \
   || fail "Runner concurrency must default to four"
-grep -Fq '\"ok\":true,\"sandboxAvailable\":true' <<<"$runner" \
-  || fail "Runner healthcheck must require ok and sandbox availability"
+grep -Fq 'http://127.0.0.1:8080/api/readiness' <<<"$runner" \
+  || fail "Runner healthcheck must use sandbox readiness"
 
 for compose_file in docker-compose.sandbox-test.yml docker-compose.worker-scale-test.yml; do
   grep -Fq '\"ok\":true,\"sandboxAvailable\":true' "$compose_file" \
@@ -101,6 +101,8 @@ grep -Fq 'JUDGE_EXECUTION_MODE: remote' <<<"$worker" \
   || fail "Worker must use remote execution"
 grep -Fq 'RUNNER_BASE_URL: http://runner:8080' <<<"$worker" \
   || fail "Worker must address the internal Runner service"
+grep -Fq 'http://127.0.0.1:8081/api/readiness' <<<"$worker" \
+  || fail "Worker healthcheck must use dependency readiness"
 
 runtime_stage="$(runtime_stage < worker/Dockerfile)"
 grep -Fq 'FROM eclipse-temurin:21-jre-jammy AS runtime' <<<"$runtime_stage" \
