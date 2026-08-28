@@ -4,6 +4,7 @@ import com.oj.runner.api.RunnerHealthResponse;
 import com.oj.runner.api.RunnerJobRequest;
 import com.oj.runner.api.RunnerJobResponse;
 import com.oj.runner.service.RunnerJobService;
+import com.oj.runner.service.BoundedReadinessProbe;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +20,11 @@ import java.util.Map;
 public class RunnerController {
 
     private final RunnerJobService jobService;
+    private final BoundedReadinessProbe readinessProbe;
 
-    public RunnerController(RunnerJobService jobService) {
+    public RunnerController(RunnerJobService jobService, BoundedReadinessProbe readinessProbe) {
         this.jobService = jobService;
+        this.readinessProbe = readinessProbe;
     }
 
     @GetMapping("/health")
@@ -36,7 +39,7 @@ public class RunnerController {
 
     @GetMapping("/readiness")
     public ResponseEntity<Map<String, String>> readiness() {
-        boolean ready = jobService.sandboxAvailable();
+        boolean ready = readinessProbe.check(jobService::sandboxAvailable);
         return ResponseEntity.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("status", ready ? "UP" : "DOWN"));
     }

@@ -11,6 +11,10 @@ import org.springframework.http.HttpStatus;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +59,28 @@ class HealthControllerTest {
     }
 
     @Test
+    void readinessFailsClosedWithinBudgetWhenDatabaseAcquisitionBlocks() throws Exception {
+        DataSource blockingDataSource = mock(DataSource.class);
+        CountDownLatch entered = new CountDownLatch(1);
+        when(blockingDataSource.getConnection()).thenAnswer(invocation -> {
+            entered.countDown();
+            Thread.sleep(5_000);
+            throw new SQLException("unreachable");
+        });
+
+        try (var probe = new com.oj.common.BoundedReadinessProbe(Duration.ofMillis(150))) {
+            HealthController controller = new HealthController(blockingDataSource, flyway("9"), probe,
+                    "release-sha", "release-version", "2026-08-27T00:00:00Z");
+            long startedAt = System.nanoTime();
+            assertThat(controller.readiness().getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+            assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(elapsedMs).isLessThan(750);
+        }
+    }
+
+    @Test
     void versionIsAdminOnlyAndContainsOnlyReleaseEvidence() {
         HealthController controller = controller(reachableDataSource(), flyway("9"));
 
@@ -67,7 +93,7 @@ class HealthControllerTest {
     }
 
     private HealthController controller(DataSource dataSource, Flyway flyway) {
-        return new HealthController(dataSource, flyway,
+        return new HealthController(dataSource, flyway, new com.oj.common.BoundedReadinessProbe(),
                 "release-sha", "release-version", "2026-08-27T00:00:00Z");
     }
 

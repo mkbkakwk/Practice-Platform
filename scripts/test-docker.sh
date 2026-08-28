@@ -35,6 +35,7 @@ worker_rc=125
 runner_rc=125
 worker_runner_contract_rc=125
 frontend_rc=125
+readiness_timeout_rc=125
 release_config_rc=125
 formal_sandbox_config_rc=125
 docker_sandbox_security_rc=125
@@ -85,6 +86,16 @@ fi
 if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -eq 0 \
     && $startup_rc -eq 0 && $backend_rc -eq 0 && $worker_rc -eq 0 \
     && $runner_rc -eq 0 && $worker_runner_contract_rc -eq 0 && $frontend_rc -eq 0 ]]; then
+  echo "==> Running bounded readiness dependency-outage acceptance"
+  readiness_timeout_rc=0
+  bash ./scripts/test-readiness-timeout.sh || readiness_timeout_rc=$?
+
+fi
+
+if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -eq 0 \
+    && $startup_rc -eq 0 && $backend_rc -eq 0 && $worker_rc -eq 0 \
+    && $runner_rc -eq 0 && $worker_runner_contract_rc -eq 0 && $frontend_rc -eq 0 \
+    && $readiness_timeout_rc -eq 0 ]]; then
   echo "==> Running real Docker sandbox security acceptance"
   docker_sandbox_security_rc=0
   bash ./scripts/test-docker-sandbox.sh || docker_sandbox_security_rc=$?
@@ -117,6 +128,7 @@ printf '  worker-test:   %s\n' "$worker_rc"
 printf '  runner-test:   %s\n' "$runner_rc"
 printf '  worker-runner-contract: %s\n' "$worker_runner_contract_rc"
 printf '  frontend-test: %s\n' "$frontend_rc"
+printf '  readiness-timeout: %s\n' "$readiness_timeout_rc"
 printf '  release-config: %s\n' "$release_config_rc"
 printf '  formal-sandbox-config: %s\n' "$formal_sandbox_config_rc"
 printf '  docker-sandbox-security: %s\n' "$docker_sandbox_security_rc"
@@ -126,7 +138,7 @@ printf '  contest-core: %s\n' "$contest_core_rc"
 
 for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" \
   "$runner_rc" "$worker_runner_contract_rc" "$frontend_rc" "$formal_sandbox_config_rc" \
-  "$docker_sandbox_security_rc" "$worker_scale_rc"; do
+  "$readiness_timeout_rc" "$docker_sandbox_security_rc" "$worker_scale_rc"; do
   if [[ $rc -ne 0 ]]; then
     exit "$rc"
   fi

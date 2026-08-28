@@ -94,6 +94,22 @@ class RunnerApiTest {
     }
 
     @Test
+    void readinessFailsClosedWithinBudgetWhenSandboxProbeBlocks() throws Exception {
+        doAnswer(invocation -> {
+            Thread.sleep(5_000);
+            return true;
+        }).when(sandboxExecutor).available();
+
+        long startedAt = System.nanoTime();
+        mockMvc.perform(get("/api/readiness"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value("DOWN"));
+        long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+        assertThat(elapsedMs).isLessThan(1_500);
+    }
+
+    @Test
     void missingAuthorizationReturns401() throws Exception {
         mockMvc.perform(post("/api/v1/jobs")
                         .contentType(MediaType.APPLICATION_JSON)
