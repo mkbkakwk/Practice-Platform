@@ -17,6 +17,12 @@ db_user=stage9b
 db_name=stage9b
 
 fail() { echo "STAGE 9B TEST FAILED: $*" >&2; exit 1; }
+diagnose_pg() {
+  local container="$1"
+  echo "PostgreSQL readiness timeout for isolated target: $container" >&2
+  docker inspect --format 'status={{.State.Status}} running={{.State.Running}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" >&2 || true
+  docker logs --tail 40 "$container" >&2 || true
+}
 cleanup() {
   docker compose -p "$project" -f "$consistent_compose" down --remove-orphans >/dev/null 2>&1 || true
   docker rm -f "$source_db" "$target_db" >/dev/null 2>&1 || true
@@ -26,8 +32,13 @@ cleanup() {
 trap cleanup EXIT INT TERM
 wait_pg() {
   local container="$1" tries=0
-  until docker exec "$container" pg_isready -U "$db_user" -d "$db_name" >/dev/null 2>&1; do
-    ((tries+=1)); ((tries < 40)) || fail "PostgreSQL did not become ready"
+  until docker exec "$container" pg_isready -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" >/dev/null 2>&1 \
+    && docker exec "$container" psql -h 127.0.0.1 -p 5432 -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" -Atc 'SELECT 1' >/dev/null 2>&1; do
+    ((tries+=1))
+    if ((tries >= 40)); then
+      diagnose_pg "$container"
+      fail "PostgreSQL did not become ready within 40 seconds"
+    fi
     sleep 1
   done
 }
@@ -55,7 +66,7 @@ command -v docker >/dev/null || fail "docker is required"
 create_db "$source_db" "$source_pg"
 docker volume create --label "com.docker.compose.project=$project" "$source_office" >/dev/null
 docker compose -p "$project" -f "$consistent_compose" up -d backend worker >/dev/null
-docker exec -i "$source_db" psql -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" <<'SQL'
+docker exec -i "$source_db" psql -h 127.0.0.1 -p 5432 -v ON_ERROR_STOP=1 -U "$db_user" -d "$db_name" <<'SQL'
 CREATE TABLE flyway_schema_history (installed_rank integer primary key, version varchar(50), success boolean);
 INSERT INTO flyway_schema_history VALUES (1, '9', true);
 CREATE TABLE users (id integer primary key, username text not null);
@@ -131,13 +142,13 @@ docker volume create --label "com.docker.compose.project=$project" "$target_offi
 echo "[restore-drill] fresh target provisioned"
 bash "$script_dir/restore.sh" --backup "$backup_dir" --target isolated --confirm-isolated --project "$project" --db-container "$target_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$target_office"
 echo "[restore-drill] artifacts restored"
-[[ "$(docker exec "$target_db" psql -U "$db_user" -d "$db_name" -Atc "SELECT max(version) FROM flyway_schema_history WHERE success;")" == 9 ]] || fail "Flyway restore validation failed"
-[[ "$(docker exec "$target_db" psql -U "$db_user" -d "$db_name" -Atc 'SELECT count(*) FROM submissions;')" == 1 ]] || fail "submission restore validation failed"
-[[ "$(docker exec "$target_db" psql -U "$db_user" -d "$db_name" -Atc 'SELECT count(*) FROM office_metadata;')" == 1 ]] || fail "Office metadata restore validation failed"
+[[ "$(docker exec "$target_db" psql -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" -Atc "SELECT max(version) FROM flyway_schema_history WHERE success;")" == 9 ]] || fail "Flyway restore validation failed"
+[[ "$(docker exec "$target_db" psql -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" -Atc 'SELECT count(*) FROM submissions;')" == 1 ]] || fail "submission restore validation failed"
+[[ "$(docker exec "$target_db" psql -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" -Atc 'SELECT count(*) FROM office_metadata;')" == 1 ]] || fail "Office metadata restore validation failed"
 target_hash="$(docker run --rm -v "$target_office:/office:ro" postgres:16-alpine sh -c 'sha256sum "/office/nested/teacher reference.docx" | awk "{print \$1}"')"
 [[ "$source_hash" == "$target_hash" ]] || fail "Office binary integrity validation failed"
 docker run --rm -v "$target_office:/office:ro" postgres:16-alpine sh -c 'test -f "/office/nested/teacher reference.docx"' || fail "DB-to-Office reference is missing"
-docker exec "$target_db" pg_isready -U "$db_user" -d "$db_name" >/dev/null || fail "restored database smoke failed"
+docker exec "$target_db" pg_isready -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" >/dev/null || fail "restored database smoke failed"
 
 echo "==> Stage 9B retention dry-run and rotation"
 for category_count in 'daily 10' 'weekly 6' 'monthly 5'; do
