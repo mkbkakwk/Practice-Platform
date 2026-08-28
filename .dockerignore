@@ -1,6 +1,8 @@
 **
 !docker-compose.release.yml
+!docker-compose.staging.yml
 !.env.production.example
+!.env.staging.example
 !.gitignore
 !README.md
 !deploy/
@@ -11,9 +13,12 @@
 !docs/release-manifest-template.md
 !scripts/
 !scripts/release-common.sh
+!scripts/release-metadata.sh
 !scripts/release-preflight.sh
 !scripts/release-status.sh
+!scripts/staging-common.sh
 !scripts/test-release-config.sh
+!scripts/test-release-metadata.sh
 !frontend/
 !frontend/src/
 !frontend/src/components/

@@ -28,6 +28,10 @@ services:
   backend:
     image: practice-platform-staging-backend:${STAGING_GIT_SHA:-local}
     container_name: practice-platform-staging-backend
+    build:
+      labels:
+        org.opencontainers.image.revision: "${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}"
+        org.opencontainers.image.created: "${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}"
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/${STAGING_POSTGRES_DB}
       POSTGRES_USER: ${STAGING_POSTGRES_USER}
@@ -41,18 +45,23 @@ services:
       CORS_ORIGIN: "http://localhost:${STAGING_FRONTEND_PORT:-18080}"
       PROMOTE_FIRST_ADMIN: ${STAGING_PROMOTE_FIRST_ADMIN:-false}
       DOC_STORAGE: /app/oj-docs
-      APP_GIT_SHA: ${STAGING_GIT_SHA:-local}
+      APP_GIT_SHA: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
       APP_VERSION: staging
-      APP_BUILD_TIME: ${STAGING_BUILD_TIME:-unknown}
+      APP_BUILD_TIME: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
     volumes:
       - oj-docs:/app/oj-docs
     labels:
       com.practice-platform.environment: staging
-      org.opencontainers.image.revision: ${STAGING_GIT_SHA:-local}
+      org.opencontainers.image.revision: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
+      org.opencontainers.image.created: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
 
   worker:
     image: practice-platform-staging-worker:${STAGING_GIT_SHA:-local}
     container_name: practice-platform-staging-worker
+    build:
+      labels:
+        org.opencontainers.image.revision: "${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}"
+        org.opencontainers.image.created: "${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}"
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/${STAGING_POSTGRES_DB}
       POSTGRES_USER: ${STAGING_POSTGRES_USER}
@@ -75,7 +84,8 @@ services:
       start_period: 20s
     labels:
       com.practice-platform.environment: staging
-      org.opencontainers.image.revision: ${STAGING_GIT_SHA:-local}
+      org.opencontainers.image.revision: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
+      org.opencontainers.image.created: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
 
   frontend:
     image: practice-platform-staging-frontend:${STAGING_GIT_SHA:-local}
@@ -85,6 +95,9 @@ services:
       args:
         VITE_DEPLOY_ENV: staging
         VITE_BUILD_SHA: ${STAGING_GIT_SHA:-local}
+      labels:
+        org.opencontainers.image.revision: "${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}"
+        org.opencontainers.image.created: "${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}"
     depends_on:
       backend:
         condition: service_healthy
@@ -98,7 +111,8 @@ services:
       start_period: 10s
     labels:
       com.practice-platform.environment: staging
-      org.opencontainers.image.revision: ${STAGING_GIT_SHA:-local}
+      org.opencontainers.image.revision: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
+      org.opencontainers.image.created: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
 
   smoke:
     image: node:20-alpine

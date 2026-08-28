@@ -2,6 +2,7 @@
 
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-common.sh"
+source "$release_script_dir/release-metadata.sh"
 
 release_require_command docker
 release_require_command git
@@ -59,7 +60,12 @@ release_build_time="$(release_env_value "$release_env_file" RELEASE_BUILD_TIME)"
 case "${release_build_time,,}" in
   replace-with*|change-me*|unknown|"") release_die "RELEASE_BUILD_TIME must be concrete release metadata" ;;
 esac
+metadata_is_utc_build_time "$release_build_time" \
+  || release_die "RELEASE_BUILD_TIME must be an immutable UTC ISO-8601 timestamp"
 unset release_build_time
+
+metadata_is_full_git_sha "$release_git_sha" \
+  || release_die "RELEASE_GIT_SHA must be a full 40-character lowercase Git SHA"
 
 git -C "$release_repo_root" cat-file -e "$release_git_sha^{commit}" 2>/dev/null \
   || release_die "release Git SHA does not exist locally"

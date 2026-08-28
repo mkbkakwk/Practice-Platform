@@ -43,9 +43,11 @@ not publish messages or alter queues, exchanges, or bindings.
 ## Version evidence
 
 The Backend receives `APP_GIT_SHA`, `APP_VERSION`, and `APP_BUILD_TIME` from
-immutable release metadata. `GET /api/admin/version` is Admin-only and reports
-those three values plus the current Flyway version. Public health does not
-report version or schema data.
+immutable release metadata. `APP_GIT_SHA` is always the full 40-character
+source revision; the shorter image tag used by Staging remains separate. The
+build timestamp is a UTC ISO-8601 artifact value, not container startup time.
+`GET /api/admin/version` is Admin-only and reports those three values plus the
+current Flyway version. Public health does not report version or schema data.
 
 The frontend and backend release images are built from the same recorded
 release commit and carry the same OCI revision label. The Staging-only frontend

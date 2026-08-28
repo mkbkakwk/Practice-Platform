@@ -4,6 +4,7 @@ set -u
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
+source "$script_dir/release-metadata.sh"
 project_name="practice-platform-staging"
 env_file="${STAGING_ENV_FILE:-$repo_root/.env.staging}"
 compose_file="$repo_root/docker-compose.staging.yml"
@@ -54,6 +55,11 @@ validate_staging_env() {
   value="$(env_value STAGING_FRONTEND_PORT)"
   [[ "$value" =~ ^[0-9]+$ ]] || die "STAGING_FRONTEND_PORT must be numeric"
   (( value >= 1024 && value <= 65535 )) || die "STAGING_FRONTEND_PORT is outside 1024-65535"
+
+  metadata_is_full_git_sha "$STAGING_FULL_GIT_SHA" \
+    || die "STAGING_FULL_GIT_SHA must be a full 40-character lowercase Git SHA"
+  metadata_is_utc_build_time "$STAGING_BUILD_TIME" \
+    || die "STAGING_BUILD_TIME must be an immutable UTC ISO-8601 timestamp"
 }
 
 port_is_available() {
@@ -90,7 +96,12 @@ docker compose version >/dev/null 2>&1 || die "docker compose is required"
 [[ -f "$env_file" ]] || die ".env.staging is missing; run ./scripts/staging-init-env.sh first"
 [[ -f "$compose_file" ]] || die "docker-compose.staging.yml is missing"
 
-export STAGING_GIT_SHA="${STAGING_GIT_SHA:-$(git -C "$repo_root" rev-parse --short HEAD)}"
+# Keep the human-friendly image tag separate from immutable application and
+# OCI revision metadata. These values are captured once by the calling script
+# and shared by both `docker compose build` and `docker compose up`.
+export STAGING_FULL_GIT_SHA="${STAGING_FULL_GIT_SHA:-$(git -C "$repo_root" rev-parse HEAD)}"
+export STAGING_GIT_SHA="${STAGING_GIT_SHA:-$(git -C "$repo_root" rev-parse --short=7 HEAD)}"
+export STAGING_BUILD_TIME="${STAGING_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 compose=(
   docker compose
   --project-name "$project_name"

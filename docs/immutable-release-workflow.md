@@ -60,27 +60,32 @@ release tags and OCI labels. For example:
 ```bash
 release_version=v0.4.0-foundation
 release_sha=f1e257d2fc719c2be92fa7cdd8406a98f475a4f1
+release_build_time=2026-08-28T07:30:00Z
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-backend:$release_version" backend-spring
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-worker:$release_version" worker
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-runner:$release_version" runner
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-frontend:$release_version" frontend
