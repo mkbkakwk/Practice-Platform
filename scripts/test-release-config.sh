@@ -3,6 +3,8 @@
 set -eu
 
 compose_file="docker-compose.release.yml"
+staging_compose_file="docker-compose.staging.yml"
+staging_common="scripts/staging-common.sh"
 release_example="deploy/releases/v0.4.0-foundation.env.example"
 production_env_example=".env.production.example"
 manifest_template="docs/release-manifest-template.md"
@@ -15,15 +17,16 @@ fail() {
   exit 1
 }
 
-for file in "$compose_file" "$release_example" "$production_env_example" \
+for file in "$compose_file" "$staging_compose_file" "$staging_common" "$release_example" "$production_env_example" \
   "$manifest_template" "$release_workflow_doc" "$ci_workflow"; do
   [ -f "$file" ] || fail "missing $file"
 done
 [ ! -e "$publish_workflow" ] || fail "remote registry publishing workflow must be removed"
 
-for script in scripts/release-common.sh scripts/release-preflight.sh scripts/release-status.sh; do
+for script in scripts/release-common.sh scripts/release-metadata.sh scripts/release-preflight.sh scripts/release-status.sh scripts/test-release-metadata.sh; do
   bash -n "$script" || fail "invalid Bash syntax in $script"
 done
+bash scripts/test-release-metadata.sh || fail "release metadata validation failed"
 
 if grep -Eq '^[[:space:]]+build:' "$compose_file"; then
   fail "release Compose must not contain build directives"
@@ -112,6 +115,10 @@ grep -Fq 'verify_image Runner' scripts/release-preflight.sh \
   || fail "release preflight must verify the Runner image"
 grep -Fq 'RUNNER_TOKEN' scripts/release-preflight.sh \
   || fail "release preflight must require the Runner token"
+grep -Fq 'metadata_is_full_git_sha "$release_git_sha"' scripts/release-preflight.sh \
+  || fail "release preflight must require a full Git SHA"
+grep -Fq 'metadata_is_utc_build_time "$release_build_time"' scripts/release-preflight.sh \
+  || fail "release preflight must require an immutable UTC build time"
 grep -Fq '*/*|*:latest|*@*)' scripts/release-preflight.sh \
   || fail "release preflight must reject registry, latest and digest application references"
 grep -Fq 'image must include an explicit release tag' scripts/release-preflight.sh \
@@ -129,6 +136,23 @@ grep -Fq 'http://127.0.0.1:8080/api/readiness' "$compose_file" \
   || fail "release Runner must expose a readiness healthcheck"
 grep -Fq 'deployEnvironment === "staging"' frontend/src/components/Navbar.tsx \
   || fail "staging badge is not explicitly gated"
+
+grep -Fq 'STAGING_FULL_GIT_SHA="${STAGING_FULL_GIT_SHA:-$(git -C "$repo_root" rev-parse HEAD)}"' "$staging_common" \
+  || fail "staging must derive immutable application metadata from the full source SHA"
+grep -Fq 'STAGING_GIT_SHA="${STAGING_GIT_SHA:-$(git -C "$repo_root" rev-parse --short=7 HEAD)}"' "$staging_common" \
+  || fail "staging short image tags must remain distinct from application metadata"
+grep -Fq 'STAGING_BUILD_TIME="${STAGING_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"' "$staging_common" \
+  || fail "staging must inject immutable UTC build metadata"
+grep -Fq 'APP_GIT_SHA: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}' "$staging_compose_file" \
+  || fail "staging Backend must receive the full source revision"
+grep -Fq 'APP_BUILD_TIME: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}' "$staging_compose_file" \
+  || fail "staging Backend must receive immutable build metadata"
+grep -Fq 'VITE_BUILD_SHA: ${STAGING_GIT_SHA:-local}' "$staging_compose_file" \
+  || fail "staging frontend badge must retain the short image tag"
+grep -Fq 'org.opencontainers.image.revision: "${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}"' "$staging_compose_file" \
+  || fail "staging images must carry the full source revision"
+grep -Fq 'org.opencontainers.image.created: "${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}"' "$staging_compose_file" \
+  || fail "staging images must carry immutable build metadata"
 
 for field in 'Release Version' 'Release Git SHA' 'Main Merge Commit' \
   'Backend Image' 'Worker Image' 'Frontend Image' 'Flyway Version' \
