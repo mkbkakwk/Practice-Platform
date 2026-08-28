@@ -49,3 +49,6 @@ yarn-error.log*
 # ── Test / coverage ──────────────────────────────────────
 coverage/
 *.lcov
+
+# ── Backup artifacts (host backup roots remain outside this repository) ─────
+/backups/
