@@ -7,6 +7,10 @@ project_name="${READINESS_TIMEOUT_TEST_PROJECT:-practice-platform-readiness-time
 compose=(docker compose -p "$project_name" -f docker-compose.judge-reliability-test.yml)
 runner_instance="reliability-runner"
 socket_gid_configured=false
+db_container_id=""
+rabbit_container_id=""
+db_paused=false
+rabbit_paused=false
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-socket-gid.sh"
 
@@ -14,6 +18,12 @@ cleanup() {
   local original_rc=$?
   local cleanup_rc=0
   trap - EXIT INT TERM
+  if [[ "$db_paused" == "true" && -n "$db_container_id" ]]; then
+    docker unpause "$db_container_id" >/dev/null 2>&1 || true
+  fi
+  if [[ "$rabbit_paused" == "true" && -n "$rabbit_container_id" ]]; then
+    docker unpause "$rabbit_container_id" >/dev/null 2>&1 || true
+  fi
   if [[ "$socket_gid_configured" == "true" ]]; then
     "${compose[@]}" down --remove-orphans || cleanup_rc=$?
   fi
@@ -117,6 +127,7 @@ db_container_id="$("${compose[@]}" ps -q db)"
 # the container preserves its migrated schema while producing the same stalled
 # dependency behavior seen by a client during an unresponsive database outage.
 docker pause "$db_container_id" >/dev/null || fail "could not pause isolated PostgreSQL"
+db_paused=true
 sleep 1
 
 status_within_budget backend 4000 /api/health 200 2000
@@ -131,6 +142,7 @@ status_within_budget worker 8081 /api/readiness 503 3000
 
 echo "==> Restoring isolated PostgreSQL and verifying automatic recovery"
 docker unpause "$db_container_id" >/dev/null || fail "could not resume isolated PostgreSQL"
+db_paused=false
 wait_for_container_health "$db_container_id" 30 || fail "isolated PostgreSQL did not recover"
 wait_for_status backend 4000 /api/readiness 200 30 || fail "Backend did not recover readiness"
 wait_for_status worker 8081 /api/readiness 200 30 || fail "Worker did not recover readiness"
@@ -139,4 +151,35 @@ wait_for_status worker 8081 /api/readiness 200 30 || fail "Worker did not recove
 [[ "$(restart_count worker)" == "$worker_restarts_before" ]] \
   || fail "Worker restarted during PostgreSQL recovery"
 
-echo "Readiness timeout test: PASSED (bounded DB outage response and automatic recovery)"
+echo "==> Injecting isolated RabbitMQ outage"
+rabbit_container_id="$("${compose[@]}" ps -q rabbitmq)"
+[[ -n "$rabbit_container_id" ]] || fail "could not identify isolated RabbitMQ"
+backend_restarts_before="$(restart_count backend)"
+worker_restarts_before="$(restart_count worker)"
+# The isolated topology stores RabbitMQ state in tmpfs. Pausing retains its
+# already-declared test topology while making the AMQP broker unreachable.
+docker pause "$rabbit_container_id" >/dev/null || fail "could not pause isolated RabbitMQ"
+rabbit_paused=true
+sleep 1
+
+status_within_budget backend 4000 /api/health 200 2000
+status_within_budget backend 4000 /api/readiness 200 2000
+status_within_budget worker 8081 /api/health 200 2000
+status_within_budget worker 8081 /api/readiness 503 3000
+
+[[ "$(restart_count backend)" == "$backend_restarts_before" ]] \
+  || fail "Backend restarted during RabbitMQ outage"
+[[ "$(restart_count worker)" == "$worker_restarts_before" ]] \
+  || fail "Worker restarted during RabbitMQ outage"
+
+echo "==> Restoring isolated RabbitMQ and verifying automatic Worker recovery"
+docker unpause "$rabbit_container_id" >/dev/null || fail "could not resume isolated RabbitMQ"
+rabbit_paused=false
+wait_for_container_health "$rabbit_container_id" 30 || fail "isolated RabbitMQ did not recover"
+wait_for_status worker 8081 /api/readiness 200 30 || fail "Worker did not recover after RabbitMQ outage"
+[[ "$(restart_count backend)" == "$backend_restarts_before" ]] \
+  || fail "Backend restarted during RabbitMQ recovery"
+[[ "$(restart_count worker)" == "$worker_restarts_before" ]] \
+  || fail "Worker restarted during RabbitMQ recovery"
+
+echo "Readiness timeout test: PASSED (bounded DB/RabbitMQ outage response and automatic recovery)"

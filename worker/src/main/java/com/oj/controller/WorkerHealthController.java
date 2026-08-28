@@ -25,15 +25,18 @@ public class WorkerHealthController {
     private final DataSource dataSource;
     private final BoundedReadinessProbe databaseProbe;
     private final RabbitListenerEndpointRegistry listeners;
+    private final RabbitConnectivityReadinessProbe rabbitConnectivityProbe;
     private final String runnerBaseUrl;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500)).build();
 
     public WorkerHealthController(DataSource dataSource, BoundedReadinessProbe databaseProbe,
                                   RabbitListenerEndpointRegistry listeners,
+                                  RabbitConnectivityReadinessProbe rabbitConnectivityProbe,
                                   @Value("${oj.judge.runner.base-url:}") String runnerBaseUrl) {
         this.dataSource = dataSource;
         this.databaseProbe = databaseProbe;
         this.listeners = listeners;
+        this.rabbitConnectivityProbe = rabbitConnectivityProbe;
         this.runnerBaseUrl = runnerBaseUrl;
     }
 
@@ -44,7 +47,10 @@ public class WorkerHealthController {
 
     @GetMapping("/readiness")
     public ResponseEntity<Map<String, String>> readiness() {
-        boolean ready = databaseProbe.check(this::databaseReachable) && listeners.isRunning() && runnerReady();
+        boolean ready = databaseProbe.check(this::databaseReachable)
+                && listeners.isRunning()
+                && rabbitConnectivityProbe.brokerReachable()
+                && runnerReady();
         return ResponseEntity.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("status", ready ? "UP" : "DOWN"));
     }

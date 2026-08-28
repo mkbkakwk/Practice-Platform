@@ -35,6 +35,11 @@ Dependency probes run outside HTTP request threads with a bounded 750 ms
 budget. A stalled dependency therefore produces a fast `503` instead of
 occupying request threads until a pool or network default timeout expires.
 
+Worker readiness requires both an active Rabbit listener lifecycle and a
+bounded, non-mutating AMQP connection/channel probe. This detects a broker
+outage even when Spring's listener registry is still marked running; it does
+not publish messages or alter queues, exchanges, or bindings.
+
 ## Version evidence
 
 The Backend receives `APP_GIT_SHA`, `APP_VERSION`, and `APP_BUILD_TIME` from
