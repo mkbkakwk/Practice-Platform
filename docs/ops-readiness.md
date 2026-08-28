@@ -31,6 +31,10 @@ work, but the service process remains alive and can recover when its dependency
 recovers. Each public or container health response contains only `status` and
 never reveals hostnames, queue depth, storage paths, credentials, or tokens.
 
+Dependency probes run outside HTTP request threads with a bounded 750 ms
+budget. A stalled dependency therefore produces a fast `503` instead of
+occupying request threads until a pool or network default timeout expires.
+
 ## Version evidence
 
 The Backend receives `APP_GIT_SHA`, `APP_VERSION`, and `APP_BUILD_TIME` from

@@ -21,14 +21,18 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class WorkerHealthController {
+    private static final Duration RUNNER_READINESS_TIMEOUT = Duration.ofMillis(750);
     private final DataSource dataSource;
+    private final BoundedReadinessProbe databaseProbe;
     private final RabbitListenerEndpointRegistry listeners;
     private final String runnerBaseUrl;
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
+    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(500)).build();
 
-    public WorkerHealthController(DataSource dataSource, RabbitListenerEndpointRegistry listeners,
+    public WorkerHealthController(DataSource dataSource, BoundedReadinessProbe databaseProbe,
+                                  RabbitListenerEndpointRegistry listeners,
                                   @Value("${oj.judge.runner.base-url:}") String runnerBaseUrl) {
         this.dataSource = dataSource;
+        this.databaseProbe = databaseProbe;
         this.listeners = listeners;
         this.runnerBaseUrl = runnerBaseUrl;
     }
@@ -40,7 +44,7 @@ public class WorkerHealthController {
 
     @GetMapping("/readiness")
     public ResponseEntity<Map<String, String>> readiness() {
-        boolean ready = databaseReachable() && listeners.isRunning() && runnerReady();
+        boolean ready = databaseProbe.check(this::databaseReachable) && listeners.isRunning() && runnerReady();
         return ResponseEntity.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("status", ready ? "UP" : "DOWN"));
     }
@@ -57,7 +61,7 @@ public class WorkerHealthController {
         if (runnerBaseUrl == null || runnerBaseUrl.isBlank()) return false;
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(runnerBaseUrl + "/api/readiness"))
-                    .timeout(Duration.ofSeconds(2)).GET().build();
+                    .timeout(RUNNER_READINESS_TIMEOUT).GET().build();
             HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
             return response.statusCode() == 200;
         } catch (Exception ignored) {

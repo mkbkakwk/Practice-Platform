@@ -1,6 +1,7 @@
 package com.oj.controller;
 
 import com.oj.common.ApiException;
+import com.oj.common.BoundedReadinessProbe;
 import com.oj.common.CurrentUser;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,16 +21,18 @@ public class HealthController {
 
     private final DataSource dataSource;
     private final Flyway flyway;
+    private final BoundedReadinessProbe readinessProbe;
     private final String gitSha;
     private final String buildVersion;
     private final String buildTime;
 
-    public HealthController(DataSource dataSource, Flyway flyway,
+    public HealthController(DataSource dataSource, Flyway flyway, BoundedReadinessProbe readinessProbe,
                             @Value("${oj.build.git-sha:unknown}") String gitSha,
                             @Value("${oj.build.version:dev}") String buildVersion,
                             @Value("${oj.build.time:unknown}") String buildTime) {
         this.dataSource = dataSource;
         this.flyway = flyway;
+        this.readinessProbe = readinessProbe;
         this.gitSha = gitSha;
         this.buildVersion = buildVersion;
         this.buildTime = buildTime;
@@ -43,7 +46,7 @@ public class HealthController {
     /** Minimal readiness for Docker and reverse-proxy checks; it intentionally exposes no dependency detail. */
     @GetMapping("/readiness")
     public ResponseEntity<Map<String, Object>> readiness() {
-        boolean ready = databaseReachable() && flywayCurrentVersion() != null;
+        boolean ready = readinessProbe.check(() -> databaseReachable() && flywayCurrentVersion() != null);
         return ResponseEntity.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("status", ready ? "UP" : "DOWN"));
     }
