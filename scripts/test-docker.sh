@@ -42,6 +42,7 @@ docker_sandbox_security_rc=125
 worker_scale_rc=125
 judge_reliability_rc=125
 contest_core_rc=125
+backup_restore_rc=125
 
 echo "==> Building isolated test images"
 "${compose[@]}" build || build_rc=$?
@@ -114,6 +115,11 @@ if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -
         echo "==> Running Contest API-to-Docker-Runner acceptance"
         contest_core_rc=0
         bash ./scripts/test-contest-core.sh || contest_core_rc=$?
+        if [[ $contest_core_rc -eq 0 ]]; then
+          echo "==> Running isolated backup, restore, retention, and disk-protection drill"
+          backup_restore_rc=0
+          bash ./scripts/test-backup-restore.sh || backup_restore_rc=$?
+        fi
       fi
     fi
   fi
@@ -135,6 +141,7 @@ printf '  docker-sandbox-security: %s\n' "$docker_sandbox_security_rc"
 printf '  worker-scale: %s\n' "$worker_scale_rc"
 printf '  judge-reliability: %s\n' "$judge_reliability_rc"
 printf '  contest-core: %s\n' "$contest_core_rc"
+printf '  backup-restore: %s\n' "$backup_restore_rc"
 
 for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" \
   "$runner_rc" "$worker_runner_contract_rc" "$frontend_rc" "$formal_sandbox_config_rc" \
@@ -150,6 +157,10 @@ fi
 
 if [[ $contest_core_rc -ne 0 ]]; then
   exit "$contest_core_rc"
+fi
+
+if [[ $backup_restore_rc -ne 0 ]]; then
+  exit "$backup_restore_rc"
 fi
 
 exit 0

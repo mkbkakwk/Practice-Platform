@@ -1,0 +1,9 @@
+services:
+  backend:
+    image: postgres:16-alpine
+    command: ["sh", "-c", "sleep infinity"]
+    restart: "no"
+  worker:
+    image: postgres:16-alpine
+    command: ["sh", "-c", "sleep infinity"]
+    restart: "no"
