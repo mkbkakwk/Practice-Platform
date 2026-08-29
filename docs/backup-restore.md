@@ -60,6 +60,12 @@ unpublished: only a directory with valid checksums and `.complete` is a backup.
 Backups use `umask 077`; never put a backup root in Git, a PostgreSQL volume,
 or an Office volume.
 
+On Windows Git Bash, use a local Docker Desktop shared-drive directory outside
+the repository. The scripts keep `/c/...` paths for host tools and normalize
+only Docker bind sources to `C:/...`; spaces and backslash input are supported.
+Drive roots and UNC/network-share paths are rejected rather than being mounted
+with ambiguous Docker semantics.
+
 The scripts fail before work when `BACKUP_MIN_FREE_BYTES` is not available.
 They do not delete existing backups or authoritative data to make space.
 
