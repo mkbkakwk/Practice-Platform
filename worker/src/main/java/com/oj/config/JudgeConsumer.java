@@ -8,9 +8,11 @@ import com.oj.reliability.JudgeMessage;
 import com.oj.reliability.JudgeMessageRouter;
 import com.oj.reliability.JudgeReliabilityProperties;
 import com.oj.reliability.JudgeSubmissionRepository;
+import com.oj.observability.WorkerOperationalMetrics;
 import com.rabbitmq.client.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.core.Message;
 import org.springframework.stereotype.Component;
@@ -31,6 +33,7 @@ public class JudgeConsumer {
     private final JudgeReliabilityProperties properties;
     private final RabbitConfig.Names rabbitNames;
     private final ObjectMapper objectMapper;
+    private final WorkerOperationalMetrics metrics;
 
     public JudgeConsumer(
             JudgeSubmissionRepository submissions,
@@ -38,13 +41,15 @@ public class JudgeConsumer {
             JudgeMessageRouter router,
             JudgeReliabilityProperties properties,
             RabbitConfig.Names rabbitNames,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            WorkerOperationalMetrics metrics) {
         this.submissions = submissions;
         this.judgeService = judgeService;
         this.router = router;
         this.properties = properties;
         this.rabbitNames = rabbitNames;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
     @RabbitListener(queues = "${oj.rabbitmq.queue:oj.judge.queue}")
@@ -76,38 +81,42 @@ public class JudgeConsumer {
             return;
         }
 
-        int deliveryAttempt = Math.max(message.deliveryAttempt(), deathCount(deaths));
-        message = message.retry(deliveryAttempt);
-        UUID judgeToken = UUID.randomUUID();
-        JudgeClaim claim;
-        try {
-            claim = submissions.claim(message.submissionId(), message.judgeGeneration(), judgeToken, properties.getLease());
-        } catch (RuntimeException exception) {
-            log.warn("Judge claim unavailable eventId={} submissionId={} attempt={} type={}",
-                    message.eventId(), message.submissionId(), deliveryAttempt,
-                    exception.getClass().getSimpleName());
-            channel.basicReject(deliveryTag, false);
-            return;
-        }
+        try (MDC.MDCCloseable event = MDC.putCloseable("eventId", message.eventId().toString());
+             MDC.MDCCloseable submission = MDC.putCloseable("submissionId", Integer.toString(message.submissionId()))) {
+            metrics.received();
+            int deliveryAttempt = Math.max(message.deliveryAttempt(), deathCount(deaths));
+            message = message.retry(deliveryAttempt);
+            UUID judgeToken = UUID.randomUUID();
+            JudgeClaim claim;
+            try {
+                claim = submissions.claim(message.submissionId(), message.judgeGeneration(), judgeToken, properties.getLease());
+            } catch (RuntimeException exception) {
+                log.warn("Judge claim unavailable eventId={} submissionId={} attempt={} type={}",
+                        message.eventId(), message.submissionId(), deliveryAttempt,
+                        exception.getClass().getSimpleName());
+                channel.basicReject(deliveryTag, false);
+                return;
+            }
 
-        switch (claim.status()) {
-            case NOT_FOUND -> {
-                log.info("Judge message ignored deleted submission eventId={} submissionId={}",
-                        message.eventId(), message.submissionId());
-                channel.basicAck(deliveryTag, false);
+            switch (claim.status()) {
+                case NOT_FOUND -> {
+                    log.info("Judge message ignored deleted submission eventId={} submissionId={}",
+                            message.eventId(), message.submissionId());
+                    channel.basicAck(deliveryTag, false);
+                }
+                case FINAL -> {
+                    log.info("Judge duplicate ignored final submission eventId={} submissionId={} attempt={}",
+                            message.eventId(), message.submissionId(), deliveryAttempt);
+                    channel.basicAck(deliveryTag, false);
+                }
+                case STALE -> {
+                    log.info("Judge stale generation ignored eventId={} submissionId={} generation={}",
+                            message.eventId(), message.submissionId(), message.judgeGeneration());
+                    channel.basicAck(deliveryTag, false);
+                }
+                case BUSY -> scheduleBusy(message, deliveryTag, channel);
+                case CLAIMED -> executeClaimed(message, claim, deliveryTag, channel);
             }
-            case FINAL -> {
-                log.info("Judge duplicate ignored final submission eventId={} submissionId={} attempt={}",
-                        message.eventId(), message.submissionId(), deliveryAttempt);
-                channel.basicAck(deliveryTag, false);
-            }
-            case STALE -> {
-                log.info("Judge stale generation ignored eventId={} submissionId={} generation={}",
-                        message.eventId(), message.submissionId(), message.judgeGeneration());
-                channel.basicAck(deliveryTag, false);
-            }
-            case BUSY -> scheduleBusy(message, deliveryTag, channel);
-            case CLAIMED -> executeClaimed(message, claim, deliveryTag, channel);
         }
     }
 
@@ -148,6 +157,7 @@ public class JudgeConsumer {
                 log.info("Judge result committed eventId={} submissionId={} judgeToken={} requestId={} verdict={}",
                         message.eventId(), message.submissionId(), claim.judgeToken(),
                         result.requestId, result.verdict);
+                metrics.completed();
                 channel.basicAck(deliveryTag, false);
             } else {
                 // A generation may have been superseded while the Runner was
@@ -198,6 +208,7 @@ public class JudgeConsumer {
             if (router.retry(retry, category)) {
                 log.info("Judge retry scheduled eventId={} submissionId={} nextAttempt={} category={}",
                         message.eventId(), message.submissionId(), retry.deliveryAttempt(), category);
+                metrics.retry();
                 channel.basicAck(deliveryTag, false);
             } else {
                 channel.basicReject(deliveryTag, false);
@@ -218,6 +229,7 @@ public class JudgeConsumer {
         }
         log.error("Judge message dead-lettered eventId={} submissionId={} attempts={} category={}",
                 message.eventId(), message.submissionId(), totalAttempts, category);
+        metrics.failed();
         channel.basicAck(deliveryTag, false);
     }
 

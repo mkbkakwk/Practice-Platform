@@ -9,6 +9,7 @@ import com.oj.runner.execution.RunnerResponses;
 import com.oj.runner.execution.SandboxExecutor;
 import com.oj.runner.language.RunnerJob;
 import com.oj.runner.language.RunnerRequestValidator;
+import com.oj.runner.observability.RunnerOperationalMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,17 +28,21 @@ public class RunnerJobService {
     private final RunnerRequestValidator requestValidator;
     private final JobConcurrencyLimiter concurrencyLimiter;
     private final SandboxExecutor sandboxExecutor;
+    private final RunnerOperationalMetrics metrics;
 
     public RunnerJobService(
             RunnerRequestValidator requestValidator,
             JobConcurrencyLimiter concurrencyLimiter,
-            SandboxExecutor sandboxExecutor) {
+            SandboxExecutor sandboxExecutor,
+            RunnerOperationalMetrics metrics) {
         this.requestValidator = requestValidator;
         this.concurrencyLimiter = concurrencyLimiter;
         this.sandboxExecutor = sandboxExecutor;
+        this.metrics = metrics;
     }
 
     public RunnerJobResponse execute(RunnerJobRequest request) {
+        metrics.execution();
         RunnerJob job = requestValidator.validate(request);
         if (!concurrencyLimiter.tryAcquire()) {
             throw new RunnerSaturatedException();
@@ -51,6 +56,7 @@ public class RunnerJobService {
             log.warn("Runner executor failed requestId={} type={}",
                     request.requestId(), exception.getClass().getSimpleName());
             response = RunnerResponses.systemError(request.requestId(), "Sandbox executor failed");
+            metrics.failure();
         } finally {
             concurrencyLimiter.release();
         }

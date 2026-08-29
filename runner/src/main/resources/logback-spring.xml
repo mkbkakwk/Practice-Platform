@@ -1,0 +1,10 @@
+<configuration>
+  <property name="gitSha" value="${APP_GIT_SHA:-unknown}"/>
+  <springProfile name="staging,production">
+    <appender name="CONSOLE" class="net.logstash.logback.appender.LogstashConsoleAppender"><encoder class="net.logstash.logback.encoder.LogstashEncoder"><customFields>{"service":"runner","gitSha":"${gitSha}"}</customFields></encoder></appender>
+  </springProfile>
+  <springProfile name="!staging &amp; !production">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%d{HH:mm:ss.SSS} %-5level service=runner requestId=%X{requestId} %logger{36} - %msg%n</pattern></encoder></appender>
+  </springProfile>
+  <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+</configuration>

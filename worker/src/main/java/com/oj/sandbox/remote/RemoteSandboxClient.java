@@ -100,6 +100,7 @@ public final class RemoteSandboxClient implements SandboxClient {
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + token)
+                .header("X-Request-ID", request.requestId())
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                 .build();
         CompletableFuture<HttpResponse<byte[]>> responseFuture = httpClient.sendAsync(

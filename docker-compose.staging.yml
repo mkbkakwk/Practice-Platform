@@ -13,6 +13,11 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${STAGING_POSTGRES_USER} -d ${STAGING_POSTGRES_DB}"]
     labels:
       com.practice-platform.environment: staging
+    logging: &staging-log-rotation
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rabbitmq:
     container_name: practice-platform-staging-rabbitmq
@@ -24,6 +29,7 @@ services:
       - staging-rabbitmq:/var/lib/rabbitmq
     labels:
       com.practice-platform.environment: staging
+    logging: *staging-log-rotation
 
   backend:
     image: practice-platform-staging-backend:${STAGING_GIT_SHA:-local}
@@ -48,12 +54,14 @@ services:
       APP_GIT_SHA: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
       APP_VERSION: staging
       APP_BUILD_TIME: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
+      SPRING_PROFILES_ACTIVE: staging
     volumes:
       - oj-docs:/app/oj-docs
     labels:
       com.practice-platform.environment: staging
       org.opencontainers.image.revision: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
       org.opencontainers.image.created: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
+    logging: *staging-log-rotation
 
   worker:
     image: practice-platform-staging-worker:${STAGING_GIT_SHA:-local}
@@ -74,6 +82,10 @@ services:
       WORKER_CONCURRENCY: ${STAGING_WORKER_CONCURRENCY:-1}
       WORKER_MAX_CONCURRENCY: ${STAGING_WORKER_MAX_CONCURRENCY:-1}
       WORKER_HEALTH_PORT: 8081
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
+      APP_VERSION: staging
+      APP_BUILD_TIME: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
     deploy:
       replicas: 1
     healthcheck:
@@ -86,6 +98,15 @@ services:
       com.practice-platform.environment: staging
       org.opencontainers.image.revision: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
       org.opencontainers.image.created: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
+    logging: *staging-log-rotation
+
+  runner:
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
+      APP_VERSION: staging
+      APP_BUILD_TIME: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
+    logging: *staging-log-rotation
 
   frontend:
     image: practice-platform-staging-frontend:${STAGING_GIT_SHA:-local}
@@ -113,6 +134,7 @@ services:
       com.practice-platform.environment: staging
       org.opencontainers.image.revision: ${STAGING_FULL_GIT_SHA:?STAGING_FULL_GIT_SHA is required}
       org.opencontainers.image.created: ${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}
+    logging: *staging-log-rotation
 
   smoke:
     image: node:20-alpine

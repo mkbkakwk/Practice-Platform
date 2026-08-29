@@ -44,10 +44,12 @@ class RemoteSandboxClientTest {
     @Test
     void postsVersionedRequestWithBearerTokenAndParsesSuccess() throws Exception {
         AtomicReference<String> authorization = new AtomicReference<>();
+        AtomicReference<String> correlation = new AtomicReference<>();
         AtomicReference<JsonNode> requestBody = new AtomicReference<>();
         SandboxRequest request = request();
         start(exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            correlation.set(exchange.getRequestHeaders().getFirst("X-Request-ID"));
             requestBody.set(objectMapper.readTree(exchange.getRequestBody()));
             respond(exchange, 200, objectMapper.writeValueAsBytes(success(request, "1")));
         });
@@ -56,6 +58,7 @@ class RemoteSandboxClientTest {
 
         assertThat(result.requestId()).isEqualTo(request.requestId());
         assertThat(authorization.get()).isEqualTo("Bearer " + TOKEN);
+        assertThat(correlation.get()).isEqualTo(request.requestId());
         assertThat(requestBody.get().get("language").asText()).isEqualTo("PYTHON");
         assertThat(requestBody.get().has("command")).isFalse();
         assertThat(requestBody.get().has("compileCommand")).isFalse();

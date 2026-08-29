@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users, CalendarDays, Menu } from "lucide-react";
+import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users, CalendarDays, Menu, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const deployEnvironment = import.meta.env.VITE_DEPLOY_ENV as string | undefined;
@@ -28,6 +28,7 @@ export function Navbar() {
   }
   if (user?.role === "ADMIN") {
     links.push({ to: "/admin/users", label: "用户", icon: Users, match: (path: string) => path.startsWith("/admin/users") });
+    links.push({ to: "/admin/system-status", label: "系统状态", icon: Activity, match: (path: string) => path.startsWith("/admin/system-status") });
   }
 
   return (

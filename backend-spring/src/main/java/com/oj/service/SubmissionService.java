@@ -14,9 +14,12 @@ import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
 import com.oj.reliability.JudgeMessage;
 import com.oj.reliability.JudgeOutboxRepository;
+import com.oj.observability.OperationalMetrics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -29,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class SubmissionService {
 
+    private static final Logger log = LoggerFactory.getLogger(SubmissionService.class);
+
     private static final Duration RATE_LIMIT = Duration.ofSeconds(5);
 
     private final SubmissionMapper submissionMapper;
@@ -36,16 +41,18 @@ public class SubmissionService {
     private final ProblemService problemService;
     private final JudgeOutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final OperationalMetrics metrics;
     private final Map<Integer, LocalDateTime> lastSubmit = new ConcurrentHashMap<>();
 
     public SubmissionService(SubmissionMapper submissionMapper, UserMapper userMapper,
                              ProblemService problemService, JudgeOutboxRepository outboxRepository,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper, OperationalMetrics metrics) {
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
         this.problemService = problemService;
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -98,6 +105,9 @@ public class SubmissionService {
             JudgeMessage message = JudgeMessage.initial(submission.getId(), 0);
             String payload = objectMapper.writeValueAsString(message);
             outboxRepository.insert(message.eventId(), submission.getId(), 0, payload);
+            metrics.submissionAccepted();
+            log.info("Submission accepted submissionId={} problemId={} contestId={} eventId={}",
+                    submission.getId(), problem.getId(), contestProblemId, message.eventId());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Unable to persist judge event", exception);
         }
