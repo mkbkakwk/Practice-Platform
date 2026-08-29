@@ -16,6 +16,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -63,6 +64,23 @@ class RemoteSandboxClientTest {
         assertThat(requestBody.get().has("command")).isFalse();
         assertThat(requestBody.get().has("compileCommand")).isFalse();
         assertThat(requestBody.get().toString()).doesNotContain("expectedOutput");
+    }
+
+    @Test
+    void forwardsSafeMdcCorrelationWithoutChangingRunnerRequestId() throws Exception {
+        AtomicReference<String> correlation = new AtomicReference<>();
+        SandboxRequest request = request();
+        start(exchange -> {
+            correlation.set(exchange.getRequestHeaders().getFirst("X-Correlation-ID"));
+            respond(exchange, 200, objectMapper.writeValueAsBytes(success(request, "1")));
+        });
+        MDC.put("requestId", "stage9c-accept-123");
+        try {
+            client(1_000, 65_536, 65_536).execute(request);
+        } finally {
+            MDC.clear();
+        }
+        assertThat(correlation.get()).isEqualTo("stage9c-accept-123");
     }
 
     @Test

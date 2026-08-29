@@ -10,6 +10,7 @@ import com.oj.sandbox.SandboxRequest;
 import com.oj.sandbox.SandboxRequestValidator;
 import com.oj.sandbox.SandboxResult;
 import com.oj.sandbox.SandboxStatus;
+import org.slf4j.MDC;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -29,11 +30,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 
 /** HTTP client for the versioned, private Sandbox Runner execution API. */
 public final class RemoteSandboxClient implements SandboxClient {
 
     public static final String API_PATH = "/api/v1/jobs";
+    private static final Pattern SAFE_CORRELATION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
 
     private final URI endpoint;
     private final String token;
@@ -95,14 +98,17 @@ public final class RemoteSandboxClient implements SandboxClient {
             throw new SandboxClientException("Runner request exceeds the configured limit");
         }
 
-        HttpRequest httpRequest = HttpRequest.newBuilder(endpoint)
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(endpoint)
                 .timeout(Duration.ofMillis(readTimeoutMs))
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + token)
-                .header("X-Request-ID", request.requestId())
-                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                .build();
+                .header("X-Request-ID", request.requestId());
+        String correlationId = MDC.get("requestId");
+        if (correlationId != null && SAFE_CORRELATION.matcher(correlationId).matches()) {
+            requestBuilder.header("X-Correlation-ID", correlationId);
+        }
+        HttpRequest httpRequest = requestBuilder.POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
         CompletableFuture<HttpResponse<byte[]>> responseFuture = httpClient.sendAsync(
                 httpRequest, responseInfo -> new BoundedBodySubscriber(maxResponseBytes));
         try {

@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -102,7 +103,7 @@ public class SubmissionService {
         submissionMapper.insert(submission);
 
         try {
-            JudgeMessage message = JudgeMessage.initial(submission.getId(), 0);
+            JudgeMessage message = JudgeMessage.initial(submission.getId(), 0, MDC.get("requestId"));
             String payload = objectMapper.writeValueAsString(message);
             outboxRepository.insert(message.eventId(), submission.getId(), 0, payload);
             metrics.submissionAccepted();

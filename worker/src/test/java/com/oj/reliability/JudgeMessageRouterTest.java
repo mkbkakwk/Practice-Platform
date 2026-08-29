@@ -89,6 +89,19 @@ class JudgeMessageRouterTest {
 
         assertThat(message.judgeGeneration()).isZero();
         assertThat(message.retry(3).judgeGeneration()).isZero();
+        assertThat(message.requestId()).isNull();
+    }
+
+    @Test
+    void preservesSafeOptionalRequestIdAcrossRetries() {
+        UUID eventId = UUID.randomUUID();
+        JudgeMessage message = JudgeMessage.from(Map.of(
+                "eventId", eventId.toString(), "submissionId", 42,
+                "schemaVersion", 1, "deliveryAttempt", 2,
+                "requestId", "stage9c-accept-123"));
+
+        assertThat(message.requestId()).isEqualTo("stage9c-accept-123");
+        assertThat(message.retry(3).requestId()).isEqualTo("stage9c-accept-123");
     }
 
     private void completePublishWith(boolean ack) {

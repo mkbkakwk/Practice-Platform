@@ -81,6 +81,7 @@ public class JudgeConsumer {
             return;
         }
 
+        if (message.requestId() != null) MDC.put("requestId", message.requestId());
         try (MDC.MDCCloseable event = MDC.putCloseable("eventId", message.eventId().toString());
              MDC.MDCCloseable submission = MDC.putCloseable("submissionId", Integer.toString(message.submissionId()))) {
             metrics.received();
@@ -117,6 +118,8 @@ public class JudgeConsumer {
                 case BUSY -> scheduleBusy(message, deliveryTag, channel);
                 case CLAIMED -> executeClaimed(message, claim, deliveryTag, channel);
             }
+        } finally {
+            if (message.requestId() != null) MDC.remove("requestId");
         }
     }
 

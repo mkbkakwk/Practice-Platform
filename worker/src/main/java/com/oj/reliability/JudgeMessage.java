@@ -3,13 +3,20 @@ package com.oj.reliability;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public record JudgeMessage(UUID eventId, int submissionId, int judgeGeneration,
-                           int schemaVersion, int deliveryAttempt) {
+                           int schemaVersion, int deliveryAttempt, String requestId) {
+    private static final Pattern SAFE_REQUEST_ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+
+    public JudgeMessage(UUID eventId, int submissionId, int judgeGeneration,
+                        int schemaVersion, int deliveryAttempt) {
+        this(eventId, submissionId, judgeGeneration, schemaVersion, deliveryAttempt, null);
+    }
 
     /** Legacy in-process constructor: messages written before V9 are generation zero. */
     public JudgeMessage(UUID eventId, int submissionId, int schemaVersion, int deliveryAttempt) {
-        this(eventId, submissionId, 0, schemaVersion, deliveryAttempt);
+        this(eventId, submissionId, 0, schemaVersion, deliveryAttempt, null);
     }
 
     public static JudgeMessage from(Map<String, Object> payload) {
@@ -36,11 +43,16 @@ public record JudgeMessage(UUID eventId, int submissionId, int judgeGeneration,
         if (judgeGeneration < 0 || schemaVersion != 1 || deliveryAttempt < 0) {
             throw new IllegalArgumentException("judge message version or attempt is invalid");
         }
-        return new JudgeMessage(eventId, submissionId, judgeGeneration, schemaVersion, deliveryAttempt);
+        Object requestIdValue = payload.get("requestId");
+        String requestId = requestIdValue == null ? null : requestIdValue.toString();
+        if (requestId != null && !SAFE_REQUEST_ID.matcher(requestId).matches()) {
+            throw new IllegalArgumentException("requestId is invalid");
+        }
+        return new JudgeMessage(eventId, submissionId, judgeGeneration, schemaVersion, deliveryAttempt, requestId);
     }
 
     public JudgeMessage retry(int nextAttempt) {
-        return new JudgeMessage(eventId, submissionId, judgeGeneration, schemaVersion, nextAttempt);
+        return new JudgeMessage(eventId, submissionId, judgeGeneration, schemaVersion, nextAttempt, requestId);
     }
 
     private static int number(Object value, int fallback) {
