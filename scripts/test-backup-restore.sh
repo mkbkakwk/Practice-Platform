@@ -11,7 +11,11 @@ source_pg="${project}-source-pgdata"
 target_pg="${project}-target-pgdata"
 source_office="${project}-source-office"
 target_office="${project}-target-office"
-backup_root="$(mktemp -d "${TMPDIR:-/tmp}/practice-platform-stage9b-backups.XXXXXX")"
+source "$script_dir/backup-lib.sh"
+backup_parent="${STAGE9B_TEST_BACKUP_PARENT:-${TMPDIR:-/tmp}}"
+backup_parent="$(backup_shell_path "$backup_parent")"
+mkdir -p "$backup_parent"
+backup_root="$(backup_shell_path "$(mktemp -d "$backup_parent/practice-platform-stage9b-backups.XXXXXX")")"
 consistent_compose="$repo_root/test/fixtures/stage9b/consistent-compose.yml"
 db_user=stage9b
 db_name=stage9b
@@ -50,13 +54,37 @@ create_db() {
     -v "$volume:/var/lib/postgresql/data" postgres:16-alpine >/dev/null
   wait_pg "$container"
 }
+
+echo "==> Stage 9B verify Docker bind-path portability"
+bind_probe="$backup_root/bind path probe"
+mkdir -p "$bind_probe"
+printf 'host-visible' > "$bind_probe/from-host.txt"
+probe_mount="$(backup_docker_host_path "$bind_probe")"
+MSYS_NO_PATHCONV=1 docker run --rm --mount "type=bind,src=$probe_mount,dst=/probe" postgres:16-alpine sh -ec '
+  test "$(cat /probe/from-host.txt)" = host-visible
+  printf container-visible > /probe/from-container.txt
+'
+[[ "$(cat "$bind_probe/from-container.txt")" == container-visible ]] || fail "Docker bind probe did not round-trip to host"
+if backup_is_windows_posix_shell; then
+  [[ "$probe_mount" =~ ^[A-Za-z]:/ ]] || fail "Windows Docker bind source was not normalized to a mixed drive path"
+  probe_backslash="$(cygpath -aw "$bind_probe")"
+  [[ "$(backup_docker_host_path "$probe_backslash")" == "$probe_mount" ]] || fail "Windows backslash bind source was not normalized consistently"
+  for unsafe_root in 'C:/' 'C:\\' 'D:/'; do
+    if (backup_assert_root "$unsafe_root" >/dev/null 2>&1); then
+      fail "Windows drive root was accepted as a backup root: $unsafe_root"
+    fi
+  done
+  if (backup_docker_host_path '//server/share' >/dev/null 2>&1); then
+    fail "UNC Docker bind source was accepted"
+  fi
+fi
 backup() {
-  BACKUP_MIN_FREE_BYTES=1 bash "$script_dir/backup.sh" \
+  BACKUP_MIN_FREE_BYTES=1 "$BASH" "$script_dir/backup.sh" \
     --environment test --mode daily --backup-root "$backup_root" --project "$project" \
     --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office"
 }
 consistent_backup() {
-  BACKUP_MIN_FREE_BYTES=1 bash "$script_dir/backup.sh" \
+  BACKUP_MIN_FREE_BYTES=1 "$BASH" "$script_dir/backup.sh" \
     --environment test --mode consistent --backup-root "$backup_root" --project "$project" \
     --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office" \
     --compose-file "$consistent_compose"
@@ -94,7 +122,7 @@ echo "==> Stage 9B create and verify backup"
 backup
 backup_dir="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 [[ -n "$backup_dir" ]] || fail "backup was not published"
-bash "$script_dir/backup-verify.sh" "$backup_dir"
+"$BASH" "$script_dir/backup-verify.sh" "$backup_dir"
 grep -Eq '"flywayVersion"[[:space:]]*:[[:space:]]*"9"' "$backup_dir/manifest.json" || fail "Flyway metadata missing"
 grep -Eq '"gitSha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$backup_dir/manifest.json" || fail "full Git SHA missing"
 
@@ -102,12 +130,12 @@ echo "==> Stage 9B create and verify quiesced backup"
 consistent_backup
 consistent_dir="$(find "$backup_root/consistent" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 [[ -n "$consistent_dir" ]] || fail "consistent backup was not published"
-bash "$script_dir/backup-verify.sh" "$consistent_dir"
+"$BASH" "$script_dir/backup-verify.sh" "$consistent_dir"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-backend-1")" == true ]] || fail "consistent backup did not restore Backend"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-worker-1")" == true ]] || fail "consistent backup did not restore Worker"
 
 echo "==> Stage 9B reject disk exhaustion before backup"
-if BACKUP_MIN_FREE_BYTES=999999999999999999 bash "$script_dir/backup.sh" --environment test --mode daily --backup-root "$backup_root" --project "$project" --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office"; then fail "disk guard accepted impossible threshold"; fi
+if BACKUP_MIN_FREE_BYTES=999999999999999999 "$BASH" "$script_dir/backup.sh" --environment test --mode daily --backup-root "$backup_root" --project "$project" --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office"; then fail "disk guard accepted impossible threshold"; fi
 
 echo "==> Stage 9B reject partial Office backup"
 docker run --rm -v "$source_office:/office" postgres:16-alpine sh -c 'ln -s /etc/passwd /office/unsafe-link'
@@ -120,7 +148,7 @@ docker run --rm -v "$source_office:/office" postgres:16-alpine sh -c 'rm /office
 echo "==> Stage 9B reject checksum corruption and archive traversal"
 corrupt="$backup_root/daily/corrupt"
 cp -a "$backup_dir" "$corrupt"; printf x >> "$corrupt/office.tar.gz"
-if bash "$script_dir/backup-verify.sh" "$corrupt"; then fail "corrupt backup verified"; fi
+if "$BASH" "$script_dir/backup-verify.sh" "$corrupt"; then fail "corrupt backup verified"; fi
 rm -rf -- "$corrupt"
 traversal="$backup_root/daily/traversal"
 cp -a "$backup_dir" "$traversal"
@@ -130,7 +158,7 @@ rm -rf -- "$fixture"
 (cd "$traversal" && sha256sum database.dump office.tar.gz manifest.json > SHA256SUMS)
 docker volume create --label "com.docker.compose.project=$project" "$target_office" >/dev/null
 create_db "$target_db" "$target_pg"
-if bash "$script_dir/restore.sh" --backup "$traversal" --target isolated --confirm-isolated --project "$project" --db-container "$target_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$target_office"; then fail "traversal archive restore succeeded"; fi
+if "$BASH" "$script_dir/restore.sh" --backup "$traversal" --target isolated --confirm-isolated --project "$project" --db-container "$target_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$target_office"; then fail "traversal archive restore succeeded"; fi
 docker rm -f "$target_db" >/dev/null; docker volume rm "$target_pg" "$target_office" >/dev/null
 rm -rf -- "$traversal"
 
@@ -140,7 +168,7 @@ echo "[restore-drill] isolated source destroyed"
 create_db "$target_db" "$target_pg"
 docker volume create --label "com.docker.compose.project=$project" "$target_office" >/dev/null
 echo "[restore-drill] fresh target provisioned"
-bash "$script_dir/restore.sh" --backup "$backup_dir" --target isolated --confirm-isolated --project "$project" --db-container "$target_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$target_office"
+"$BASH" "$script_dir/restore.sh" --backup "$backup_dir" --target isolated --confirm-isolated --project "$project" --db-container "$target_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$target_office"
 echo "[restore-drill] artifacts restored"
 [[ "$(docker exec "$target_db" psql -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" -Atc "SELECT max(version) FROM flyway_schema_history WHERE success;")" == 9 ]] || fail "Flyway restore validation failed"
 [[ "$(docker exec "$target_db" psql -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" -Atc 'SELECT count(*) FROM submissions;')" == 1 ]] || fail "submission restore validation failed"
@@ -161,14 +189,14 @@ for category_count in 'daily 10' 'weekly 6' 'monthly 5'; do
   done
 done
 before="$(find "$backup_root" -type d | sort | sha256sum)"
-bash "$script_dir/backup-retention.sh" --backup-root "$backup_root" --dry-run >/dev/null
+"$BASH" "$script_dir/backup-retention.sh" --backup-root "$backup_root" --dry-run >/dev/null
 after="$(find "$backup_root" -type d | sort | sha256sum)"; [[ "$before" == "$after" ]] || fail "retention dry-run changed files"
-bash "$script_dir/backup-retention.sh" --backup-root "$backup_root" --apply >/dev/null
+"$BASH" "$script_dir/backup-retention.sh" --backup-root "$backup_root" --apply >/dev/null
 [[ "$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 7 ]] || fail "daily retention count is wrong"
 [[ "$(find "$backup_root/weekly" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 4 ]] || fail "weekly retention count is wrong"
 [[ "$(find "$backup_root/monthly" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" == 3 ]] || fail "monthly retention count is wrong"
 boundary_before="$(find "$backup_root" -type d | sort | sha256sum)"
-bash "$script_dir/backup-retention.sh" --backup-root "$backup_root" --apply >/dev/null
+"$BASH" "$script_dir/backup-retention.sh" --backup-root "$backup_root" --apply >/dev/null
 boundary_after="$(find "$backup_root" -type d | sort | sha256sum)"; [[ "$boundary_before" == "$boundary_after" ]] || fail "exact retention boundary deleted a backup"
 
 echo "Stage 9B backup/restore drill passed"

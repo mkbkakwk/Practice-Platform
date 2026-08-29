@@ -11,23 +11,65 @@ backup_require() { command -v "$1" >/dev/null 2>&1 || backup_die "$1 is required
 
 backup_realpath() { realpath -m "$1"; }
 
-backup_docker_host_path() {
-  if command -v cygpath >/dev/null 2>&1; then
-    cygpath -aw "$1"
+backup_is_windows_posix_shell() {
+  case "${OSTYPE:-}:${MSYSTEM:-}" in
+    msys*:*|cygwin*:*|*:MINGW*|*:MSYS*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+backup_is_unc_path() {
+  case "$1" in
+    //*) return 0 ;;
+    \\\\*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+backup_is_windows_drive_root() {
+  [[ "$1" =~ ^[A-Za-z]:/$ || "$1" =~ ^/[A-Za-z]/?$ ]]
+}
+
+backup_shell_path() {
+  local path="$1" resolved
+  [[ -n "$path" ]] || backup_die "backup path must not be empty"
+  backup_is_unc_path "$path" && backup_die "UNC backup roots are not supported"
+  resolved="$(backup_realpath "$path")"
+  if backup_is_windows_posix_shell; then
+    command -v cygpath >/dev/null 2>&1 || backup_die "cygpath is required for Windows backup paths"
+    cygpath -au "$resolved"
   else
-    backup_realpath "$1"
+    printf '%s\n' "$resolved"
+  fi
+}
+
+backup_docker_host_path() {
+  local path="$1" shell_path
+  [[ -n "$path" ]] || backup_die "Docker bind source must not be empty"
+  backup_is_unc_path "$path" && backup_die "UNC backup roots are not supported"
+  shell_path="$(backup_shell_path "$path")"
+  if backup_is_windows_posix_shell; then
+    command -v cygpath >/dev/null 2>&1 || backup_die "cygpath is required for Windows Docker bind paths"
+    # Docker Desktop accepts mixed drive paths (C:/...) in --mount source.
+    # Keep MSYS conversion disabled at the call site so this is passed verbatim.
+    cygpath -am "$shell_path"
+  else
+    printf '%s\n' "$shell_path"
   fi
 }
 
 backup_assert_root() {
-  local root="$1" root_real repo_real
+  local root="$1" root_real root_shell repo_real
   [[ -n "$root" && "$root" != / && "$root" != . && "$root" != .. ]] || backup_die "BACKUP_ROOT must be an explicit safe host directory"
-  mkdir -p "$root" || backup_die "cannot create backup root"
+  backup_is_unc_path "$root" && backup_die "UNC backup roots are not supported"
   root_real="$(backup_realpath "$root")"
+  backup_is_windows_posix_shell && backup_is_windows_drive_root "$root_real" && backup_die "backup root must not be a Windows drive root"
+  root_shell="$(backup_shell_path "$root_real")"
+  mkdir -p "$root_shell" || backup_die "cannot create backup root"
   repo_real="$(backup_realpath "$backup_repo_root")"
   [[ "$root_real" != "$repo_real" && "$root_real" != "$repo_real"/* ]] || backup_die "backup root must be outside the Git repository"
   [[ ! -L "$root_real" ]] || backup_die "backup root must not be a symlink"
-  printf '%s\n' "$root_real"
+  printf '%s\n' "$root_shell"
 }
 
 backup_assert_volume() {
@@ -46,6 +88,7 @@ backup_is_utc_time() { [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z$ ]]; }
 
 backup_verify_dir() {
   local dir="$1" manifest mode sha created
+  dir="$(backup_shell_path "$dir")"
   [[ -d "$dir" && ! -L "$dir" ]] || backup_die "backup directory is missing or unsafe"
   [[ -f "$dir/.complete" && -f "$dir/manifest.json" && -f "$dir/SHA256SUMS" ]] || backup_die "backup is incomplete"
   [[ -f "$dir/database.dump" && -f "$dir/office.tar.gz" ]] || backup_die "backup artifacts are missing"
@@ -63,6 +106,7 @@ backup_verify_dir() {
 
 backup_validate_archive() {
   local archive="$1" entries details
+  archive="$(backup_shell_path "$archive")"
   entries="$(tar -tzf "$archive")" || backup_die "Office archive cannot be read"
   if printf '%s\n' "$entries" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
     backup_die "Office archive contains an unsafe path"
@@ -74,7 +118,10 @@ backup_validate_archive() {
 }
 
 backup_free_bytes() {
-  df -Pk "$1" | awk 'NR == 2 { printf "%.0f\n", $4 * 1024 }'
+  local filesystem blocks used available capacity mount
+  read -r filesystem blocks used available capacity mount < <(df -Pk "$1" | tail -n 1)
+  [[ "$available" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$((available * 1024))"
 }
 
 backup_assert_project_container() {
