@@ -26,6 +26,9 @@ class SystemStatusControllerTest {
         CurrentUser.set(1, "teacher", "TEACHER");
         assertThrows(ApiException.class, controller::status);
 
+        CurrentUser.set(3, "student", "STUDENT");
+        assertThrows(ApiException.class, controller::status);
+
         CurrentUser.set(2, "admin", "ADMIN");
         when(status.snapshot()).thenReturn(Map.of("checkedAt", "2026-08-29T00:00:00Z"));
         assertEquals("2026-08-29T00:00:00Z", controller.status().get("checkedAt"));
