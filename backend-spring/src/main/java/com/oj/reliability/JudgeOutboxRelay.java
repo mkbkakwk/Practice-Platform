@@ -1,6 +1,7 @@
 package com.oj.reliability;
 
 import com.oj.config.AppProperties;
+import com.oj.observability.OperationalMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,16 +20,18 @@ public class JudgeOutboxRelay {
     private final ConfirmedJudgePublisher publisher;
     private final AppProperties properties;
     private final OutboxPublisherStatus status;
+    private final OperationalMetrics metrics;
 
     public JudgeOutboxRelay(
             JudgeOutboxRepository repository,
             ConfirmedJudgePublisher publisher,
             AppProperties properties,
-            OutboxPublisherStatus status) {
+            OutboxPublisherStatus status, OperationalMetrics metrics) {
         this.repository = repository;
         this.publisher = publisher;
         this.properties = properties;
         this.status = status;
+        this.metrics = metrics;
     }
 
     @Scheduled(
@@ -61,6 +64,7 @@ public class JudgeOutboxRelay {
                 return;
             }
             status.confirmed();
+            metrics.outboxPublished();
             log.info("Judge outbox publish confirmed eventId={} submissionId={} attempt={}",
                     event.eventId(), event.submissionId(), event.attemptCount());
             return;
@@ -74,6 +78,7 @@ public class JudgeOutboxRelay {
             return;
         }
         status.failed(result.failureCategory());
+        metrics.outboxPublishFailure();
         log.warn("Judge outbox publish retry eventId={} submissionId={} attempt={} category={} delayMs={}",
                 event.eventId(), event.submissionId(), event.attemptCount(),
                 result.failureCategory(), delay.toMillis());

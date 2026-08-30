@@ -1,6 +1,7 @@
 package com.oj.reliability;
 
 import com.oj.config.AppProperties;
+import com.oj.observability.OperationalMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +33,7 @@ class JudgeOutboxRelayTest {
         AppProperties properties = new AppProperties();
         properties.getOutbox().setInitialRetryDelay(Duration.ofSeconds(1));
         properties.getOutbox().setMaxRetryDelay(Duration.ofSeconds(30));
-        relay = new JudgeOutboxRelay(repository, publisher, properties, status);
+        relay = new JudgeOutboxRelay(repository, publisher, properties, status, new OperationalMetrics());
         event = new JudgeOutboxEvent(1, UUID.randomUUID(), 10, "{}", 1, UUID.randomUUID());
         when(repository.claimBatch(20, Duration.ofSeconds(30))).thenReturn(List.of(event));
     }

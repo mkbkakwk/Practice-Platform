@@ -18,6 +18,7 @@ spring:
     publisher-returns: true
     template:
       mandatory: true
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:750ms}
   jackson:
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
@@ -76,6 +77,9 @@ oj:
     retention: ${OUTBOX_RETENTION:7d}
     cleanup-interval: ${OUTBOX_CLEANUP_INTERVAL_MS:3600000}ms
     cleanup-batch-size: ${OUTBOX_CLEANUP_BATCH_SIZE:500}
+  status:
+    worker-readiness-url: ${WORKER_READINESS_URL:http://worker:8081/api/readiness}
+    runner-readiness-url: ${RUNNER_READINESS_URL:http://runner:8080/api/readiness}
   doc-storage: ${DOC_STORAGE:/tmp/oj-docs}
   office:
     max-upload-bytes: ${OFFICE_MAX_UPLOAD_BYTES:10485760}

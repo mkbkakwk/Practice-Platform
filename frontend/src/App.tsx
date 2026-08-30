@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth";
 import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AdminGuard, TeacherGuard } from "@/components/AdminGuard";
+import SystemStatus from "@/pages/SystemStatus";
 import ProblemList from "@/pages/ProblemList";
 import ProblemDetail from "@/pages/ProblemDetail";
 import Login from "@/pages/Login";
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/admin/office-doc/review-list" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReviewList /></TeacherGuard></Layout>} />
             <Route path="/admin/office-doc/review/:id" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReview /></TeacherGuard></Layout>} />
             <Route path="/admin/users" element={<Layout label="用户管理"><AdminGuard><AdminUserList /></AdminGuard></Layout>} />
+            <Route path="/admin/system-status" element={<Layout label="系统状态"><AdminGuard><SystemStatus /></AdminGuard></Layout>} />
             <Route path="/admin/contests/new" element={<Layout label="创建比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
             <Route path="/admin/contests/:id" element={<Layout label="管理比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
             <Route path="/admin/contests/:id/analytics" element={<Layout label="比赛数据分析"><TeacherGuard><ContestAnalytics /></TeacherGuard></Layout>} />

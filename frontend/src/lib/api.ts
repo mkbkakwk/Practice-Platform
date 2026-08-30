@@ -121,6 +121,20 @@ export interface PublicUser {
   solvedCount?: number;
 }
 
+export interface SystemStatusComponent {
+  status: "UP" | "DOWN" | "UNKNOWN";
+  latencyMs: number;
+}
+
+export interface SystemStatus {
+  checkedAt: string;
+  version: { gitSha: string; version: string; buildTime: string; flywayVersion: string };
+  components: Record<string, SystemStatusComponent>;
+  queues: { main: number | "UNKNOWN"; retry: number | "UNKNOWN"; dlq: number | "UNKNOWN" };
+  outbox: { status: string; latencyMs: number; nonterminal?: number; publisherRunning: boolean; lastFailure: string };
+  metrics: Record<string, number>;
+}
+
 export interface ProblemListItem {
   id: number;
   slug: string;
@@ -561,6 +575,7 @@ export interface UserListItem {
 }
 
 export const api = {
+  getSystemStatus: (signal?: AbortSignal) => request<SystemStatus>("/admin/system-status", { signal }),
   register: (username: string, password: string) =>
     request<{ token: string; user: PublicUser }>("/auth/register", {
       method: "POST",

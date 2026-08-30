@@ -16,6 +16,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -44,10 +45,12 @@ class RemoteSandboxClientTest {
     @Test
     void postsVersionedRequestWithBearerTokenAndParsesSuccess() throws Exception {
         AtomicReference<String> authorization = new AtomicReference<>();
+        AtomicReference<String> correlation = new AtomicReference<>();
         AtomicReference<JsonNode> requestBody = new AtomicReference<>();
         SandboxRequest request = request();
         start(exchange -> {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            correlation.set(exchange.getRequestHeaders().getFirst("X-Request-ID"));
             requestBody.set(objectMapper.readTree(exchange.getRequestBody()));
             respond(exchange, 200, objectMapper.writeValueAsBytes(success(request, "1")));
         });
@@ -56,10 +59,28 @@ class RemoteSandboxClientTest {
 
         assertThat(result.requestId()).isEqualTo(request.requestId());
         assertThat(authorization.get()).isEqualTo("Bearer " + TOKEN);
+        assertThat(correlation.get()).isEqualTo(request.requestId());
         assertThat(requestBody.get().get("language").asText()).isEqualTo("PYTHON");
         assertThat(requestBody.get().has("command")).isFalse();
         assertThat(requestBody.get().has("compileCommand")).isFalse();
         assertThat(requestBody.get().toString()).doesNotContain("expectedOutput");
+    }
+
+    @Test
+    void forwardsSafeMdcCorrelationWithoutChangingRunnerRequestId() throws Exception {
+        AtomicReference<String> correlation = new AtomicReference<>();
+        SandboxRequest request = request();
+        start(exchange -> {
+            correlation.set(exchange.getRequestHeaders().getFirst("X-Correlation-ID"));
+            respond(exchange, 200, objectMapper.writeValueAsBytes(success(request, "1")));
+        });
+        MDC.put("requestId", "stage9c-accept-123");
+        try {
+            client(1_000, 65_536, 65_536).execute(request);
+        } finally {
+            MDC.clear();
+        }
+        assertThat(correlation.get()).isEqualTo("stage9c-accept-123");
     }
 
     @Test
