@@ -17,8 +17,11 @@ fail() {
 
 json_log_for() {
   local service="$1"
+  # Do not exit awk after the first matching record. With pipefail enabled,
+  # that early close can make Docker Compose return a broken-pipe status on
+  # Linux CI before it has finished writing the bounded log stream.
   "${compose[@]}" logs --no-color --no-log-prefix "$service" 2>/dev/null \
-    | awk '/^\{/{print; exit}'
+    | awk '!found && /^\{/ { print; found = 1 }'
 }
 
 assert_json_log() {
