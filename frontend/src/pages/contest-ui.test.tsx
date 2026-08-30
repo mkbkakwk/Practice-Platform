@@ -815,7 +815,7 @@ describe("contest stage UI", () => {
     fireEvent.click(confirm);
     fireEvent.click(confirm);
     await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole("status")).toHaveTextContent("批次 #91 · RUNNING · 已完成 1 / 3");
+    expect(await screen.findByRole("status")).toHaveTextContent("批次 #91 · RUNNING · 已完成 1 / 3");
     expect(screen.getByText(/Office 题暂不支持重判/)).toBeInTheDocument();
   });
 });
