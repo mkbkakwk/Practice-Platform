@@ -1,7 +1,7 @@
 <configuration>
   <property name="gitSha" value="${APP_GIT_SHA:-unknown}"/>
   <springProfile name="staging,production">
-    <appender name="CONSOLE" class="net.logstash.logback.appender.LogstashConsoleAppender"><encoder class="net.logstash.logback.encoder.LogstashEncoder"><customFields>{"service":"worker","gitSha":"${gitSha}"}</customFields></encoder></appender>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender"><encoder class="net.logstash.logback.encoder.LogstashEncoder"><customFields>{"service":"worker","gitSha":"${gitSha}"}</customFields></encoder></appender>
   </springProfile>
   <springProfile name="!staging &amp; !production">
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%d{HH:mm:ss.SSS} %-5level service=worker requestId=%X{requestId} submissionId=%X{submissionId} eventId=%X{eventId} %logger{36} - %msg%n</pattern></encoder></appender>

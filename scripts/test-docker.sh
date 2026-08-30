@@ -37,6 +37,7 @@ worker_runner_contract_rc=125
 frontend_rc=125
 readiness_timeout_rc=125
 release_config_rc=125
+release_logging_rc=125
 formal_sandbox_config_rc=125
 docker_sandbox_security_rc=125
 worker_scale_rc=125
@@ -63,6 +64,12 @@ if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $formal_sandbox_config_rc -
 fi
 
 if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 ]]; then
+  echo "==> Validating release-profile structured logging startup"
+  release_logging_rc=0
+  bash ./scripts/test-release-logging.sh || release_logging_rc=$?
+fi
+
+if [[ $build_rc -eq 0 && $release_config_rc -eq 0 && $startup_rc -eq 0 && $release_logging_rc -eq 0 ]]; then
   echo "==> Running Runner service tests"
   runner_rc=0
   "${compose[@]}" run --rm runner-test || runner_rc=$?
@@ -136,6 +143,7 @@ printf '  worker-runner-contract: %s\n' "$worker_runner_contract_rc"
 printf '  frontend-test: %s\n' "$frontend_rc"
 printf '  readiness-timeout: %s\n' "$readiness_timeout_rc"
 printf '  release-config: %s\n' "$release_config_rc"
+printf '  release-logging: %s\n' "$release_logging_rc"
 printf '  formal-sandbox-config: %s\n' "$formal_sandbox_config_rc"
 printf '  docker-sandbox-security: %s\n' "$docker_sandbox_security_rc"
 printf '  worker-scale: %s\n' "$worker_scale_rc"
@@ -143,7 +151,7 @@ printf '  judge-reliability: %s\n' "$judge_reliability_rc"
 printf '  contest-core: %s\n' "$contest_core_rc"
 printf '  backup-restore: %s\n' "$backup_restore_rc"
 
-for rc in "$build_rc" "$release_config_rc" "$startup_rc" "$backend_rc" "$worker_rc" \
+for rc in "$build_rc" "$release_config_rc" "$release_logging_rc" "$startup_rc" "$backend_rc" "$worker_rc" \
   "$runner_rc" "$worker_runner_contract_rc" "$frontend_rc" "$formal_sandbox_config_rc" \
   "$readiness_timeout_rc" "$docker_sandbox_security_rc" "$worker_scale_rc"; do
   if [[ $rc -ne 0 ]]; then
