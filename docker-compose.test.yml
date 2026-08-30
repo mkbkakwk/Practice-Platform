@@ -161,7 +161,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: staging
       APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
-      APP_BUILD_TIME: 2026-08-30T00:00:00Z
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
       DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
       POSTGRES_USER: oj_test
       POSTGRES_PASSWORD: oj_test_password
@@ -182,7 +182,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: staging
       APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
-      APP_BUILD_TIME: 2026-08-30T00:00:00Z
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
       RUNNER_TOKEN: test-runner-token
 
   release-logging-worker:
@@ -202,7 +202,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: staging
       APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
-      APP_BUILD_TIME: 2026-08-30T00:00:00Z
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
       DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
       POSTGRES_USER: oj_test
       POSTGRES_PASSWORD: oj_test_password
@@ -222,5 +222,5 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: production
       APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
-      APP_BUILD_TIME: 2026-08-30T00:00:00Z
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
       RUNNER_TOKEN: test-runner-token
