@@ -80,24 +80,56 @@ assert_redacted_json_logs() {
           ["bearer-token", /\bBearer\s+[A-Za-z0-9._~+\/-]+=*/i]
         ];
         let validJson = 0;
-        let sensitiveCategory = null;
+        let leak = null;
         let diagnosableFailure = false;
+        const safePath = path => path.replace(/[^A-Za-z0-9_.$\[\]]/g, "?");
+        const findLeak = (value, path) => {
+          if (typeof value === "string") {
+            const sentinel = sentinels.find(([, candidate]) => value.includes(candidate));
+            const blockedMatch = blocked.find(([, pattern]) => pattern.test(value));
+            if (sentinel || blockedMatch) {
+              return { category: sentinel?.[0] || blockedMatch?.[0], path: safePath(path) };
+            }
+            return null;
+          }
+          if (Array.isArray(value)) {
+            for (let index = 0; index < value.length; index++) {
+              const nested = findLeak(value[index], `${path}[${index}]`);
+              if (nested) return nested;
+            }
+            return null;
+          }
+          if (value && typeof value === "object") {
+            for (const [key, nestedValue] of Object.entries(value)) {
+              const nested = findLeak(nestedValue, `${path}.${key}`);
+              if (nested) return nested;
+            }
+          }
+          return null;
+        };
+        let record = 0;
         for (const line of input.split(/\r?\n/)) {
           let entry;
           try { entry = JSON.parse(line); } catch { continue; }
           validJson++;
-          const rendered = JSON.stringify(entry);
-          const sentinel = sentinels.find(([, value]) => rendered.includes(value));
-          const blockedMatch = blocked.find(([, pattern]) => pattern.test(rendered));
-          sensitiveCategory ||= sentinel?.[0] || blockedMatch?.[0] || null;
+          record++;
+          leak ||= (() => {
+            const match = findLeak(entry, "$");
+            return match && {
+              ...match,
+              record,
+              logger: String(entry.logger_name || entry.logger || "unknown").replace(/[^A-Za-z0-9_.-]/g, "?"),
+              level: String(entry.level || "unknown").replace(/[^A-Za-z]/g, "?")
+            };
+          })();
           if (entry.level && /^(WARN|ERROR)$/i.test(entry.level) && /(fail|unable|refused|exception|unavailable|connect)/i.test(entry.message || "")) diagnosableFailure = true;
         }
         if (validJson === 0) {
           console.error("check=json-log-missing jsonRecords=0");
           process.exit(2);
         }
-        if (sensitiveCategory) {
-          console.error(`check=sentinel-leak category=${sensitiveCategory} jsonRecords=${validJson}`);
+        if (leak) {
+          console.error(`check=sentinel-leak category=${leak.category} record=${leak.record} path=${leak.path} logger=${leak.logger} level=${leak.level} jsonRecords=${validJson}`);
           process.exit(3);
         }
         if (process.argv[1] === "true" && !diagnosableFailure) {
