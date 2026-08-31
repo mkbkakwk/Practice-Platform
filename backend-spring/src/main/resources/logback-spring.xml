@@ -11,6 +11,9 @@
           <value><![CDATA[\x5B[A-Za-z0-9._-]+:[0-9]+\x5D]]></value>
           <value><![CDATA[(?i)(host(name)?|user(name)?|database|db(name)?)[ ]*[:=][ ]*[^ ,;]+]]></value>
           <value><![CDATA[(?i)Connection to [^ ]+:[0-9]+]]></value>
+          <value><![CDATA[(?i)(?<=UnknownHostException:[ ])[A-Za-z0-9._-]+]]></value>
+          <value><![CDATA[(?i)(?<=Connection to )[A-Za-z0-9._-]+(?=[:/,; ])]]></value>
+          <value><![CDATA[(?i)(?<=database:[ ])[A-Za-z0-9._-]+(?=[:/,; ]|$)]]></value>
           <value><![CDATA[(?i)(user(name)?|username|password|token|secret|authorization)[ ]*[:=][ ]*[^ ,;]+]]></value>
           <value><![CDATA[(?i)Bearer[ ]+[^ ]+]]></value>
           <value><![CDATA[/var/run/docker[.]sock]]></value>
