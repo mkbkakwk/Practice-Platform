@@ -174,6 +174,28 @@ services:
     tmpfs:
       - /tmp/practice-platform-release-logging-docs
 
+  release-logging-backend-failure:
+    build:
+      context: ./backend-spring
+      target: runtime
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      DATABASE_URL: jdbc:postgresql://db-internal.example:5432/private_database
+      POSTGRES_USER: stage_db_user
+      POSTGRES_PASSWORD: test-only-failure-password
+      RABBITMQ_HOST: test-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oj_test
+      RABBITMQ_PASSWORD: oj_test_password
+      JWT_SECRET: test-only-secret-not-for-production-0123456789
+      DOC_STORAGE: /tmp/practice-platform-release-logging-failure-docs
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 1000
+    tmpfs:
+      - /tmp/practice-platform-release-logging-failure-docs
+
   release-logging-runner:
     build:
       context: ./runner
@@ -213,6 +235,34 @@ services:
       RUNNER_BASE_URL: http://release-logging-runner:8080
       RUNNER_TOKEN: test-runner-token
       JUDGE_EXECUTION_MODE: remote
+
+  release-logging-worker-failure:
+    build:
+      context: ./worker
+      target: runtime
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      release-logging-runner:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+      RABBITMQ_HOST: rabbit-internal.example
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: stage_rabbit_user
+      RABBITMQ_PASSWORD: test-only-failure-password
+      RUNNER_BASE_URL: http://release-logging-runner:8080
+      RUNNER_TOKEN: test-runner-token
+      JUDGE_EXECUTION_MODE: remote
+      SPRING_RABBITMQ_CONNECTION_TIMEOUT: 1000
 
   release-logging-runner-production:
     build:

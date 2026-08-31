@@ -1,7 +1,25 @@
 <configuration>
   <property name="gitSha" value="${APP_GIT_SHA:-unknown}"/>
   <springProfile name="staging,production">
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender"><encoder class="net.logstash.logback.encoder.LogstashEncoder"><customFields>{"service":"runner","gitSha":"${gitSha}"}</customFields></encoder></appender>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <customFields>{"service":"runner","gitSha":"${gitSha}"}</customFields>
+        <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+          <defaultMask>[REDACTED]</defaultMask>
+          <value><![CDATA[jdbc:postgresql://[^ ]+]]></value>
+          <value><![CDATA[amqps?://[^ ]+]]></value>
+          <value><![CDATA[\x5B[A-Za-z0-9._-]+:[0-9]+\x5D]]></value>
+          <value><![CDATA[(?i)(host(name)?|user(name)?|database|db(name)?)[ ]*[:=][ ]*[^ ,;]+]]></value>
+          <value><![CDATA[(?i)Connection to [^ ]+:[0-9]+]]></value>
+          <value><![CDATA[(?i)(?<=UnknownHostException:[ ])[A-Za-z0-9._-]+]]></value>
+          <value><![CDATA[(?i)(?<=Connection to )[A-Za-z0-9._-]+(?=[:/,; ])]]></value>
+          <value><![CDATA[(?i)(?<=database:[ ])[A-Za-z0-9._-]+(?=[:/,; ]|$)]]></value>
+          <value><![CDATA[(?i)(user(name)?|username|password|token|secret|authorization)[ ]*[:=][ ]*[^ ,;]+]]></value>
+          <value><![CDATA[(?i)Bearer[ ]+[^ ]+]]></value>
+          <value><![CDATA[/var/run/docker[.]sock]]></value>
+        </jsonGeneratorDecorator>
+      </encoder>
+    </appender>
   </springProfile>
   <springProfile name="!staging &amp; !production">
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender"><encoder><pattern>%d{HH:mm:ss.SSS} %-5level service=runner requestId=%X{requestId} %logger{36} - %msg%n</pattern></encoder></appender>
