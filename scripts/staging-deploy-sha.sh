@@ -27,12 +27,13 @@ done
 
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: --sha must be an exact 40-character lowercase Git SHA" >&2; exit 2; }
 git -C "$repo_root" cat-file -e "$sha^{commit}" || { echo "ERROR: requested SHA is not available locally" >&2; exit 1; }
-[[ -f "$env_file" ]] || { echo "ERROR: staging environment file is missing" >&2; exit 1; }
 
 if [[ "$dry_run" == true ]]; then
   printf 'DRY-RUN: would deploy exact Staging source SHA %s using %s\n' "$sha" "$env_file"
   exit 0
 fi
+
+[[ -f "$env_file" ]] || { echo "ERROR: staging environment file is missing" >&2; exit 1; }
 
 worktree="$(mktemp -d "${TMPDIR:-/tmp}/practice-platform-stage9d-deploy.XXXXXX")"
 added=false
