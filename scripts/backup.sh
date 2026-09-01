@@ -58,15 +58,25 @@ docker exec "$db_container" pg_dump -U "$db_user" -d "$db_name" -Fc > "$tmp/data
 backup_restrict_artifact "$tmp" database.dump
 
 backup_note backup "archiving Office persistent storage"
+office_archive="$tmp/office.tar.gz"
+# The helper writes to a host bind mount.  On Linux, create the restrictive
+# artifact as the invoking backup operator so that 0600 remains readable for
+# validation and the later restore path.  Keep Windows on its existing Docker
+# Desktop bind-path behavior, where POSIX ownership is not meaningful.
+archive_user_args=()
+if ! backup_is_windows_posix_shell; then
+  archive_user_args=(--user "$(id -u):$(id -g)")
+fi
 tmp_mount="$(backup_docker_host_path "$tmp")"
-MSYS_NO_PATHCONV=1 docker run --rm -v "$office_volume:/source:ro" --mount "type=bind,src=$tmp_mount,dst=/out" postgres:16-alpine sh -ec '
+MSYS_NO_PATHCONV=1 docker run --rm "${archive_user_args[@]}" -v "$office_volume:/source:ro" --mount "type=bind,src=$tmp_mount,dst=/out" postgres:16-alpine sh -ec '
   umask 077
   test -z "$(find /source -type l -print -quit)" || { echo "Office storage contains a symlink" >&2; exit 1; }
   tar -C /source -czf /out/office.tar.gz .
 '
-[[ -s "$tmp/office.tar.gz" ]] || backup_die "Office archive is empty"
-backup_validate_archive "$tmp/office.tar.gz"
+[[ -s "$office_archive" ]] || backup_die "Office archive is empty"
 backup_restrict_artifact "$tmp" office.tar.gz
+[[ -r "$office_archive" ]] || backup_die "Office archive is not readable by the backup operator"
+backup_validate_archive "$office_archive"
 
 cat > "$tmp/manifest.json" <<EOF
 {

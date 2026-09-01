@@ -37,12 +37,18 @@ assert_backup_permissions() {
   done
 }
 assert_archive_helper_permissions() {
-  local dir="$1" mode
-  # office.tar.gz is created by the production archive-helper container,
-  # not by the host shell.  This directly guards its independent umask.
+  local dir="$1" mode owner expected_owner
+  # The helper supplies only archive bytes; the host backup operator owns the
+  # resulting file.  This exercises the real container-to-host boundary.
   mode="$(stat -c %a "$dir/office.tar.gz")"
   if ! backup_is_windows_posix_shell; then
     [[ "$mode" == 600 ]] || fail "Linux archive-helper office.tar.gz mode must be 600, got $mode"
+    [[ -f "$dir/office.tar.gz" && ! -L "$dir/office.tar.gz" ]] || fail "archive-helper produced an unsafe Office archive"
+    expected_owner="$(id -u)"
+    owner="$(stat -c %u "$dir/office.tar.gz")"
+    [[ "$owner" == "$expected_owner" ]] || fail "Linux archive-helper Office archive owner must match backup operator"
+    [[ -r "$dir/office.tar.gz" ]] || fail "Linux archive-helper Office archive is not readable by backup operator"
+    tar -tzf "$dir/office.tar.gz" >/dev/null || fail "Linux archive-helper Office archive is unreadable"
   fi
 }
 diagnose_pg() {
