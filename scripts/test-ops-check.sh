@@ -12,7 +12,9 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/practice-platform-ops-check.XXXXXX")"
 cleanup() { rm -rf -- "$tmp"; }
 trap cleanup EXIT INT TERM
 
-sha="f35df465eea405b569691cdfd681dbf05fdae61d"
+# The positive exact-SHA case must work with actions/checkout's shallow clone.
+# HEAD is guaranteed to be present locally; historical revisions are not.
+sha="$(git -C "$repo_root" rev-parse HEAD)"
 backup_root="$tmp/backups"
 backup_dir="$backup_root/consistent/$(date -u +%Y-%m-%dT%H%M%SZ)_$sha"
 mkdir -p "$backup_dir/office"
@@ -75,6 +77,10 @@ if run_check >/dev/null 2>&1; then echo "FAIL: stale backup fixture was accepted
   || { echo "FAIL: exact-SHA staging dry-run failed" >&2; exit 1; }
 if "$BASH" "$script_dir/staging-deploy-sha.sh" --sha HEAD --dry-run >/dev/null 2>&1; then
   echo "FAIL: staging deploy helper accepted a symbolic revision" >&2
+  exit 1
+fi
+if "$BASH" "$script_dir/staging-deploy-sha.sh" --sha 0000000000000000000000000000000000000000 --dry-run >/dev/null 2>&1; then
+  echo "FAIL: staging deploy helper accepted an unavailable exact SHA" >&2
   exit 1
 fi
 if "$BASH" "$script_dir/restore.sh" --backup "$backup_dir" --target isolated --confirm-isolated \
