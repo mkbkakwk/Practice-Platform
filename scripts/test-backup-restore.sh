@@ -21,6 +21,36 @@ db_user=stage9b
 db_name=stage9b
 
 fail() { echo "STAGE 9B TEST FAILED: $*" >&2; exit 1; }
+assert_backup_permissions() {
+  local dir="$1" mode file file_mode
+  mode="$(stat -c %a "$dir")"
+  (( (8#$mode & 2) == 0 )) || fail "backup directory is world-writable"
+  if ! backup_is_windows_posix_shell; then
+    [[ "$mode" == 700 ]] || fail "Linux backup directory mode must be 700, got $mode"
+  fi
+  for file in database.dump office.tar.gz manifest.json SHA256SUMS .complete; do
+    file_mode="$(stat -c %a "$dir/$file")"
+    (( (8#$file_mode & 2) == 0 )) || fail "backup artifact $file is world-writable"
+    if ! backup_is_windows_posix_shell; then
+      [[ "$file_mode" == 600 ]] || fail "Linux backup artifact $file mode must be 600, got $file_mode"
+    fi
+  done
+}
+assert_archive_helper_permissions() {
+  local dir="$1" mode owner expected_owner
+  # The helper supplies only archive bytes; the host backup operator owns the
+  # resulting file.  This exercises the real container-to-host boundary.
+  mode="$(stat -c %a "$dir/office.tar.gz")"
+  if ! backup_is_windows_posix_shell; then
+    [[ "$mode" == 600 ]] || fail "Linux archive-helper office.tar.gz mode must be 600, got $mode"
+    [[ -f "$dir/office.tar.gz" && ! -L "$dir/office.tar.gz" ]] || fail "archive-helper produced an unsafe Office archive"
+    expected_owner="$(id -u)"
+    owner="$(stat -c %u "$dir/office.tar.gz")"
+    [[ "$owner" == "$expected_owner" ]] || fail "Linux archive-helper Office archive owner must match backup operator"
+    [[ -r "$dir/office.tar.gz" ]] || fail "Linux archive-helper Office archive is not readable by backup operator"
+    tar -tzf "$dir/office.tar.gz" >/dev/null || fail "Linux archive-helper Office archive is unreadable"
+  fi
+}
 diagnose_pg() {
   local container="$1"
   echo "PostgreSQL readiness timeout for isolated target: $container" >&2
@@ -125,12 +155,16 @@ backup_dir="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -print -
 "$BASH" "$script_dir/backup-verify.sh" "$backup_dir"
 grep -Eq '"flywayVersion"[[:space:]]*:[[:space:]]*"9"' "$backup_dir/manifest.json" || fail "Flyway metadata missing"
 grep -Eq '"gitSha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$backup_dir/manifest.json" || fail "full Git SHA missing"
+assert_backup_permissions "$backup_dir"
+assert_archive_helper_permissions "$backup_dir"
 
 echo "==> Stage 9B create and verify quiesced backup"
 consistent_backup
 consistent_dir="$(find "$backup_root/consistent" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 [[ -n "$consistent_dir" ]] || fail "consistent backup was not published"
 "$BASH" "$script_dir/backup-verify.sh" "$consistent_dir"
+assert_backup_permissions "$consistent_dir"
+assert_archive_helper_permissions "$consistent_dir"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-backend-1")" == true ]] || fail "consistent backup did not restore Backend"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-worker-1")" == true ]] || fail "consistent backup did not restore Worker"
 

@@ -86,6 +86,34 @@ backup_manifest_value() {
 backup_is_full_sha() { [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }
 backup_is_utc_time() { [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{6}Z$ ]]; }
 
+# New backups are created below a private temporary directory.  Keep the
+# permission check next to the chmod so callers cannot accidentally apply it
+# to an arbitrary path (or to an existing, possibly historical backup).
+backup_restrict_temp_dir() {
+  local dir="$1" mode
+  dir="$(backup_shell_path "$dir")"
+  [[ -d "$dir" && ! -L "$dir" ]] || backup_die "backup temporary directory is missing or unsafe"
+  if ! backup_is_windows_posix_shell; then
+    chmod 700 "$dir" || backup_die "cannot restrict backup temporary directory permissions"
+    mode="$(stat -c %a "$dir")" || backup_die "cannot read backup temporary directory permissions"
+    [[ "$mode" == 700 ]] || backup_die "backup temporary directory permissions are not restrictive"
+  fi
+}
+
+backup_restrict_artifact() {
+  local dir="$1" name="$2" artifact mode
+  dir="$(backup_shell_path "$dir")"
+  [[ "$name" != */* && "$name" != . && "$name" != .. && -n "$name" ]] || backup_die "invalid backup artifact name"
+  [[ -d "$dir" && ! -L "$dir" ]] || backup_die "backup temporary directory is missing or unsafe"
+  artifact="$dir/$name"
+  [[ -f "$artifact" && ! -L "$artifact" ]] || backup_die "backup artifact is missing or unsafe: $name"
+  if ! backup_is_windows_posix_shell; then
+    chmod 600 "$artifact" || backup_die "cannot restrict backup artifact permissions: $name"
+    mode="$(stat -c %a "$artifact")" || backup_die "cannot read backup artifact permissions: $name"
+    [[ "$mode" == 600 ]] || backup_die "backup artifact permissions are not restrictive: $name"
+  fi
+}
+
 backup_verify_dir() {
   local dir="$1" manifest mode sha created
   dir="$(backup_shell_path "$dir")"
