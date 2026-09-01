@@ -7,7 +7,47 @@ compose_file="${COMPOSE_FILE:-docker-compose.test.yml}"
 compose=(docker compose -p "$project_name" -f "$compose_file")
 normal_services=(release-logging-backend release-logging-worker release-logging-runner release-logging-runner-production)
 failure_services=(release-logging-backend-failure release-logging-worker-failure)
+gate_services=("${normal_services[@]}" "${failure_services[@]}")
 expected_git_sha="0123456789abcdef0123456789abcdef01234567"
+
+cleanup_done=false
+
+cleanup_gate_services() {
+  local cleanup_rc=0
+  local active_services
+  local service
+
+  echo "==> Cleaning release-logging gate-owned services"
+  "${compose[@]}" rm --stop --force "${gate_services[@]}" || cleanup_rc=$?
+
+  active_services="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
+  for service in "${gate_services[@]}"; do
+    if grep -Fxq "$service" <<<"$active_services"; then
+      echo "RELEASE LOGGING TEST FAILED: gate-owned service remained active: $service" >&2
+      cleanup_rc=1
+    fi
+  done
+
+  cleanup_done=true
+  return "$cleanup_rc"
+}
+
+on_exit() {
+  local rc=$?
+  if [[ "$cleanup_done" != true ]]; then
+    if ! cleanup_gate_services; then
+      echo "WARN: release-logging gate cleanup failed" >&2
+      if [[ $rc -eq 0 ]]; then
+        rc=1
+      fi
+    fi
+  fi
+  exit "$rc"
+}
+
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 fail() {
   echo "RELEASE LOGGING TEST FAILED: $*" >&2
@@ -183,6 +223,10 @@ assert_redacted_json_logs release-logging-worker-failure rabbit-failure true
 if "${compose[@]}" logs --no-color "${normal_services[@]}" "${failure_services[@]}" \
   | grep -Eq 'LogstashConsoleAppender|ClassNotFoundException|DynamicClassLoadingException|Could not create appender|logback configuration error'; then
   fail "release-profile logging startup emitted a Logback initialization error"
+fi
+
+if ! cleanup_gate_services; then
+  fail "gate-owned application services remained active after logging checks"
 fi
 
 echo "Release logging profile checks passed (JSON, normal-path redaction, and isolated failure-path redaction)."
