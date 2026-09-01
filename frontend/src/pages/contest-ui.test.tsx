@@ -201,6 +201,7 @@ describe("contest stage UI", () => {
   });
 
   it("lets a student join an upcoming OPEN contest once", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-31T12:00:00Z"));
     const user = userEvent.setup();
     vi.spyOn(api, "getContest")
       .mockResolvedValueOnce({ detail: detail() })
@@ -545,6 +546,7 @@ describe("contest stage UI", () => {
 
   it("refreshes UPCOMING to RUNNING from the server without a browser reload", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:30:00Z"));
     vi.spyOn(api, "getContest")
       .mockResolvedValueOnce({ detail: detail({ phase: "UPCOMING", participant: true }, [problems[0]]) })
       .mockResolvedValue({ detail: detail({ phase: "RUNNING", participant: true }, [problems[0]]) });
@@ -558,6 +560,7 @@ describe("contest stage UI", () => {
 
   it("refreshes RUNNING to ENDED and closes submission UI", async () => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T01:30:00Z"));
     vi.spyOn(api, "getContest")
       .mockResolvedValueOnce({ detail: detail({ phase: "RUNNING", participant: true }, [problems[0]]) })
       .mockResolvedValue({ detail: detail({ phase: "ENDED", participant: true }, [problems[0]]) });

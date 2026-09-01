@@ -160,6 +160,10 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: staging
+      # This service exists only to verify release-profile logging. It shares the
+      # suite database, so it must not run the production outbox relay while
+      # backend integration tests are using their isolated fixtures.
+      OJ_OUTBOX_ENABLED: "false"
       APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
       APP_BUILD_TIME: "2026-08-30T00:00:00Z"
       DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
