@@ -36,6 +36,15 @@ assert_backup_permissions() {
     fi
   done
 }
+assert_archive_helper_permissions() {
+  local dir="$1" mode
+  # office.tar.gz is created by the production archive-helper container,
+  # not by the host shell.  This directly guards its independent umask.
+  mode="$(stat -c %a "$dir/office.tar.gz")"
+  if ! backup_is_windows_posix_shell; then
+    [[ "$mode" == 600 ]] || fail "Linux archive-helper office.tar.gz mode must be 600, got $mode"
+  fi
+}
 diagnose_pg() {
   local container="$1"
   echo "PostgreSQL readiness timeout for isolated target: $container" >&2
@@ -141,6 +150,7 @@ backup_dir="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -print -
 grep -Eq '"flywayVersion"[[:space:]]*:[[:space:]]*"9"' "$backup_dir/manifest.json" || fail "Flyway metadata missing"
 grep -Eq '"gitSha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$backup_dir/manifest.json" || fail "full Git SHA missing"
 assert_backup_permissions "$backup_dir"
+assert_archive_helper_permissions "$backup_dir"
 
 echo "==> Stage 9B create and verify quiesced backup"
 consistent_backup
@@ -148,6 +158,7 @@ consistent_dir="$(find "$backup_root/consistent" -mindepth 1 -maxdepth 1 -type d
 [[ -n "$consistent_dir" ]] || fail "consistent backup was not published"
 "$BASH" "$script_dir/backup-verify.sh" "$consistent_dir"
 assert_backup_permissions "$consistent_dir"
+assert_archive_helper_permissions "$consistent_dir"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-backend-1")" == true ]] || fail "consistent backup did not restore Backend"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-worker-1")" == true ]] || fail "consistent backup did not restore Worker"
 

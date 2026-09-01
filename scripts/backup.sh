@@ -55,15 +55,18 @@ flyway_version="$(docker exec "$db_container" psql -U "$db_user" -d "$db_name" -
 backup_note backup "writing PostgreSQL custom-format dump"
 docker exec "$db_container" pg_dump -U "$db_user" -d "$db_name" -Fc > "$tmp/database.dump"
 [[ -s "$tmp/database.dump" ]] || backup_die "database dump is empty"
+backup_restrict_artifact "$tmp" database.dump
 
 backup_note backup "archiving Office persistent storage"
 tmp_mount="$(backup_docker_host_path "$tmp")"
 MSYS_NO_PATHCONV=1 docker run --rm -v "$office_volume:/source:ro" --mount "type=bind,src=$tmp_mount,dst=/out" postgres:16-alpine sh -ec '
+  umask 077
   test -z "$(find /source -type l -print -quit)" || { echo "Office storage contains a symlink" >&2; exit 1; }
   tar -C /source -czf /out/office.tar.gz .
 '
 [[ -s "$tmp/office.tar.gz" ]] || backup_die "Office archive is empty"
 backup_validate_archive "$tmp/office.tar.gz"
+backup_restrict_artifact "$tmp" office.tar.gz
 
 cat > "$tmp/manifest.json" <<EOF
 {
@@ -78,8 +81,12 @@ cat > "$tmp/manifest.json" <<EOF
   "rabbitmq": { "authoritative": false }
 }
 EOF
+backup_restrict_artifact "$tmp" manifest.json
 (cd "$tmp" && sha256sum database.dump office.tar.gz manifest.json > SHA256SUMS)
+backup_restrict_artifact "$tmp" SHA256SUMS
 touch "$tmp/.complete"
+backup_restrict_artifact "$tmp" .complete
+backup_restrict_temp_dir "$tmp"
 backup_verify_dir "$tmp"
 mv "$tmp" "$final"
 tmp=
