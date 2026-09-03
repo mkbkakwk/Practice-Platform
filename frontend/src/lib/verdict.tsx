@@ -3,22 +3,30 @@ import { cn } from "./utils";
 
 export const VERDICT_LABEL: Record<Verdict, string> = {
   PENDING: "评测中",
+  JUDGING: "评测中",
   AC: "通过",
   WA: "答案错误",
   TLE: "超时",
+  MLE: "内存超限",
+  OLE: "输出超限",
   RE: "运行错误",
   CE: "编译错误",
   SE: "系统错误",
+  JUDGE_FAILED: "评测失败",
 };
 
 export const VERDICT_CLASS: Record<Verdict, string> = {
   PENDING: "bg-blue-100 text-blue-700 border-blue-200",
+  JUDGING: "bg-blue-100 text-blue-700 border-blue-200",
   AC: "bg-green-100 text-green-700 border-green-200",
   WA: "bg-red-100 text-red-700 border-red-200",
   TLE: "bg-orange-100 text-orange-700 border-orange-200",
+  MLE: "bg-orange-100 text-orange-700 border-orange-200",
+  OLE: "bg-orange-100 text-orange-700 border-orange-200",
   RE: "bg-red-100 text-red-700 border-red-200",
   CE: "bg-zinc-200 text-zinc-700 border-zinc-300",
   SE: "bg-zinc-200 text-zinc-700 border-zinc-300",
+  JUDGE_FAILED: "bg-zinc-200 text-zinc-700 border-zinc-300",
 };
 
 export function VerdictBadge({ verdict, className }: { verdict: Verdict; className?: string }) {

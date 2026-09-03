@@ -2,6 +2,7 @@
 
 set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-common.sh"
+source "$release_script_dir/release-metadata.sh"
 
 release_require_command docker
 release_require_command git
@@ -13,12 +14,12 @@ release_require_file "$release_env_file" "local release metadata"
 release_require_file "$formal_env_file" "production environment file"
 
 release_keys=(
-  RELEASE_VERSION RELEASE_TAG RELEASE_GIT_SHA RELEASE_MAIN_SHA RELEASE_FLYWAY_VERSION POSTGRES_DB
-  POSTGRES_IMAGE RABBITMQ_IMAGE BACKEND_IMAGE WORKER_IMAGE FRONTEND_IMAGE
-  EXPECTED_BACKEND_IMAGE_ID EXPECTED_WORKER_IMAGE_ID EXPECTED_FRONTEND_IMAGE_ID
+  RELEASE_VERSION RELEASE_TAG RELEASE_GIT_SHA RELEASE_MAIN_SHA RELEASE_FLYWAY_VERSION RELEASE_BUILD_TIME POSTGRES_DB
+  POSTGRES_IMAGE RABBITMQ_IMAGE BACKEND_IMAGE WORKER_IMAGE RUNNER_IMAGE FRONTEND_IMAGE
+  EXPECTED_BACKEND_IMAGE_ID EXPECTED_WORKER_IMAGE_ID EXPECTED_RUNNER_IMAGE_ID EXPECTED_FRONTEND_IMAGE_ID
   EXPECTED_OCI_VERSION FORMAL_POSTGRES_VOLUME FORMAL_RABBITMQ_VOLUME
   FORMAL_DOCS_VOLUME FORMAL_NETWORK FORMAL_POSTGRES_CONTAINER
-  FORMAL_RABBITMQ_CONTAINER FORMAL_BACKEND_CONTAINER FORMAL_WORKER_CONTAINER
+  FORMAL_RABBITMQ_CONTAINER FORMAL_BACKEND_CONTAINER FORMAL_WORKER_CONTAINER FORMAL_RUNNER_CONTAINER
   FORMAL_FRONTEND_CONTAINER FORMAL_FRONTEND_PORT POSTGRES_LOGICAL_BACKUP
   POSTGRES_GLOBALS_BACKUP POSTGRES_BASE_BACKUP RABBITMQ_DEFINITIONS_BACKUP DOCS_BACKUP
 )
@@ -28,7 +29,7 @@ done
 
 secret_keys=(
   POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD
-  JWT_SECRET CORS_ORIGIN
+  JWT_SECRET CORS_ORIGIN RUNNER_TOKEN DOCKER_SOCKET_GID
 )
 for key in "${secret_keys[@]}"; do
   release_require_env_key "$formal_env_file" "$key"
@@ -55,6 +56,16 @@ release_tag="$(release_env_value "$release_env_file" RELEASE_TAG)"
 release_git_sha="$(release_env_value "$release_env_file" RELEASE_GIT_SHA)"
 release_main_sha="$(release_env_value "$release_env_file" RELEASE_MAIN_SHA)"
 release_flyway_version="$(release_env_value "$release_env_file" RELEASE_FLYWAY_VERSION)"
+release_build_time="$(release_env_value "$release_env_file" RELEASE_BUILD_TIME)"
+case "${release_build_time,,}" in
+  replace-with*|change-me*|unknown|"") release_die "RELEASE_BUILD_TIME must be concrete release metadata" ;;
+esac
+metadata_is_utc_build_time "$release_build_time" \
+  || release_die "RELEASE_BUILD_TIME must be an immutable UTC ISO-8601 timestamp"
+unset release_build_time
+
+metadata_is_full_git_sha "$release_git_sha" \
+  || release_die "RELEASE_GIT_SHA must be a full 40-character lowercase Git SHA"
 
 git -C "$release_repo_root" cat-file -e "$release_git_sha^{commit}" 2>/dev/null \
   || release_die "release Git SHA does not exist locally"
@@ -98,6 +109,9 @@ verify_image Backend \
 verify_image Worker \
   "$(release_env_value "$release_env_file" WORKER_IMAGE)" \
   "$(release_env_value "$release_env_file" EXPECTED_WORKER_IMAGE_ID)"
+verify_image Runner \
+  "$(release_env_value "$release_env_file" RUNNER_IMAGE)" \
+  "$(release_env_value "$release_env_file" EXPECTED_RUNNER_IMAGE_ID)"
 verify_image Frontend \
   "$(release_env_value "$release_env_file" FRONTEND_IMAGE)" \
   "$(release_env_value "$release_env_file" EXPECTED_FRONTEND_IMAGE_ID)"
@@ -146,9 +160,10 @@ db_container="$(release_env_value "$release_env_file" FORMAL_POSTGRES_CONTAINER)
 rabbit_container="$(release_env_value "$release_env_file" FORMAL_RABBITMQ_CONTAINER)"
 backend_container="$(release_env_value "$release_env_file" FORMAL_BACKEND_CONTAINER)"
 worker_container="$(release_env_value "$release_env_file" FORMAL_WORKER_CONTAINER)"
+runner_container="$(release_env_value "$release_env_file" FORMAL_RUNNER_CONTAINER)"
 frontend_container="$(release_env_value "$release_env_file" FORMAL_FRONTEND_CONTAINER)"
 
-for container in "$db_container" "$rabbit_container" "$backend_container" "$worker_container" "$frontend_container"; do
+for container in "$db_container" "$rabbit_container" "$backend_container" "$runner_container" "$worker_container" "$frontend_container"; do
   [[ "$(release_container_state "$container")" == "running" ]] \
     || release_die "production container is not running: $container"
 done
@@ -156,6 +171,10 @@ done
   || release_die "PostgreSQL is not healthy"
 [[ "$(release_container_health "$rabbit_container")" == "healthy" ]] \
   || release_die "RabbitMQ is not healthy"
+for container in "$backend_container" "$runner_container" "$worker_container" "$frontend_container"; do
+  [[ "$(release_container_health "$container")" == "healthy" ]] \
+    || release_die "production container is not healthy: $container"
+done
 
 flyway_version="$(docker exec -e PGOPTIONS='-c default_transaction_read_only=on' "$db_container" \
   sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank DESC LIMIT 1"')"
@@ -165,7 +184,7 @@ flyway_version="$(docker exec -e PGOPTIONS='-c default_transaction_read_only=on'
 frontend_port="$(release_env_value "$release_env_file" FORMAL_FRONTEND_PORT)"
 curl --fail --silent --show-error "http://127.0.0.1:$frontend_port/" >/dev/null
 health_json="$(curl --fail --silent --show-error "http://127.0.0.1:$frontend_port/api/health")"
-[[ "$health_json" == *'"ok":true'* ]] || release_die "Backend health did not return ok=true"
+[[ "$health_json" == *'"status":"UP"'* ]] || release_die "Backend liveness did not return status=UP"
 
 echo "Release preflight passed:"
 echo "  tag: $release_tag"

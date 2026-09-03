@@ -58,6 +58,8 @@ services:
     build:
       context: ./worker
       target: test
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
     restart: "no"
     depends_on:
       test-db:
@@ -76,11 +78,60 @@ services:
       OJ_RABBITMQ_EXCHANGE: oj.test.judge
       OJ_RABBITMQ_ROUTING_KEY: oj.test.judge.submit
       OJ_RABBITMQ_QUEUE: oj.test.judge.queue
+      JUDGE_EXECUTION_MODE: legacy-local
       JUDGE_WORKSPACE: /tmp/practice-platform-test-judge
       SPRING_RABBITMQ_LISTENER_SIMPLE_AUTO_STARTUP: "false"
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
     tmpfs:
       - /tmp/practice-platform-test-judge
     command: ["mvn", "-B", "test"]
+
+  runner-test:
+    build:
+      context: ./runner
+      target: test
+    restart: "no"
+    volumes:
+      - ./test/fixtures/runner:/contracts/runner:ro
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      RUNNER_TOKEN: test-runner-token
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
+    command: ["mvn", "-B", "test"]
+
+  runner-contract:
+    build:
+      context: ./runner
+      target: runtime
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      SPRING_PROFILES_ACTIVE: runner-contract-test
+      RUNNER_TOKEN: test-runner-token
+      RUNNER_MAX_CONCURRENT_JOBS: 1
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  worker-runner-contract-test:
+    build:
+      context: ./worker
+      target: test
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    depends_on:
+      runner-contract:
+        condition: service_healthy
+    environment:
+      RUNNER_CONTRACT_BASE_URL: http://runner-contract:8080
+      RUNNER_CONTRACT_TOKEN: test-runner-token
+      RUNNER_CONTRACT_FIXTURE_DIR: /contracts/runner
+    command: ["mvn", "-B", "-Dtest=RemoteSandboxRunnerContractIT", "test"]
 
   frontend-test:
     build:
@@ -96,3 +147,134 @@ services:
     restart: "no"
     working_dir: /workspace
     command: ["bash", "scripts/test-release-config.sh"]
+
+  release-logging-backend:
+    build:
+      context: ./backend-spring
+      target: runtime
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      # This service exists only to verify release-profile logging. It shares the
+      # suite database, so it must not run the production outbox relay while
+      # backend integration tests are using their isolated fixtures.
+      OJ_OUTBOX_ENABLED: "false"
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+      RABBITMQ_HOST: test-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oj_test
+      RABBITMQ_PASSWORD: oj_test_password
+      JWT_SECRET: test-only-secret-not-for-production-0123456789
+      DOC_STORAGE: /tmp/practice-platform-release-logging-docs
+    tmpfs:
+      - /tmp/practice-platform-release-logging-docs
+
+  release-logging-backend-failure:
+    build:
+      context: ./backend-spring
+      target: runtime
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      DATABASE_URL: jdbc:postgresql://db-internal.example:5432/private_database
+      POSTGRES_USER: stage_db_user
+      POSTGRES_PASSWORD: test-only-failure-password
+      RABBITMQ_HOST: test-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oj_test
+      RABBITMQ_PASSWORD: oj_test_password
+      JWT_SECRET: test-only-secret-not-for-production-0123456789
+      DOC_STORAGE: /tmp/practice-platform-release-logging-failure-docs
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 1000
+    tmpfs:
+      - /tmp/practice-platform-release-logging-failure-docs
+
+  release-logging-runner:
+    build:
+      context: ./runner
+      target: runtime
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      RUNNER_TOKEN: test-runner-token
+
+  release-logging-worker:
+    build:
+      context: ./worker
+      target: runtime
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-rabbitmq:
+        condition: service_healthy
+      release-logging-runner:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+      RABBITMQ_HOST: test-rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: oj_test
+      RABBITMQ_PASSWORD: oj_test_password
+      RUNNER_BASE_URL: http://release-logging-runner:8080
+      RUNNER_TOKEN: test-runner-token
+      JUDGE_EXECUTION_MODE: remote
+
+  release-logging-worker-failure:
+    build:
+      context: ./worker
+      target: runtime
+      additional_contexts:
+        fixtures: ./test/fixtures/runner
+    restart: "no"
+    depends_on:
+      test-db:
+        condition: service_healthy
+      release-logging-runner:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      DATABASE_URL: jdbc:postgresql://test-db:5432/oj_test
+      POSTGRES_USER: oj_test
+      POSTGRES_PASSWORD: oj_test_password
+      RABBITMQ_HOST: rabbit-internal.example
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: stage_rabbit_user
+      RABBITMQ_PASSWORD: test-only-failure-password
+      RUNNER_BASE_URL: http://release-logging-runner:8080
+      RUNNER_TOKEN: test-runner-token
+      JUDGE_EXECUTION_MODE: remote
+      SPRING_RABBITMQ_CONNECTION_TIMEOUT: 1000
+
+  release-logging-runner-production:
+    build:
+      context: ./runner
+      target: runtime
+    restart: "no"
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      APP_GIT_SHA: 0123456789abcdef0123456789abcdef01234567
+      APP_BUILD_TIME: "2026-08-30T00:00:00Z"
+      RUNNER_TOKEN: test-runner-token

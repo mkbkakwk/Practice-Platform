@@ -23,6 +23,8 @@ public class ProblemUpsertRequest {
     private Object samples;   // JSON array of {input,output}
     private Object testCases; // JSON array of {input,output}
     private Boolean visible = true;
+    @jakarta.validation.constraints.Pattern(regexp = "PUBLIC|CONTEST_ONLY", message = "可见范围无效")
+    private String contentVisibility = "PUBLIC";
 
     public String getSlug() { return slug; }
     public void setSlug(String slug) { this.slug = slug; }
@@ -48,4 +50,6 @@ public class ProblemUpsertRequest {
     public void setTestCases(Object testCases) { this.testCases = testCases; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
 }

@@ -32,6 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -59,7 +60,8 @@ class AuthPermissionIntegrationTest {
     @BeforeEach
     void resetDatabase() {
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
+                    "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
     }
@@ -68,7 +70,8 @@ class AuthPermissionIntegrationTest {
     void cleanDatabase() {
         CurrentUser.clear();
         jdbcTemplate.execute("""
-                TRUNCATE TABLE "OfficeDocSubmission", "OfficeRecord", "Submission",
+                TRUNCATE TABLE "judge_outbox", rejudge_batch_item, rejudge_batch, algorithm_judge_history, "OfficeDocSubmission", "OfficeRecord", "Submission",
+                    "ContestProblem", "ContestParticipant", "Contest",
                     "OfficeExercise", "OfficeQuestion", "Problem", "User" RESTART IDENTITY
                 """);
     }
@@ -225,7 +228,10 @@ class AuthPermissionIntegrationTest {
 
         register("anonymous_register");
         login("anonymous_register", PASSWORD, status().isOk());
-        mockMvc.perform(get("/api/health")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/health"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"status\":\"UP\"}", true));
+        mockMvc.perform(get("/api/readiness")).andExpect(status().isOk());
         mockMvc.perform(get("/api/submissions/meta/languages")).andExpect(status().isOk());
         mockMvc.perform(get("/api/problems")).andExpect(status().isOk());
         mockMvc.perform(get("/api/problems/public-problem"))
@@ -245,6 +251,24 @@ class AuthPermissionIntegrationTest {
                 "/api/not-whitelisted")) {
             mockMvc.perform(get(protectedPath)).andExpect(status().isUnauthorized());
         }
+    }
+
+    @Test
+    void detailedReleaseVersionEvidenceIsAdminOnly() throws Exception {
+        TestUser student = createUser("version_student", "USER");
+        TestUser teacher = createUser("version_teacher", "TEACHER");
+        TestUser admin = createUser("version_admin", "ADMIN");
+
+        mockMvc.perform(get("/api/admin/version"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/admin/version").header("Authorization", bearer(student.token())))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/admin/version").header("Authorization", bearer(teacher.token())))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/admin/version").header("Authorization", bearer(admin.token())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gitSha").exists())
+                .andExpect(jsonPath("$.flywayVersion").value("9"));
     }
 
     private int demoteAs(TestUser requester, int targetId, CountDownLatch start) throws Exception {

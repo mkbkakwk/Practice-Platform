@@ -15,13 +15,17 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const fileRef = useRef<HTMLInputElement>(null);
+  const starterFileRef = useRef<HTMLInputElement>(null);
   const [currentId, setCurrentId] = useState<number | null>(mode === "edit" ? Number(id) : null);
   const [title, setTitle] = useState("");
   const [difficulty, setDifficulty] = useState("EASY");
   const [description, setDescription] = useState(DEFAULT_DESCRIPTION);
   const [visible, setVisible] = useState(true);
+  const [contentVisibility, setContentVisibility] = useState<"PUBLIC" | "CONTEST_ONLY">("PUBLIC");
   const [teacherDocName, setTeacherDocName] = useState<string | null>(null);
+  const [starterDocName, setStarterDocName] = useState<string | null>(null);
   const [teacherFile, setTeacherFile] = useState<File | null>(null);
+  const [starterFile, setStarterFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -38,7 +42,9 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
       setDifficulty(exercise.difficulty);
       setDescription(exercise.description);
       setVisible(exercise.visible);
+      setContentVisibility(exercise.contentVisibility ?? "PUBLIC");
       setTeacherDocName(exercise.teacherDocName);
+      setStarterDocName(exercise.starterDocName);
     }).catch((exception) => active && setError(exception instanceof ApiError ? exception.message : "加载失败"))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -49,7 +55,7 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
     if (!title.trim() || !description.trim()) { setError("请填写标题和要求"); return; }
     setSaving(true); setSaved(false); setError(null);
     try {
-      const payload = { title: title.trim(), difficulty, description: description.trim(), visible };
+      const payload = { title: title.trim(), difficulty, description: description.trim(), visible, contentVisibility };
       if (currentId) {
         await api.updateDocExercise(currentId, payload);
       } else {
@@ -79,6 +85,21 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
     }
   }
 
+  async function handleUploadStarter() {
+    if (!starterFile || !currentId) return;
+    setUploading(true); setError(null);
+    try {
+      await api.uploadStarterDoc(currentId, starterFile);
+      setStarterDocName(starterFile.name);
+      setStarterFile(null);
+      if (starterFileRef.current) starterFileRef.current.value = "";
+    } catch (exception) {
+      setError(exception instanceof ApiError ? exception.message : "上传起始文档失败");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
 
   return (
@@ -91,19 +112,30 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
           <div><Label className="mb-1.5 block text-xs">难度</Label><div className="flex gap-2">{DIFFS.map((item) => <Button key={item.key} type="button" size="sm" variant={difficulty === item.key ? "default" : "outline"} onClick={() => setDifficulty(item.key)}>{item.label}</Button>)}</div></div>
           <div><Label className="mb-1.5 block text-xs">排版要求（Markdown）</Label><textarea className="min-h-32 w-full rounded-md border border-zinc-200 p-3 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
           <div className="flex items-center justify-between"><div><Label className="text-sm font-semibold">启用状态</Label><p className="text-xs text-zinc-400">停用后学生不能查看或提交，历史数据保留</p></div><button type="button" onClick={() => setVisible(!visible)} className={cn("relative h-6 w-11 rounded-full", visible ? "bg-zinc-900" : "bg-zinc-300")}><span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform", visible ? "translate-x-5" : "translate-x-0.5")} /></button></div>
+          <div><Label className="mb-1.5 block text-xs">内容可见范围</Label><select aria-label="内容可见范围" value={contentVisibility} onChange={(event) => setContentVisibility(event.target.value as "PUBLIC" | "CONTEST_ONLY")} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"><option value="PUBLIC">PUBLIC（练习区公开）</option><option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option></select></div>
         </Card>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex items-center gap-3"><Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{currentId ? "保存信息" : "创建练习"}</Button>{saved && <span className="text-sm text-green-600">✓ 已保存</span>}</div>
       </form>
 
       {currentId && <Card className="mt-5 p-5">
-        <h2 className="mb-2 text-sm font-semibold">参考文档</h2>
+        <h2 className="mb-2 text-sm font-semibold">学生待修改文件（Starter）</h2>
+        {starterDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{starterDocName}</p>}
+        <p className="mb-3 text-xs text-zinc-500">学生会下载此文件并在本地修改。它与教师参考文档独立存储。</p>
+        <input ref={starterFileRef} aria-label="学生待修改文件" type="file" accept=".docx" className="hidden" onChange={(event) => setStarterFile(event.target.files?.[0] ?? null)} />
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => starterFileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{starterFile && <span className="text-sm text-zinc-600">{starterFile.name}</span>}{starterDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadStarterDoc(currentId, starterDocName)}>下载检查</Button>}</div>
+        {starterFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadStarter()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Starter"}</Button>}
+      </Card>}
+
+      {currentId && <Card className="mt-5 p-5">
+        <h2 className="mb-2 text-sm font-semibold">教师参考文档（Reference）</h2>
         {teacherDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{teacherDocName}</p>}
         <p className="mb-3 text-xs text-zinc-500">上传新文件会替换当前参考文档；旧文件在确认未被其他记录使用后清理。</p>
-        <input ref={fileRef} type="file" accept=".docx" className="hidden" onChange={(event) => setTeacherFile(event.target.files?.[0] ?? null)} />
-        <div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-zinc-600">{teacherFile.name}</span>}</div>
-        {teacherFile && <Button className="mt-3" size="sm" onClick={() => void handleUploadTeacher()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传参考文档"}</Button>}
+        <input ref={fileRef} aria-label="教师参考文档" type="file" accept=".docx" className="hidden" onChange={(event) => setTeacherFile(event.target.files?.[0] ?? null)} />
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-zinc-600">{teacherFile.name}</span>}{teacherDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadTeacherDoc(currentId, teacherDocName)}>下载检查</Button>}</div>
+        {teacherFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadTeacher()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Reference"}</Button>}
       </Card>}
+      {currentId && <p className="mt-3 text-sm text-zinc-600">完成状态：{starterDocName && teacherDocName ? "Starter 与 Reference 已齐全，可用于公开练习或比赛。" : "尚未完成；使用前必须同时上传 Starter 与 Reference。"}</p>}
       {currentId && <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => navigate("/admin/office-doc")}>完成</Button><Button asChild><a href={`#/office/docs/${currentId}`}>查看练习</a></Button></div>}
     </div>
   );

@@ -6,6 +6,7 @@ public class SubmissionView {
     private Integer id;
     private Integer userId;
     private Integer problemId;
+    private Long contestProblemId;
     private String language;
     private String code;
     private String verdict;
@@ -25,6 +26,8 @@ public class SubmissionView {
     public void setUserId(Integer userId) { this.userId = userId; }
     public Integer getProblemId() { return problemId; }
     public void setProblemId(Integer problemId) { this.problemId = problemId; }
+    public Long getContestProblemId() { return contestProblemId; }
+    public void setContestProblemId(Long contestProblemId) { this.contestProblemId = contestProblemId; }
     public String getLanguage() { return language; }
     public void setLanguage(String language) { this.language = language; }
     public String getCode() { return code; }

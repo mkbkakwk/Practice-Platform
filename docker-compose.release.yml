@@ -23,6 +23,11 @@ services:
     networks:
       formal-network:
         aliases: [db]
+    logging: &formal-log-rotation
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rabbitmq:
     image: ${RABBITMQ_IMAGE:?RABBITMQ_IMAGE is required}
@@ -44,6 +49,7 @@ services:
     networks:
       formal-network:
         aliases: [rabbitmq]
+    logging: *formal-log-rotation
 
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
@@ -68,10 +74,14 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
       PROMOTE_FIRST_ADMIN: "false"
       DOC_STORAGE: /app/oj-docs
+      APP_GIT_SHA: ${RELEASE_GIT_SHA:?RELEASE_GIT_SHA is required}
+      APP_VERSION: ${RELEASE_VERSION:?RELEASE_VERSION is required}
+      APP_BUILD_TIME: ${RELEASE_BUILD_TIME:?RELEASE_BUILD_TIME is required}
+      SPRING_PROFILES_ACTIVE: production
     volumes:
       - formal-docs:/app/oj-docs
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:4000/api/health"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:4000/api/readiness"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -79,6 +89,50 @@ services:
     networks:
       formal-network:
         aliases: [backend]
+    logging: *formal-log-rotation
+
+  runner:
+    image: ${RUNNER_IMAGE:?RUNNER_IMAGE is required}
+    pull_policy: never
+    container_name: ${FORMAL_RUNNER_CONTAINER:-oj-runner}
+    restart: unless-stopped
+    read_only: true
+    user: "10001:10001"
+    group_add:
+      - "${DOCKER_SOCKET_GID:?DOCKER_SOCKET_GID is required}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=33554432
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?RUNNER_TOKEN is required}
+      RUNNER_SANDBOX_MODE: docker
+      RUNNER_INSTANCE_ID: ${RUNNER_INSTANCE_ID:-oj-runner}
+      RUNNER_MAX_CONCURRENT_JOBS: ${RUNNER_MAX_CONCURRENCY:-4}
+      RUNNER_DOCKER_PYTHON_IMAGE: ${RUNNER_DOCKER_PYTHON_IMAGE:?RUNNER_DOCKER_PYTHON_IMAGE is required}
+      RUNNER_DOCKER_JAVASCRIPT_IMAGE: ${RUNNER_DOCKER_JAVASCRIPT_IMAGE:?RUNNER_DOCKER_JAVASCRIPT_IMAGE is required}
+      RUNNER_DOCKER_C_IMAGE: ${RUNNER_DOCKER_C_IMAGE:?RUNNER_DOCKER_C_IMAGE is required}
+      RUNNER_DOCKER_CPP_IMAGE: ${RUNNER_DOCKER_CPP_IMAGE:?RUNNER_DOCKER_CPP_IMAGE is required}
+      RUNNER_DOCKER_JAVA_IMAGE: ${RUNNER_DOCKER_JAVA_IMAGE:?RUNNER_DOCKER_JAVA_IMAGE is required}
+      RUNNER_DOCKER_PIDS_LIMIT: ${RUNNER_DOCKER_PIDS_LIMIT:-64}
+      SPRING_PROFILES_ACTIVE: production
+      APP_GIT_SHA: ${RELEASE_GIT_SHA:?RELEASE_GIT_SHA is required}
+      APP_VERSION: ${RELEASE_VERSION:?RELEASE_VERSION is required}
+      APP_BUILD_TIME: ${RELEASE_BUILD_TIME:?RELEASE_BUILD_TIME is required}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/api/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    networks:
+      formal-network:
+        aliases: [runner]
+    logging: *formal-log-rotation
 
   worker:
     image: ${WORKER_IMAGE:?WORKER_IMAGE is required}
@@ -92,6 +146,8 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      runner:
+        condition: service_healthy
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -103,8 +159,16 @@ services:
       JUDGE_WORKSPACE: /tmp/oj-judge
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
       WORKER_MAX_CONCURRENCY: ${WORKER_MAX_CONCURRENCY:-2}
+      WORKER_HEALTH_PORT: 8081
+      JUDGE_EXECUTION_MODE: remote
+      RUNNER_BASE_URL: http://runner:8080
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?RUNNER_TOKEN is required}
+      SPRING_PROFILES_ACTIVE: production
+      APP_GIT_SHA: ${RELEASE_GIT_SHA:?RELEASE_GIT_SHA is required}
+      APP_VERSION: ${RELEASE_VERSION:?RELEASE_VERSION is required}
+      APP_BUILD_TIME: ${RELEASE_BUILD_TIME:?RELEASE_BUILD_TIME is required}
     healthcheck:
-      test: ["CMD-SHELL", "grep -aq 'app.jar' /proc/1/cmdline"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8081/api/readiness"]
       interval: 10s
       timeout: 3s
       retries: 12
@@ -112,6 +176,7 @@ services:
     networks:
       formal-network:
         aliases: [worker]
+    logging: *formal-log-rotation
 
   frontend:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}
@@ -132,6 +197,7 @@ services:
     networks:
       formal-network:
         aliases: [frontend]
+    logging: *formal-log-rotation
 
 volumes:
   formal-pgdata:

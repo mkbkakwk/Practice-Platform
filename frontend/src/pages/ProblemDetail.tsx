@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import CodeMirror from "@uiw/react-codemirror";
-import { python } from "@codemirror/lang-python";
-import { javascript } from "@codemirror/lang-javascript";
-import { cpp } from "@codemirror/lang-cpp";
-import { java } from "@codemirror/lang-java";
+import { CodeEditor } from "@/components/CodeEditor";
 import { Markdown } from "@/components/Markdown";
 import {
   api,
@@ -12,6 +8,8 @@ import {
   type LanguageDef,
   type Verdict,
   ApiError,
+  getApiErrorMessage,
+  isAbortError,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { VerdictBadge, DIFFICULTY_LABEL, DIFFICULTY_CLASS } from "@/lib/verdict";
@@ -35,22 +33,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-function langExtension(id: string) {
-  switch (id) {
-    case "python":
-      return [python()];
-    case "javascript":
-      return [javascript()];
-    case "cpp":
-    case "c":
-      return [cpp()];
-    case "java":
-      return [java()];
-    default:
-      return [];
-  }
-}
 
 interface SubmitResult {
   verdict: Verdict;
@@ -81,12 +63,16 @@ export default function ProblemDetail() {
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [error, setError] = useState("");
   const codeByLang = useRef<Record<string, string>>({});
+  const pollController = useRef<AbortController | null>(null);
+  const submitAttempt = useRef(0);
 
   useEffect(() => {
     if (!slug) return;
+    let active = true;
     setLoading(true);
     Promise.all([api.getProblem(slug), api.getLanguages()])
       .then(([pRes, lRes]) => {
+        if (!active) return;
         setProblem(pRes.problem);
         setLanguages(lRes.languages);
         const first = lRes.languages[0];
@@ -94,10 +80,18 @@ export default function ProblemDetail() {
           setLangId(first.id);
           setCode(first.template);
           codeByLang.current[first.id] = first.template;
+        } else {
+          setLangId("");
+          setCode("");
+          setError("当前没有可用的编程语言，请联系管理员。");
         }
       })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "加载失败"))
-      .finally(() => setLoading(false));
+      .catch((e) => { if (active) setError(e instanceof ApiError ? e.message : "加载失败"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => {
+      active = false;
+      pollController.current?.abort();
+    };
   }, [slug]);
 
   // Persist code per-language, swap templates when switching.
@@ -109,7 +103,11 @@ export default function ProblemDetail() {
   };
 
   const submit = async () => {
-    if (!problem || !user) return;
+    if (!problem || !user || !langId || submitting || polling) return;
+    pollController.current?.abort();
+    const controller = new AbortController();
+    pollController.current = controller;
+    const attempt = ++submitAttempt.current;
     setSubmitting(true);
     setPolling(false);
     setPollCount(0);
@@ -118,14 +116,17 @@ export default function ProblemDetail() {
     try {
       // 1) enqueue
       const res = await api.submit(problem.id, langId, code);
+      if (controller.signal.aborted || attempt !== submitAttempt.current) return;
       // 2) poll for the verdict
       setSubmitting(false);
       setPolling(true);
       const settled = await api.pollSubmission(res.submissionId, {
         intervalMs: 1200,
         timeoutMs: 60000,
-        onTick: (n) => setPollCount(n),
+        signal: controller.signal,
+        onTick: (n) => { if (attempt === submitAttempt.current) setPollCount(n); },
       });
+      if (controller.signal.aborted || attempt !== submitAttempt.current) return;
       setResult({
         verdict: settled.verdict,
         message: settled.message,
@@ -134,11 +135,18 @@ export default function ProblemDetail() {
         passed: settled.passed,
         total: settled.total,
       });
+      if (settled.verdict === "PENDING" || settled.verdict === "JUDGING") {
+        setError("判题仍在进行，可前往提交记录查看最终结果。");
+      }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "提交失败");
+      if (!isAbortError(e) && attempt === submitAttempt.current) {
+        setError(getApiErrorMessage(e, "提交失败"));
+      }
     } finally {
-      setSubmitting(false);
-      setPolling(false);
+      if (attempt === submitAttempt.current && !controller.signal.aborted) {
+        setSubmitting(false);
+        setPolling(false);
+      }
     }
   };
 
@@ -244,7 +252,7 @@ export default function ProblemDetail() {
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base">代码编辑器</CardTitle>
                 <div className="ml-auto w-44">
-                  <Select value={langId} onValueChange={onLangChange}>
+                  <Select value={langId || undefined} onValueChange={onLangChange} disabled={languages.length === 0}>
                     <SelectTrigger size="sm">
                       <SelectValue />
                     </SelectTrigger>
@@ -260,20 +268,12 @@ export default function ProblemDetail() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-hidden rounded-md border">
-                <CodeMirror
-                  value={code}
-                  height="360px"
-                  theme="light"
-                  extensions={langExtension(langId)}
-                  onChange={(v) => setCode(v)}
-                  basicSetup={{
-                    lineNumbers: true,
-                    highlightActiveLine: true,
-                    foldGutter: false,
-                  }}
-                />
-              </div>
+              <CodeEditor
+                ariaLabel="源代码"
+                value={code}
+                language={langId}
+                onChange={setCode}
+              />
 
               {!user && (
                 <p className="mt-3 text-sm text-amber-600">
@@ -286,7 +286,7 @@ export default function ProblemDetail() {
               )}
 
               <div className="mt-3 flex items-center gap-2">
-                <Button onClick={submit} disabled={submitting || polling || !user} className="gap-1.5">
+                <Button onClick={submit} disabled={submitting || polling || !user || !langId} className="gap-1.5">
                   {(submitting || polling) ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
@@ -314,7 +314,7 @@ export default function ProblemDetail() {
                 </Button>
               </div>
 
-              {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+              {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
             </CardContent>
           </Card>
 

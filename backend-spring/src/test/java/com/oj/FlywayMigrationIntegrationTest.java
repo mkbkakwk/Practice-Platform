@@ -29,7 +29,7 @@ class FlywayMigrationIntegrationTest {
 
     private static final String[] BUSINESS_TABLES = {
             "User", "Problem", "Submission", "OfficeQuestion", "OfficeRecord",
-            "OfficeExercise", "OfficeDocSubmission"
+            "OfficeExercise", "OfficeDocSubmission", "judge_outbox"
     };
 
     @Autowired
@@ -66,14 +66,39 @@ class FlywayMigrationIntegrationTest {
                 FROM information_schema.tables
                 WHERE table_schema = ?
                   AND table_name = ANY (?)
-                """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(7);
+                """, Integer.class, database.schema(), BUSINESS_TABLES)).isEqualTo(8);
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(4);
+                Integer.class)).isEqualTo(9);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema=? AND table_name IN ('Contest', 'ContestParticipant', 'ContestProblem')
+                """, Integer.class, database.schema())).isEqualTo(3);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=? AND table_name IN ('Submission', 'OfficeDocSubmission')
+                  AND column_name='contest_problem_id'
+                """, Integer.class, database.schema())).isEqualTo(2);
         assertThat(database.jdbc().queryForObject("""
                 SELECT column_default FROM information_schema.columns
                 WHERE table_schema=? AND table_name='User' AND column_name='token_version'
                 """, String.class, database.schema())).isEqualTo("0");
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=? AND table_name='Submission'
+                  AND column_name IN ('judge_token', 'judge_lease_until',
+                                      'judge_attempt_count', 'judge_failure_category')
+                """, Integer.class, database.schema())).isEqualTo(4);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=? AND table_name='OfficeDocSubmission'
+                  AND column_name IN ('judge_version', 'result_detail', 'error_category', 'judged_at')
+                """, Integer.class, database.schema())).isEqualTo(4);
+        assertThat(database.jdbc().queryForObject("""
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_schema=? AND table_name='OfficeDocSubmission'
+                  AND column_name='student_doc_path'
+                """, String.class, database.schema())).isEqualTo("YES");
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM \"Problem\"", Integer.class)).isZero();
         assertThat(database.jdbc().queryForObject(
@@ -97,6 +122,116 @@ class FlywayMigrationIntegrationTest {
                 "SELECT COUNT(*) FROM \"Problem\"", Integer.class)).isZero();
         assertThat(database.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM \"OfficeQuestion\"", Integer.class)).isZero();
+    }
+
+    @Test
+    void v8AndV9UpgradeLegacyOfficeContestRowsWithoutChangingTheirDocxTarget() {
+        TestDatabase database = newDatabase("office_v8_upgrade");
+        Flyway throughV7 = Flyway.configure()
+                .dataSource(database.dataSource())
+                .defaultSchema(database.schema())
+                .schemas(database.schema())
+                .locations("classpath:db/migration")
+                .target(MigrationVersion.fromVersion("7"))
+                .validateMigrationNaming(true)
+                .load();
+        throughV7.migrate();
+        JdbcTemplate jdbc = database.jdbc();
+        int ownerId = insertUser(jdbc, "office_v8_owner");
+        int exerciseId = insertExercise(jdbc, ownerId);
+        jdbc.update("""
+                UPDATE "OfficeExercise"
+                SET teacher_doc_path='legacy-reference-id.docx',
+                    teacher_doc_name='旧参考文档.docx'
+                WHERE id=?
+                """, exerciseId);
+        int contestId = jdbc.queryForObject("""
+                INSERT INTO "Contest" (title, owner_id, start_at, end_at)
+                VALUES ('Legacy office contest', ?, NOW() + INTERVAL '1 day', NOW() + INTERVAL '2 days')
+                RETURNING id
+                """, Integer.class, ownerId);
+        long contestProblemId = jdbc.queryForObject("""
+                INSERT INTO "ContestProblem"
+                    (contest_id, problem_type, office_exercise_id, display_order, label)
+                VALUES (?, 'OFFICE', ?, 1, 'A')
+                RETURNING id
+                """, Long.class, contestId, exerciseId);
+
+        database.flyway().migrate();
+
+        assertThat(jdbc.queryForObject(
+                "SELECT problem_type FROM \"ContestProblem\" WHERE id=?",
+                String.class, contestProblemId)).isEqualTo("OFFICE_DOCX");
+        assertThat(jdbc.queryForObject(
+                "SELECT office_exercise_id FROM \"ContestProblem\" WHERE id=?",
+                Integer.class, contestProblemId)).isEqualTo(exerciseId);
+        assertThat(jdbc.queryForObject(
+                "SELECT teacher_doc_path FROM \"OfficeExercise\" WHERE id=?",
+                String.class, exerciseId)).isEqualTo("legacy-reference-id.docx");
+        assertThat(jdbc.queryForObject(
+                "SELECT teacher_doc_name FROM \"OfficeExercise\" WHERE id=?",
+                String.class, exerciseId)).isEqualTo("旧参考文档.docx");
+        assertThat(jdbc.queryForObject(
+                "SELECT starter_doc_path IS NULL AND starter_doc_name IS NULL FROM \"OfficeExercise\" WHERE id=?",
+                Boolean.class, exerciseId)).isTrue();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.columns
+                WHERE table_schema=?
+                  AND ((table_name='OfficeExercise' AND column_name IN ('starter_doc_path','starter_doc_name'))
+                    OR (table_name='ContestProblem' AND column_name='office_question_id')
+                    OR (table_name='OfficeRecord' AND column_name='contest_problem_id'))
+                """, Integer.class, database.schema())).isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT scoring_mode FROM \"Contest\" WHERE id=?", String.class, contestId))
+                .isEqualTo("SCORE");
+        assertThat(jdbc.queryForObject("SELECT freeze_at IS NULL FROM \"Contest\" WHERE id=?", Boolean.class, contestId))
+                .isTrue();
+    }
+
+    @Test
+    void v9BackfillsHistoricalAlgorithmTerminalResultsFromAV8Schema() {
+        TestDatabase database = newDatabase("v8_to_v9_judge_history");
+        Flyway throughV8 = Flyway.configure()
+                .dataSource(database.dataSource())
+                .defaultSchema(database.schema())
+                .schemas(database.schema())
+                .locations("classpath:db/migration")
+                .target(MigrationVersion.fromVersion("8"))
+                .validateMigrationNaming(true)
+                .load();
+        throughV8.migrate();
+        JdbcTemplate jdbc = database.jdbc();
+        int ownerId = insertUser(jdbc, "v8_history_owner");
+        int problemId = insertProblem(jdbc, "v8-history-problem", ownerId);
+        int contestId = jdbc.queryForObject("""
+                INSERT INTO "Contest" (title, owner_id, start_at, end_at)
+                VALUES ('V8 history contest', ?, NOW() - INTERVAL '1 hour', NOW() + INTERVAL '1 hour')
+                RETURNING id
+                """, Integer.class, ownerId);
+        long contestProblemId = jdbc.queryForObject("""
+                INSERT INTO "ContestProblem"
+                    (contest_id, problem_type, algorithm_problem_id, display_order, label)
+                VALUES (?, 'ALGORITHM', ?, 1, 'A')
+                RETURNING id
+                """, Long.class, contestId, problemId);
+        int submissionId = jdbc.queryForObject("""
+                INSERT INTO "Submission" (user_id, problem_id, contest_problem_id, language, code, verdict,
+                    passed, total, time_ms, memory_kb, message)
+                VALUES (?, ?, ?, 'python', 'print(1)', 'AC', 1, 1, 7, 512, 'accepted')
+                RETURNING id
+                """, Integer.class, ownerId, problemId, contestProblemId);
+
+        database.flyway().migrate();
+
+        assertThat(jdbc.queryForObject("SELECT scoring_mode FROM \"Contest\" WHERE id=?", String.class, contestId))
+                .isEqualTo("SCORE");
+        assertThat(jdbc.queryForObject("SELECT freeze_at IS NULL FROM \"Contest\" WHERE id=?", Boolean.class, contestId))
+                .isTrue();
+        assertThat(jdbc.queryForObject("SELECT judge_generation FROM \"Submission\" WHERE id=?", Integer.class, submissionId))
+                .isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM algorithm_judge_history
+                WHERE submission_id=? AND judge_generation=0 AND verdict='AC' AND passed=1 AND total=1
+                """, Integer.class, submissionId)).isEqualTo(1);
     }
 
     @Test
@@ -152,7 +287,7 @@ class FlywayMigrationIntegrationTest {
                 """, String.class)).isEqualTo("BASELINE");
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success",
-                Integer.class)).isEqualTo(4);
+                Integer.class)).isEqualTo(9);
         assertThat(jdbc.queryForObject(
                 "SELECT solved_count FROM \"User\" WHERE id=?",
                 Integer.class, userId)).isEqualTo(1);
@@ -174,6 +309,12 @@ class FlywayMigrationIntegrationTest {
         assertThat(jdbc.queryForObject(
                 "SELECT score FROM \"OfficeDocSubmission\" WHERE exercise_id=?",
                 Integer.class, exerciseId)).isEqualTo(88);
+        assertThat(jdbc.queryForObject(
+                "SELECT judge_version FROM \"OfficeDocSubmission\" WHERE exercise_id=?",
+                String.class, exerciseId)).isEqualTo("legacy");
+        assertThat(jdbc.queryForObject(
+                "SELECT result_detail::text FROM \"OfficeDocSubmission\" WHERE exercise_id=?",
+                String.class, exerciseId)).isEqualTo("{}");
     }
 
     @Test
@@ -279,6 +420,11 @@ class FlywayMigrationIntegrationTest {
                 "UPDATE \"Submission\" SET passed=2, total=1 WHERE problem_id=?", problemId);
         assertDatabaseRejects(jdbc,
                 "UPDATE \"OfficeDocSubmission\" SET score=101 WHERE id=?", documentSubmissionId);
+        assertDatabaseRejects(jdbc,
+                "UPDATE \"OfficeDocSubmission\" SET judge_version=' ' WHERE id=?", documentSubmissionId);
+        assertDatabaseRejects(jdbc,
+                "UPDATE \"OfficeDocSubmission\" SET result_detail=to_jsonb(repeat('x', 262145)) WHERE id=?",
+                documentSubmissionId);
         assertDatabaseRejects(jdbc, """
                 INSERT INTO "User" (username, password, role)
                 VALUES ('valid_user', 'hash', 'USER')

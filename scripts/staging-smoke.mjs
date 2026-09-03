@@ -49,7 +49,13 @@ console.log("PASS staging build marker");
 
 const health = await request("/api/health");
 expectStatus(health, 200, "backend health through frontend proxy");
-if (health.body?.ok !== true) throw new Error("backend health response did not contain ok=true");
+if (health.body?.status !== "UP") throw new Error("backend health response was not status=UP");
+console.log("PASS backend health response contract");
+
+const readiness = await request("/api/readiness");
+expectStatus(readiness, 200, "backend readiness through frontend proxy");
+if (readiness.body?.status !== "UP") throw new Error("backend readiness response was not status=UP");
+console.log("PASS backend readiness response contract");
 
 const problems = await request("/api/problems");
 expectStatus(problems, 200, "anonymous problem list");

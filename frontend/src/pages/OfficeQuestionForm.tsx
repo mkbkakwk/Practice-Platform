@@ -30,6 +30,7 @@ interface FormState {
   answer: string;
   explanation: string;
   visible: boolean;
+  contentVisibility: "PUBLIC" | "CONTEST_ONLY";
 }
 
 function emptyForm(): FormState {
@@ -43,6 +44,7 @@ function emptyForm(): FormState {
     answer: "",
     explanation: "",
     visible: true,
+    contentVisibility: "PUBLIC",
   };
 }
 
@@ -72,6 +74,7 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
           answer: question.answer || "",
           explanation: question.explanation || "",
           visible: question.visible ?? true,
+          contentVisibility: question.contentVisibility ?? "PUBLIC",
         });
       })
       .catch((e: Error) => active && setError(e.message))
@@ -360,6 +363,16 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
               )}
             />
           </button>
+        </Card>
+
+        <Card className="space-y-2 p-5">
+          <Label htmlFor="office-question-visibility" className="text-sm font-semibold text-zinc-700">内容可见范围</Label>
+          <select id="office-question-visibility" value={form.contentVisibility}
+            onChange={(event) => patch({ contentVisibility: event.target.value as FormState["contentVisibility"] })}
+            className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
+            <option value="PUBLIC">PUBLIC（练习区公开）</option>
+            <option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option>
+          </select>
         </Card>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

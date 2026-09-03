@@ -14,9 +14,14 @@ public class OfficeExerciseEntity {
     private String title;
     private String difficulty;
     private String description;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String starterDocPath;
+    private String starterDocName;
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String teacherDocPath;
     private String teacherDocName;
     private Boolean visible;
+    private String contentVisibility;
     private Integer createdBy;
     @TableField(exist = false)
     private String creatorUsername;
@@ -30,12 +35,18 @@ public class OfficeExerciseEntity {
     public void setDifficulty(String difficulty) { this.difficulty = difficulty; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    public String getStarterDocPath() { return starterDocPath; }
+    public void setStarterDocPath(String starterDocPath) { this.starterDocPath = starterDocPath; }
+    public String getStarterDocName() { return starterDocName; }
+    public void setStarterDocName(String starterDocName) { this.starterDocName = starterDocName; }
     public String getTeacherDocPath() { return teacherDocPath; }
     public void setTeacherDocPath(String teacherDocPath) { this.teacherDocPath = teacherDocPath; }
     public String getTeacherDocName() { return teacherDocName; }
     public void setTeacherDocName(String teacherDocName) { this.teacherDocName = teacherDocName; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
     public Integer getCreatedBy() { return createdBy; }
     public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
     public String getCreatorUsername() { return creatorUsername; }

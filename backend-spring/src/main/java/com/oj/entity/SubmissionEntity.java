@@ -12,6 +12,7 @@ public class SubmissionEntity {
     private Integer id;
     private Integer userId;
     private Integer problemId;
+    private Long contestProblemId;
     private String language;
     private String code;
     private String verdict;
@@ -20,6 +21,7 @@ public class SubmissionEntity {
     private String message;
     private Integer passed;
     private Integer total;
+    private Integer judgeGeneration;
     private LocalDateTime createdAt;
 
     public Integer getId() { return id; }
@@ -28,6 +30,8 @@ public class SubmissionEntity {
     public void setUserId(Integer userId) { this.userId = userId; }
     public Integer getProblemId() { return problemId; }
     public void setProblemId(Integer problemId) { this.problemId = problemId; }
+    public Long getContestProblemId() { return contestProblemId; }
+    public void setContestProblemId(Long contestProblemId) { this.contestProblemId = contestProblemId; }
     public String getLanguage() { return language; }
     public void setLanguage(String language) { this.language = language; }
     public String getCode() { return code; }
@@ -44,6 +48,8 @@ public class SubmissionEntity {
     public void setPassed(Integer passed) { this.passed = passed; }
     public Integer getTotal() { return total; }
     public void setTotal(Integer total) { this.total = total; }
+    public Integer getJudgeGeneration() { return judgeGeneration; }
+    public void setJudgeGeneration(Integer judgeGeneration) { this.judgeGeneration = judgeGeneration; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

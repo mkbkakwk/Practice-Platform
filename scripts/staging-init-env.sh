@@ -28,7 +28,9 @@ postgres_password="$(random_hex 24)"
 rabbitmq_password="$(random_hex 24)"
 jwt_secret="$(random_hex 48)"
 smoke_password="$(random_hex 24)"
-git_sha="$(git -C "$repo_root" rev-parse --short HEAD)"
+git_sha="$(git -C "$repo_root" rev-parse --short=7 HEAD)"
+full_git_sha="$(git -C "$repo_root" rev-parse HEAD)"
+build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 umask 077
 {
@@ -46,6 +48,8 @@ umask 077
   printf '%s\n' "STAGING_SMOKE_USERNAME_PREFIX=stgsmoke"
   printf '%s\n' "STAGING_SMOKE_PASSWORD=$smoke_password"
   printf '%s\n' "STAGING_GIT_SHA=$git_sha"
+  printf '%s\n' "STAGING_FULL_GIT_SHA=$full_git_sha"
+  printf '%s\n' "STAGING_BUILD_TIME=$build_time"
 } > "$env_file"
 
 chmod 600 "$env_file" 2>/dev/null || true

@@ -1,11 +1,9 @@
 server:
-  port: 0   # worker does not serve HTTP
+  port: ${WORKER_HEALTH_PORT:8081}
 
 spring:
   application:
     name: oj-worker
-  main:
-    web-application-type: none
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/oj}
     username: ${POSTGRES_USER:oj}
@@ -19,6 +17,10 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:oj}
     password: ${RABBITMQ_PASSWORD:oj}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     # Concurrency: how many messages processed in parallel per worker instance.
     listener:
       simple:
@@ -36,11 +38,35 @@ mybatis-plus:
 
 oj:
   judge:
+    execution-mode: ${JUDGE_EXECUTION_MODE:legacy-local}
     workspace: ${JUDGE_WORKSPACE:/tmp/oj-judge}
+    compile-timeout-ms: ${JUDGE_COMPILE_TIMEOUT_MS:10000}
+    output-limit-bytes: ${JUDGE_OUTPUT_LIMIT_BYTES:16777216}
+    max-source-bytes: ${JUDGE_MAX_SOURCE_BYTES:1048576}
+    max-stdin-bytes: ${JUDGE_MAX_STDIN_BYTES:1048576}
+    runner:
+      base-url: ${RUNNER_BASE_URL:}
+      token: ${RUNNER_TOKEN:}
+      connect-timeout-ms: ${RUNNER_CONNECT_TIMEOUT_MS:1000}
+      read-timeout-ms: ${RUNNER_READ_TIMEOUT_MS:15000}
+      max-request-bytes: ${RUNNER_MAX_REQUEST_BYTES:4194304}
+      max-response-bytes: ${RUNNER_MAX_RESPONSE_BYTES:33554432}
+  judge-reliability:
+    max-retries: ${JUDGE_MAX_RETRIES:3}
+    lease: ${JUDGE_LEASE:30m}
+    confirm-timeout: ${JUDGE_PUBLISH_CONFIRM_TIMEOUT:5s}
+    worker-instance: ${WORKER_INSTANCE:${HOSTNAME:worker}}
   rabbitmq:
-    exchange: oj.judge
-    routing-key: oj.judge.submit
-    queue: oj.judge.queue
+    exchange: ${OJ_RABBITMQ_EXCHANGE:oj.judge}
+    routing-key: ${OJ_RABBITMQ_ROUTING_KEY:oj.judge.submit}
+    queue: ${OJ_RABBITMQ_QUEUE:oj.judge.queue}
+    retry-exchange: ${OJ_RABBITMQ_RETRY_EXCHANGE:oj.judge.retry}
+    retry-routing-key: ${OJ_RABBITMQ_RETRY_ROUTING_KEY:oj.judge.retry}
+    retry-queue: ${OJ_RABBITMQ_RETRY_QUEUE:oj.judge.retry.queue}
+    retry-delay-ms: ${JUDGE_RETRY_DELAY_MS:5000}
+    dead-letter-exchange: ${OJ_RABBITMQ_DLX:oj.judge.dlx}
+    dead-letter-routing-key: ${OJ_RABBITMQ_DLQ_ROUTING_KEY:oj.judge.dead}
+    dead-letter-queue: ${OJ_RABBITMQ_DLQ:oj.judge.dlq}
 
 logging:
   level:

@@ -60,21 +60,32 @@ release tags and OCI labels. For example:
 ```bash
 release_version=v0.4.0-foundation
 release_sha=f1e257d2fc719c2be92fa7cdd8406a98f475a4f1
+release_build_time=2026-08-28T07:30:00Z
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-backend:$release_version" backend-spring
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-worker:$release_version" worker
 
 docker build \
   --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
+  --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
+  --label org.opencontainers.image.version="$release_version" \
+  --tag "oj-runner:$release_version" runner
+
+docker build \
+  --label org.opencontainers.image.revision="$release_sha" \
+  --label org.opencontainers.image.created="$release_build_time" \
   --label org.opencontainers.image.source=mkbkakwk/Practice-Platform \
   --label org.opencontainers.image.version="$release_version" \
   --tag "oj-frontend:$release_version" frontend
@@ -119,9 +130,13 @@ backup/recovery rehearsal and is not part of this workflow.
 
 This repository intentionally does not contain an automatic production deploy
 script. An explicitly approved maintenance-window procedure may replace
-Backend, Worker and Frontend one at a time after preflight. PostgreSQL,
+Backend, Runner, Worker and Frontend one at a time after preflight. PostgreSQL,
 RabbitMQ, external volumes and the production network must remain untouched.
 
 The existing v0.4.0 images predate the final release tag and therefore retain
 OCI version `f1e257d-release`; their full revision and Image IDs remain fixed.
 Future local release builds must use the release version as their OCI version.
+The Worker is remote-only in release Compose and depends on the trusted Runner;
+there is no local Worker sandbox fallback in the release topology. The Runner is
+the only application container with Docker-socket access and its readiness check
+requires the fixed sandbox images to be available.

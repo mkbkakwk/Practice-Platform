@@ -1,7 +1,8 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users } from "lucide-react";
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users, CalendarDays, Menu, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const deployEnvironment = import.meta.env.VITE_DEPLOY_ENV as string | undefined;
@@ -16,6 +17,7 @@ export function Navbar() {
   const links = [
     { to: "/", label: "题库", icon: ListOrdered, match: (path: string) => path === "/" || path.startsWith("/problem") },
     { to: "/office", label: "Office", icon: Briefcase, match: (path: string) => path.startsWith("/office") },
+    { to: "/contests", label: "比赛", icon: CalendarDays, match: (path: string) => path.startsWith("/contests") || path.startsWith("/admin/contests") },
     { to: "/submissions", label: "提交记录", icon: FileCode2, match: (path: string) => path.startsWith("/submissions") },
     { to: "/leaderboard", label: "排行榜", icon: Trophy, match: (path: string) => path.startsWith("/leaderboard") },
   ];
@@ -26,6 +28,7 @@ export function Navbar() {
   }
   if (user?.role === "ADMIN") {
     links.push({ to: "/admin/users", label: "用户", icon: Users, match: (path: string) => path.startsWith("/admin/users") });
+    links.push({ to: "/admin/system-status", label: "系统状态", icon: Activity, match: (path: string) => path.startsWith("/admin/system-status") });
   }
 
   return (
@@ -37,21 +40,70 @@ export function Navbar() {
         </Link>
         {showStagingBadge && (
           <span data-testid="staging-build" className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
-            STAGING · {buildSha || "unknown"}
+            <span className="sm:hidden">STG · {(buildSha || "unknown").slice(0, 7)}</span>
+            <span className="hidden sm:inline">STAGING · {buildSha || "unknown"}</span>
           </span>
         )}
-        <nav className="flex items-center gap-1">
+        <nav aria-label="主导航" className="hidden items-center gap-1 xl:flex">
           {links.map((link) => {
             const Icon = link.icon;
             return <Link key={link.to} to={link.to} className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors", link.match(location.pathname) ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")}><Icon className="h-4 w-4" />{link.label}</Link>;
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto hidden items-center gap-2 xl:flex">
           {user ? <>
             <span className="hidden items-center gap-1.5 text-sm text-zinc-600 sm:flex"><UserCircle className="h-4 w-4" />{user.username}{user.role === "ADMIN" && <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">管理员</span>}{user.role === "TEACHER" && <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">老师</span>}</span>
             <Button variant="ghost" size="sm" onClick={() => { logout(); navigate("/"); }}><LogOut className="mr-1 h-4 w-4" />退出</Button>
           </> : <><Button variant="ghost" size="sm" onClick={() => navigate("/login")}>登录</Button><Button size="sm" onClick={() => navigate("/register")}>注册</Button></>}
         </div>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button className="ml-auto xl:hidden" variant="ghost" size="icon" aria-label="打开导航菜单">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="w-[min(22rem,90vw)]" aria-describedby="mobile-navigation-description">
+            <SheetHeader>
+              <SheetTitle>导航</SheetTitle>
+              <SheetDescription id="mobile-navigation-description">
+                {user ? `${user.username} · ${user.role === "ADMIN" ? "管理员" : user.role === "TEACHER" ? "老师" : "学生"}` : "浏览题库、Office 与比赛"}
+              </SheetDescription>
+            </SheetHeader>
+            <nav className="grid gap-1 px-4" aria-label="移动端导航">
+              {links.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <SheetClose asChild key={link.to}>
+                    <Link
+                      to={link.to}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                        link.match(location.pathname) ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {link.label}
+                    </Link>
+                  </SheetClose>
+                );
+              })}
+            </nav>
+            <SheetFooter>
+              {user ? (
+                <SheetClose asChild>
+                  <Button variant="outline" onClick={() => { logout(); navigate("/"); }}>
+                    <LogOut className="mr-2 h-4 w-4" />退出
+                  </Button>
+                </SheetClose>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <SheetClose asChild><Button variant="outline" onClick={() => navigate("/login")}>登录</Button></SheetClose>
+                  <SheetClose asChild><Button onClick={() => navigate("/register")}>注册</Button></SheetClose>
+                </div>
+              )}
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   );

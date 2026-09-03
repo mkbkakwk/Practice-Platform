@@ -2,29 +2,40 @@ package com.oj.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
-import com.oj.common.DocComparator;
-import com.oj.common.DocxParser;
-import com.oj.config.AppProperties;
+import com.oj.contest.ContestContentAccessPolicy;
+import com.oj.contest.ContestProblemType;
+import com.oj.contest.ContentVisibility;
+import com.oj.mapper.ContestProblemMapper;
 import com.oj.dto.OfficeExerciseCreateRequest;
+import com.oj.dto.OfficeSubmissionDtos;
 import com.oj.dto.ReviewRequest;
 import com.oj.entity.OfficeDocSubmissionEntity;
 import com.oj.entity.OfficeExerciseEntity;
 import com.oj.mapper.OfficeDocSubmissionMapper;
 import com.oj.mapper.OfficeExerciseMapper;
 import com.oj.mapper.UserMapper;
+import com.oj.office.OfficeDocumentComparator;
+import com.oj.office.OfficeDocumentException;
+import com.oj.office.OfficeDocumentParser;
+import com.oj.office.OfficeFileValidator;
+import com.oj.office.OfficeJudgeConcurrencyGate;
+import com.oj.office.OfficeResultSerializer;
+import com.oj.office.OfficeSubmissionResponseMapper;
+import com.oj.office.OfficeStorageService;
+import com.oj.office.model.OfficeDocumentModel;
+import com.oj.office.model.OfficeJudgeResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,22 +47,45 @@ public class OfficeDocService {
     private final OfficeExerciseMapper exerciseMapper;
     private final OfficeDocSubmissionMapper submissionMapper;
     private final UserMapper userMapper;
-    private final AppProperties appProperties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final OfficeFileValidator validator;
+    private final OfficeStorageService storage;
+    private final OfficeDocumentParser parser;
+    private final OfficeDocumentComparator comparator;
+    private final OfficeJudgeConcurrencyGate concurrencyGate;
+    private final OfficeResultSerializer resultSerializer;
+    private final OfficeSubmissionResponseMapper responseMapper;
+    private final ContestProblemMapper contestProblemMapper;
+    private final ContestContentAccessPolicy contestAccess;
 
     public OfficeDocService(OfficeExerciseMapper exerciseMapper,
                             OfficeDocSubmissionMapper submissionMapper,
                             UserMapper userMapper,
-                            AppProperties appProperties) {
+                            OfficeFileValidator validator,
+                            OfficeStorageService storage,
+                            OfficeDocumentParser parser,
+                            OfficeDocumentComparator comparator,
+                            OfficeJudgeConcurrencyGate concurrencyGate,
+                            OfficeResultSerializer resultSerializer,
+                            OfficeSubmissionResponseMapper responseMapper,
+                            ContestProblemMapper contestProblemMapper,
+                            ContestContentAccessPolicy contestAccess) {
         this.exerciseMapper = exerciseMapper;
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
-        this.appProperties = appProperties;
+        this.validator = validator;
+        this.storage = storage;
+        this.parser = parser;
+        this.comparator = comparator;
+        this.concurrencyGate = concurrencyGate;
+        this.resultSerializer = resultSerializer;
+        this.responseMapper = responseMapper;
+        this.contestProblemMapper = contestProblemMapper;
+        this.contestAccess = contestAccess;
     }
 
     public Map<String, Object> listExercises(int page, int pageSize) {
         QueryWrapper<OfficeExerciseEntity> query = new QueryWrapper<>();
-        query.eq("visible", true).orderByDesc("id");
+        query.eq("visible", true).eq("content_visibility", ContentVisibility.PUBLIC.name()).orderByDesc("id");
         return listResponse(page, pageSize, query);
     }
 
@@ -65,7 +99,12 @@ public class OfficeDocService {
 
     public OfficeExerciseEntity getExercise(int id) {
         OfficeExerciseEntity exercise = findExercise(id);
-        if (!Boolean.TRUE.equals(exercise.getVisible()) && !CurrentUser.canManage(exercise.getCreatedBy())) {
+        boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
+        boolean contestAllowed = ContentVisibility.CONTEST_ONLY.name().equals(exercise.getContentVisibility())
+                && contestAccess.canReadContestOnly(ContestProblemType.OFFICE_DOCX, exercise.getId());
+        if ((!Boolean.TRUE.equals(exercise.getVisible())
+                || ContentVisibility.CONTEST_ONLY.name().equals(exercise.getContentVisibility()))
+                && !manager && !contestAllowed) {
             throw ApiException.notFound("练习不存在");
         }
         exercise.setCreatorUsername(loadCreatorUsername(exercise.getCreatedBy()));
@@ -87,6 +126,10 @@ public class OfficeDocService {
     public OfficeExerciseEntity updateExercise(int id, OfficeExerciseCreateRequest request) {
         OfficeExerciseEntity exercise = findExercise(id);
         CurrentUser.requireCanManage(exercise.getCreatedBy());
+        if (contestProblemMapper.selectCount(new QueryWrapper<com.oj.entity.ContestProblemEntity>()
+                .eq("office_exercise_id", exercise.getId())) > 0) {
+            throw ApiException.conflict("该练习已被比赛引用，不能彻底删除");
+        }
         applyToEntity(exercise, request);
         exerciseMapper.updateById(exercise);
         exercise.setCreatorUsername(loadCreatorUsername(exercise.getCreatedBy()));
@@ -121,38 +164,109 @@ public class OfficeDocService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (exercise.getTeacherDocPath() != null) candidatePaths.add(exercise.getTeacherDocPath());
+        if (exercise.getStarterDocPath() != null) candidatePaths.add(exercise.getStarterDocPath());
 
         int deletedSubmissions = submissionMapper.delete(
                 new QueryWrapper<OfficeDocSubmissionEntity>().eq("exercise_id", id));
         exerciseMapper.deleteById(id);
 
-        int deletedFiles = 0;
-        for (String path : candidatePaths) {
-            if (deleteFileIfUnused(path)) deletedFiles++;
-        }
-        return Map.of(
-                "deleted", true,
-                "deletedSubmissions", deletedSubmissions,
-                "deletedFiles", deletedFiles,
-                "affectedUsers", affectedUserIds.size()
-        );
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deleted", true);
+        result.put("deletedSubmissions", deletedSubmissions);
+        result.put("deletedFiles", 0);
+        result.put("affectedUsers", affectedUserIds.size());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                int deletedFiles = 0;
+                for (String path : candidatePaths) {
+                    if (deleteFileIfUnused(path)) deletedFiles++;
+                }
+                result.put("deletedFiles", deletedFiles);
+            }
+        });
+        return result;
     }
 
     public Map<String, Object> uploadTeacherDoc(int exerciseId, MultipartFile file) {
         OfficeExerciseEntity exercise = findExercise(exerciseId);
         CurrentUser.requireCanManage(exercise.getCreatedBy());
+        String displayName = validator.validateMetadata(file);
         String oldPath = exercise.getTeacherDocPath();
-        String savedPath = saveDocx(file, "teacher_" + exerciseId);
+        OfficeStorageService.StagedDocument staged = storage.stage(file, displayName);
+        OfficeStorageService.StoredDocument stored = null;
         try {
-            exercise.setTeacherDocPath(savedPath);
-            exercise.setTeacherDocName(file.getOriginalFilename());
+            validator.validateContainer(staged.path());
+            parser.parse(staged.path());
+            stored = storage.commit(staged);
+            exercise.setTeacherDocPath(storage.path(stored));
+            exercise.setTeacherDocName(displayName);
             exerciseMapper.updateById(exercise);
+        } catch (OfficeDocumentException exception) {
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            throw documentApiException(exception);
         } catch (RuntimeException exception) {
-            deleteFileIfUnused(savedPath);
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
             throw exception;
         }
-        if (oldPath != null && !oldPath.equals(savedPath)) deleteFileIfUnused(oldPath);
-        return Map.of("teacherDocName", file.getOriginalFilename(), "path", savedPath);
+        if (oldPath != null && !oldPath.equals(storage.path(stored))) deleteFileIfUnused(oldPath);
+        return Map.of("teacherDocName", displayName);
+    }
+
+    public Map<String, Object> uploadStarterDoc(int exerciseId, MultipartFile file) {
+        OfficeExerciseEntity exercise = findExercise(exerciseId);
+        CurrentUser.requireCanManage(exercise.getCreatedBy());
+        String displayName = validator.validateMetadata(file);
+        String oldPath = exercise.getStarterDocPath();
+        OfficeStorageService.StagedDocument staged = storage.stage(file, displayName);
+        OfficeStorageService.StoredDocument stored = null;
+        try {
+            validator.validateContainer(staged.path());
+            parser.parse(staged.path());
+            stored = storage.commit(staged);
+            exercise.setStarterDocPath(storage.path(stored));
+            exercise.setStarterDocName(displayName);
+            exerciseMapper.updateById(exercise);
+        } catch (OfficeDocumentException exception) {
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            throw documentApiException(exception);
+        } catch (RuntimeException exception) {
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            throw exception;
+        }
+        if (oldPath != null && !oldPath.equals(storage.path(stored))) deleteFileIfUnused(oldPath);
+        return Map.of("starterDocName", displayName);
+    }
+
+    public File getStarterDocFile(int exerciseId) {
+        OfficeExerciseEntity exercise = findExercise(exerciseId);
+        boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
+        if (!manager && (!Boolean.TRUE.equals(exercise.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility()))) {
+            throw ApiException.notFound("起始文档不存在");
+        }
+        return requireStarterDoc(exercise);
+    }
+
+    public String getStarterDocName(int exerciseId) {
+        OfficeExerciseEntity exercise = findExercise(exerciseId);
+        boolean manager = CurrentUser.canManage(exercise.getCreatedBy());
+        if (!manager && (!Boolean.TRUE.equals(exercise.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility()))) {
+            throw ApiException.notFound("起始文档不存在");
+        }
+        return exercise.getStarterDocName();
+    }
+
+    public File requireStarterDoc(OfficeExerciseEntity exercise) {
+        if (exercise.getStarterDocPath() == null || exercise.getStarterDocPath().isBlank()) {
+            throw ApiException.notFound("起始文档不存在");
+        }
+        return requireStoredFile(exercise.getStarterDocPath(), "起始文档文件丢失");
     }
 
     public File getTeacherDocFile(int exerciseId) {
@@ -160,63 +274,136 @@ public class OfficeDocService {
         if (!Boolean.TRUE.equals(exercise.getVisible()) && !CurrentUser.canManage(exercise.getCreatedBy())) {
             throw ApiException.notFound("参考文档不存在");
         }
+        CurrentUser.requireCanManage(exercise.getCreatedBy());
         if (exercise.getTeacherDocPath() == null) throw ApiException.notFound("参考文档不存在");
         return requireStoredFile(exercise.getTeacherDocPath(), "参考文档文件丢失");
     }
 
     public String getTeacherDocName(int exerciseId) {
         OfficeExerciseEntity exercise = findExercise(exerciseId);
-        if (!Boolean.TRUE.equals(exercise.getVisible()) && !CurrentUser.canManage(exercise.getCreatedBy())) {
-            throw ApiException.notFound("参考文档不存在");
-        }
+        CurrentUser.requireCanManage(exercise.getCreatedBy());
         return exercise.getTeacherDocName();
     }
 
-    public OfficeDocSubmissionEntity submitDoc(int exerciseId, MultipartFile file) {
+    public OfficeSubmissionDtos.StudentSubmission submitDoc(int exerciseId, MultipartFile file) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
 
         OfficeExerciseEntity exercise = findExercise(exerciseId);
+        if (!Boolean.TRUE.equals(exercise.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(exercise.getContentVisibility())) {
+            throw ApiException.conflict("该练习已停用，无法继续提交");
+        }
+        return responseMapper.student(judgeDocument(exercise, file, userId, null));
+    }
+
+    public OfficeSubmissionDtos.StudentSubmission submitContestDoc(OfficeExerciseEntity exercise,
+                                                                    MultipartFile file, long contestProblemId) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
         if (!Boolean.TRUE.equals(exercise.getVisible())) {
             throw ApiException.conflict("该练习已停用，无法继续提交");
         }
+        return responseMapper.student(judgeDocument(exercise, file, userId, contestProblemId));
+    }
+
+    private OfficeDocSubmissionEntity judgeDocument(OfficeExerciseEntity exercise, MultipartFile file,
+                                                     int userId, Long contestProblemId) {
+        int exerciseId = exercise.getId();
         if (exercise.getTeacherDocPath() == null || exercise.getTeacherDocPath().isBlank()) {
             throw ApiException.badRequest("该练习尚未上传老师参考文档，暂无法提交");
         }
+        if (exercise.getStarterDocPath() == null || exercise.getStarterDocPath().isBlank()) {
+            throw ApiException.badRequest("该练习尚未上传学生起始文档，暂无法提交");
+        }
 
-        String savedPath = saveDocx(file, "student_" + userId + "_" + exerciseId);
+        String displayName = validator.validateMetadata(file);
+        OfficeStorageService.StagedDocument staged = storage.stage(file, displayName);
+        OfficeStorageService.StoredDocument stored = null;
+        OfficeDocSubmissionEntity submission = new OfficeDocSubmissionEntity();
+        submission.setUserId(userId);
+        submission.setExerciseId(exerciseId);
+        submission.setContestProblemId(contestProblemId);
+        submission.setStudentDocName(displayName);
+        submission.setStatus("PENDING");
+        submission.setJudgeVersion(OfficeDocumentComparator.JUDGE_VERSION);
+        submission.setResultDetail(Map.of("judgeVersion", OfficeDocumentComparator.JUDGE_VERSION));
         try {
-            List<Map<String, Object>> studentParagraphs = DocxParser.parse(savedPath);
-            List<Map<String, Object>> teacherParagraphs = DocxParser.parse(exercise.getTeacherDocPath());
-            List<Map<String, Object>> compareResult = DocComparator.compare(studentParagraphs, teacherParagraphs);
-            int matchPercent = DocComparator.matchPercent(compareResult);
-
-            OfficeDocSubmissionEntity submission = new OfficeDocSubmissionEntity();
-            submission.setUserId(userId);
-            submission.setExerciseId(exerciseId);
-            submission.setStudentDocPath(savedPath);
-            submission.setStudentDocName(file.getOriginalFilename());
-            submission.setAutoResult(toJson(studentParagraphs));
-            submission.setCompareResult(toJson(compareResult));
-            submission.setStatus(matchPercent == 100 ? "AUTO_CHECKED" : "NEEDS_REVIEW");
             submissionMapper.insert(submission);
+            long startedAt = System.nanoTime();
+            OfficeDocumentModel student;
+            OfficeDocumentModel teacher;
+            OfficeJudgeResult result;
+            Map<String, Object> structured;
+            long parseMs;
+            long compareMs;
+            try (OfficeJudgeConcurrencyGate.Permit ignored = concurrencyGate.acquire()) {
+                submission.setStatus("JUDGING");
+                submissionMapper.updateById(submission);
+                validator.validateContainer(staged.path());
+                Path reference = storage.require(exercise.getTeacherDocPath());
+                validator.validateContainer(reference);
+                long parseStartedAt = System.nanoTime();
+                student = parser.parse(staged.path());
+                teacher = parser.parse(reference);
+                parseMs = elapsedMillis(parseStartedAt);
+                long compareStartedAt = System.nanoTime();
+                result = comparator.compare(teacher, student);
+                structured = resultSerializer.structured(result);
+                compareMs = elapsedMillis(compareStartedAt);
+                stored = storage.commit(staged);
+            }
+
+            submission.setStudentDocPath(storage.path(stored));
+            submission.setAutoResult(resultSerializer.json(Map.of(
+                    "paragraphCount", student.paragraphs().size(),
+                    "tableCount", student.tables().size())));
+            submission.setCompareResult(resultSerializer.comparisonRows(result));
+            submission.setResultDetail(structured);
+            submission.setJudgeVersion(result.judgeVersion());
+            submission.setScore(result.earnedScore());
+            submission.setStatus(result.passed() ? "COMPLETED" : "NEEDS_REVIEW");
+            submission.setJudgedAt(java.time.LocalDateTime.now());
+            submissionMapper.updateById(submission);
+            log.info("Office judge completed submissionId={} exerciseId={} userId={} storageId={} judgeVersion={} score={} parseMs={} compareMs={} totalMs={}",
+                    submission.getId(), exerciseId, userId, stored.storageId(),
+                    result.judgeVersion(), result.earnedScore(), parseMs, compareMs, elapsedMillis(startedAt));
             return submission;
+        } catch (OfficeDocumentException exception) {
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            markFailed(submission, exception.category().name());
+            log.warn("Office document rejected exerciseId={} userId={} category={}",
+                    exerciseId, userId, exception.category());
+            throw documentApiException(exception);
         } catch (ApiException exception) {
-            deleteFileIfUnused(savedPath);
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            markFailed(submission, "REQUEST_REJECTED");
             throw exception;
         } catch (Exception exception) {
-            deleteFileIfUnused(savedPath);
-            throw ApiException.badRequest("文档解析或比对失败：" + exception.getMessage());
+            storage.discard(staged);
+            if (stored != null) storage.delete(storage.path(stored));
+            markFailed(submission, "JUDGE_INTERNAL_ERROR");
+            log.error("Office judge failed exerciseId={} userId={} type={}",
+                    exerciseId, userId, exception.getClass().getSimpleName());
+            throw ApiException.badRequest("文档判题失败，请稍后重试");
         }
     }
 
-    public OfficeDocSubmissionEntity getSubmission(int submissionId) {
+    public OfficeSubmissionDtos.StudentSubmission getStudentSubmission(int submissionId) {
         OfficeDocSubmissionEntity submission = findSubmission(submissionId);
         requireCanAccessSubmission(submission);
-        return submission;
+        return responseMapper.student(submission);
     }
 
-    public Map<String, Object> listSubmissions(Integer exerciseId, int page, int pageSize) {
+    public OfficeSubmissionDtos.ReviewerSubmission getReviewerSubmission(int submissionId) {
+        OfficeDocSubmissionEntity submission = findSubmission(submissionId);
+        requireCanReviewSubmission(submission);
+        return responseMapper.reviewer(submission);
+    }
+
+    public OfficeSubmissionDtos.SubmissionListResponse listSubmissions(Integer exerciseId, int page, int pageSize) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
         QueryWrapper<OfficeDocSubmissionEntity> query = new QueryWrapper<>();
@@ -244,29 +431,19 @@ public class OfficeDocService {
 
         query.orderByDesc("id");
         Page<OfficeDocSubmissionEntity> result = submissionMapper.selectPage(new Page<>(page, pageSize), query);
-        List<Map<String, Object>> items = result.getRecords().stream().map(submission -> {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", submission.getId());
-            item.put("exerciseId", submission.getExerciseId());
-            item.put("userId", submission.getUserId());
-            item.put("studentDocName", submission.getStudentDocName());
-            item.put("status", submission.getStatus());
-            item.put("score", submission.getScore());
-            item.put("createdAt", submission.getCreatedAt());
-            return item;
-        }).toList();
-        return Map.of("total", result.getTotal(), "page", page, "pageSize", pageSize, "submissions", items);
+        return new OfficeSubmissionDtos.SubmissionListResponse(
+                result.getTotal(), page, pageSize,
+                result.getRecords().stream().map(responseMapper::summary).toList());
     }
 
-    public OfficeDocSubmissionEntity review(int submissionId, ReviewRequest request) {
+    public OfficeSubmissionDtos.ReviewerSubmission review(int submissionId, ReviewRequest request) {
         OfficeDocSubmissionEntity submission = findSubmission(submissionId);
-        OfficeExerciseEntity exercise = findExercise(submission.getExerciseId());
-        CurrentUser.requireCanManage(exercise.getCreatedBy());
+        requireCanReviewSubmission(submission);
         submission.setScore(Math.max(0, Math.min(100, request.getScore())));
         submission.setTeacherComment(request.getComment() == null ? "" : request.getComment());
         submission.setStatus("REVIEWED");
         submissionMapper.updateById(submission);
-        return submission;
+        return responseMapper.reviewer(submission);
     }
 
     public File getStudentDocFile(int submissionId) {
@@ -292,7 +469,10 @@ public class OfficeDocService {
             item.put("title", exercise.getTitle());
             item.put("difficulty", exercise.getDifficulty());
             item.put("visible", exercise.getVisible());
+            item.put("contentVisibility", exercise.getContentVisibility());
             item.put("hasTeacherDoc", exercise.getTeacherDocPath() != null && !exercise.getTeacherDocPath().isBlank());
+            item.put("hasStarterDoc", exercise.getStarterDocPath() != null && !exercise.getStarterDocPath().isBlank());
+            item.put("starterDocName", exercise.getStarterDocName());
             item.put("createdBy", exercise.getCreatedBy());
             item.put("creatorUsername", exercise.getCreatedBy() == null ? null : creatorNames.get(exercise.getCreatedBy()));
             item.put("submissionCount", submissionCounts.getOrDefault(exercise.getId(), 0L));
@@ -308,6 +488,7 @@ public class OfficeDocService {
                 ? "EASY" : request.getDifficulty().toUpperCase());
         exercise.setDescription(request.getDescription());
         exercise.setVisible(request.getVisible() == null || request.getVisible());
+        exercise.setContentVisibility(ContentVisibility.parse(request.getContentVisibility()).name());
     }
 
     private OfficeExerciseEntity findExercise(int id) {
@@ -331,6 +512,11 @@ public class OfficeDocService {
             if (CurrentUser.canManage(exercise.getCreatedBy())) return;
         }
         throw ApiException.forbidden("无权查看此提交记录");
+    }
+
+    private void requireCanReviewSubmission(OfficeDocSubmissionEntity submission) {
+        OfficeExerciseEntity exercise = findExercise(submission.getExerciseId());
+        CurrentUser.requireCanManage(exercise.getCreatedBy());
     }
 
     private Map<Integer, String> loadCreatorNames(List<OfficeExerciseEntity> exercises) {
@@ -359,77 +545,50 @@ public class OfficeDocService {
         return user == null ? null : user.getUsername();
     }
 
-    private String saveDocx(MultipartFile file, String prefix) {
-        try {
-            Path root = storageRoot();
-            Files.createDirectories(root);
-            String original = file.getOriginalFilename() == null ? "upload.docx" : file.getOriginalFilename();
-            String safeOriginal = original.replaceAll("[^a-zA-Z0-9._\\-]", "_");
-            if (!safeOriginal.toLowerCase().endsWith(".docx")) safeOriginal += ".docx";
-            Path target = root.resolve(prefix + "_" + UUID.randomUUID() + "_" + safeOriginal).normalize();
-            if (!target.startsWith(root)) throw ApiException.badRequest("文件路径不安全");
-            file.transferTo(target.toFile());
-            return target.toString();
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw ApiException.badRequest("文件保存失败：" + exception.getMessage());
-        }
-    }
-
     private File requireStoredFile(String storedPath, String missingMessage) {
-        Path path = safeStoragePath(storedPath);
-        if (path == null || !Files.isRegularFile(path) || Files.isSymbolicLink(path)) {
+        try {
+            return storage.require(storedPath).toFile();
+        } catch (OfficeDocumentException exception) {
             throw ApiException.notFound(missingMessage);
         }
-        return path.toFile();
     }
 
     private boolean deleteFileIfUnused(String storedPath) {
         if (storedPath == null || storedPath.isBlank()) return false;
         long exerciseRefs = exerciseMapper.selectCount(
-                new QueryWrapper<OfficeExerciseEntity>().eq("teacher_doc_path", storedPath));
+                new QueryWrapper<OfficeExerciseEntity>()
+                        .eq("teacher_doc_path", storedPath).or().eq("starter_doc_path", storedPath));
         long submissionRefs = submissionMapper.selectCount(
                 new QueryWrapper<OfficeDocSubmissionEntity>().eq("student_doc_path", storedPath));
         if (exerciseRefs > 0 || submissionRefs > 0) return false;
 
-        Path path = safeStoragePath(storedPath);
-        if (path == null || Files.isSymbolicLink(path)) {
-            log.warn("Refusing to delete unsafe document path: {}", storedPath);
-            return false;
-        }
-        try {
-            if (Files.exists(path) && !Files.isRegularFile(path)) {
-                log.warn("Refusing to delete non-file document path: {}", path);
-                return false;
-            }
-            return Files.deleteIfExists(path);
-        } catch (Exception exception) {
-            log.warn("Failed to delete document file {}: {}", path, exception.getMessage());
-            return false;
-        }
+        return storage.delete(storedPath);
     }
 
-    private Path safeStoragePath(String storedPath) {
-        try {
-            Path root = storageRoot();
-            Path path = Paths.get(storedPath).toAbsolutePath().normalize();
-            if (path.equals(root) || !path.startsWith(root)) return null;
-            return path;
-        } catch (Exception ignored) {
-            return null;
-        }
+    private long elapsedMillis(long startedAt) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
-    private Path storageRoot() {
-        return Paths.get(appProperties.getDocStorage()).toAbsolutePath().normalize();
+    private ApiException documentApiException(OfficeDocumentException exception) {
+        return ApiException.badRequest(exception.category().clientMessage());
     }
 
-    private String toJson(Object value) {
+    private void markFailed(OfficeDocSubmissionEntity submission, String category) {
+        if (submission == null || submission.getId() == null) return;
         try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception ignored) {
-            return "[]";
+            submission.setStudentDocPath(null);
+            submission.setStatus("FAILED");
+            submission.setScore(null);
+            submission.setErrorCategory(category);
+            submission.setJudgedAt(java.time.LocalDateTime.now());
+            submission.setResultDetail(Map.of(
+                    "judgeVersion", OfficeDocumentComparator.JUDGE_VERSION,
+                    "status", "FAILED",
+                    "errorCategory", category));
+            submissionMapper.updateById(submission);
+        } catch (RuntimeException persistenceFailure) {
+            log.error("Unable to persist failed Office judge state submissionId={} type={}",
+                    submission.getId(), persistenceFailure.getClass().getSimpleName());
         }
     }
 }

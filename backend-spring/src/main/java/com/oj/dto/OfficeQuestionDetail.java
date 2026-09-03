@@ -15,6 +15,7 @@ public class OfficeQuestionDetail {
     private String answer;
     private String explanation;
     private Boolean visible;
+    private String contentVisibility;
     private Integer createdBy;
     private String creatorUsername;
     private LocalDateTime createdAt;
@@ -39,6 +40,8 @@ public class OfficeQuestionDetail {
     public void setExplanation(String explanation) { this.explanation = explanation; }
     public Boolean getVisible() { return visible; }
     public void setVisible(Boolean visible) { this.visible = visible; }
+    public String getContentVisibility() { return contentVisibility; }
+    public void setContentVisibility(String contentVisibility) { this.contentVisibility = contentVisibility; }
     public Integer getCreatedBy() { return createdBy; }
     public void setCreatedBy(Integer createdBy) { this.createdBy = createdBy; }
     public String getCreatorUsername() { return creatorUsername; }

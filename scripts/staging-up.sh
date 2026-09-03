@@ -13,7 +13,7 @@ fi
 echo "Validating staging Compose configuration"
 "${compose[@]}" config --quiet
 
-echo "Building staging images for Git $STAGING_GIT_SHA"
+echo "Building staging images for Git $STAGING_FULL_GIT_SHA (tag $STAGING_GIT_SHA)"
 "${compose[@]}" build
 
 echo "Starting isolated staging project $project_name"
@@ -24,4 +24,5 @@ echo "Starting isolated staging project $project_name"
 echo "Staging is healthy:"
 echo "  Frontend: http://localhost:$frontend_port"
 echo "  Health:   http://localhost:$frontend_port/api/health"
-echo "  Git SHA:  $STAGING_GIT_SHA"
+echo "  Git SHA:  $STAGING_FULL_GIT_SHA"
+echo "  Image tag: $STAGING_GIT_SHA"

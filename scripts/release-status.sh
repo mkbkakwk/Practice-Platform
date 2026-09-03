@@ -20,11 +20,12 @@ db_container="$(value_or_default FORMAL_POSTGRES_CONTAINER oj-db)"
 rabbit_container="$(value_or_default FORMAL_RABBITMQ_CONTAINER oj-rabbitmq)"
 backend_container="$(value_or_default FORMAL_BACKEND_CONTAINER oj-backend)"
 worker_container="$(value_or_default FORMAL_WORKER_CONTAINER oj-worker-1)"
+runner_container="$(value_or_default FORMAL_RUNNER_CONTAINER oj-runner)"
 frontend_container="$(value_or_default FORMAL_FRONTEND_CONTAINER oj-frontend)"
 frontend_port="$(value_or_default FORMAL_FRONTEND_PORT 3000)"
 
 echo "Production release status (read-only)"
-for container in "$db_container" "$rabbit_container" "$backend_container" "$worker_container" "$frontend_container"; do
+for container in "$db_container" "$rabbit_container" "$backend_container" "$runner_container" "$worker_container" "$frontend_container"; do
   if ! docker inspect "$container" >/dev/null 2>&1; then
     echo "  $container: missing"
     continue

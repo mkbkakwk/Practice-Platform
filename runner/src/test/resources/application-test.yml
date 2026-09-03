@@ -1,0 +1,11 @@
+runner:
+  token: test-runner-token
+  max-concurrent-jobs: 1
+  max-request-bytes: 4096
+  max-source-bytes: 1024
+  max-stdin-bytes: 1024
+  max-cases: 4
+  max-compile-time-ms: 20000
+  max-run-time-ms: 5000
+  max-memory-mb: 1024
+  max-output-limit-bytes: 4096

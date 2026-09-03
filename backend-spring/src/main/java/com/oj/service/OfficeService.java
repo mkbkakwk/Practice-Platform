@@ -6,9 +6,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
+import com.oj.contest.ContentVisibility;
 import com.oj.dto.*;
 import com.oj.entity.OfficeQuestionEntity;
 import com.oj.entity.OfficeRecordEntity;
+import com.oj.entity.ContestProblemEntity;
+import com.oj.mapper.ContestProblemMapper;
 import com.oj.mapper.OfficeQuestionMapper;
 import com.oj.mapper.OfficeRecordMapper;
 import com.oj.mapper.UserMapper;
@@ -28,23 +31,26 @@ public class OfficeService {
     private final OfficeQuestionMapper questionMapper;
     private final OfficeRecordMapper recordMapper;
     private final UserMapper userMapper;
+    private final ContestProblemMapper contestProblemMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public OfficeService(OfficeQuestionMapper questionMapper, OfficeRecordMapper recordMapper, UserMapper userMapper) {
+    public OfficeService(OfficeQuestionMapper questionMapper, OfficeRecordMapper recordMapper,
+                         UserMapper userMapper, ContestProblemMapper contestProblemMapper) {
         this.questionMapper = questionMapper;
         this.recordMapper = recordMapper;
         this.userMapper = userMapper;
+        this.contestProblemMapper = contestProblemMapper;
     }
 
     public List<OfficeQuestionListItem> list(int page, int pageSize, String appType, String difficulty) {
         QueryWrapper<OfficeQuestionEntity> query = baseListQuery(appType, difficulty);
-        query.eq("visible", true).orderByAsc("id");
+        query.eq("visible", true).eq("content_visibility", ContentVisibility.PUBLIC.name()).orderByAsc("id");
         return toListItems(questionMapper.selectPage(new Page<>(page, pageSize), query).getRecords());
     }
 
     public long count(String appType, String difficulty) {
         QueryWrapper<OfficeQuestionEntity> query = baseListQuery(appType, difficulty);
-        query.eq("visible", true);
+        query.eq("visible", true).eq("content_visibility", ContentVisibility.PUBLIC.name());
         return questionMapper.selectCount(query);
     }
 
@@ -60,10 +66,37 @@ public class OfficeService {
 
     public OfficeQuestionDetail getById(int id) {
         OfficeQuestionEntity entity = findById(id);
-        if (!Boolean.TRUE.equals(entity.getVisible()) && !CurrentUser.canManage(entity.getCreatedBy())) {
+        if ((!Boolean.TRUE.equals(entity.getVisible())
+                || ContentVisibility.CONTEST_ONLY.name().equals(entity.getContentVisibility()))
+                && !CurrentUser.canManage(entity.getCreatedBy())) {
             throw ApiException.notFound("题目不存在");
         }
+        OfficeQuestionDetail detail = detail(entity);
+        if (CurrentUser.canManage(entity.getCreatedBy())) {
+            detail.setAnswer(entity.getAnswer());
+            detail.setExplanation(entity.getExplanation());
+        }
+        return detail;
+    }
 
+    public OfficeQuestionDetail getContestQuestion(int id) {
+        OfficeQuestionEntity entity = findById(id);
+        if (!Boolean.TRUE.equals(entity.getVisible())) {
+            throw ApiException.notFound("题目不存在");
+        }
+        return detail(entity);
+    }
+
+    public OfficeQuestionEntity requireContestReady(int id) {
+        OfficeQuestionEntity entity = questionMapper.selectById(id);
+        if (entity == null || !Boolean.TRUE.equals(entity.getVisible())) {
+            throw ApiException.notFound("Office 选择题不存在或已停用");
+        }
+        validateContestReady(entity);
+        return entity;
+    }
+
+    private OfficeQuestionDetail detail(OfficeQuestionEntity entity) {
         OfficeQuestionDetail detail = new OfficeQuestionDetail();
         detail.setId(entity.getId());
         detail.setAppType(entity.getAppType());
@@ -73,13 +106,10 @@ public class OfficeService {
         detail.setContent(entity.getContent());
         detail.setOptions(parseStringList(entity.getOptions()));
         detail.setVisible(entity.getVisible());
+        detail.setContentVisibility(entity.getContentVisibility());
         detail.setCreatedBy(entity.getCreatedBy());
         detail.setCreatorUsername(loadCreatorUsername(entity.getCreatedBy()));
         detail.setCreatedAt(entity.getCreatedAt());
-        if (CurrentUser.canManage(entity.getCreatedBy())) {
-            detail.setAnswer(entity.getAnswer());
-            detail.setExplanation(entity.getExplanation());
-        }
         return detail;
     }
 
@@ -119,6 +149,10 @@ public class OfficeService {
     public Map<String, Object> hardDelete(int id) {
         OfficeQuestionEntity entity = findById(id);
         CurrentUser.requireCanManage(entity.getCreatedBy());
+        if (contestProblemMapper.selectCount(new QueryWrapper<ContestProblemEntity>()
+                .eq("office_question_id", id)) > 0) {
+            throw ApiException.conflict("该题目已加入比赛，只能停用，不能彻底删除。");
+        }
         List<OfficeRecordEntity> records = recordMapper.selectList(
                 new QueryWrapper<OfficeRecordEntity>().eq("question_id", id));
         if (!CurrentUser.isAdmin() && !records.isEmpty()) {
@@ -147,6 +181,9 @@ public class OfficeService {
         if (!Boolean.TRUE.equals(entity.getVisible())) {
             throw ApiException.conflict("该题目已停用，无法继续作答");
         }
+        if (!ContentVisibility.PUBLIC.name().equals(entity.getContentVisibility())) {
+            throw ApiException.notFound("题目不存在");
+        }
 
         List<String> selected = request.getSelected() == null ? List.of() : request.getSelected();
         String selectedNorm = normalize(selected);
@@ -162,11 +199,33 @@ public class OfficeService {
         return new OfficeSubmitResult(correct, entity.getAnswer(), entity.getExplanation());
     }
 
+    public ContestDtos.ChoiceSubmission submitContest(int questionId, List<String> selected,
+                                                       long contestProblemId) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
+        OfficeQuestionEntity entity = questionMapper.selectById(questionId);
+        if (entity == null || !Boolean.TRUE.equals(entity.getVisible())) {
+            throw ApiException.notFound("题目不存在");
+        }
+        List<String> safeSelected = validateContestSelection(entity, selected);
+        boolean correct = normalize(safeSelected).equals(entity.getAnswer() == null ? "" : entity.getAnswer().trim());
+        OfficeRecordEntity record = new OfficeRecordEntity();
+        record.setUserId(userId);
+        record.setQuestionId(questionId);
+        record.setContestProblemId(contestProblemId);
+        record.setSelected(serialize(safeSelected));
+        record.setCorrect(correct);
+        recordMapper.insert(record);
+        record = recordMapper.selectById(record.getId());
+        return new ContestDtos.ChoiceSubmission(record.getId(), contestProblemId,
+                safeSelected, correct, record.getCreatedAt());
+    }
+
     public OfficeStats stats() {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
         List<OfficeRecordEntity> records = recordMapper.selectList(
-                new QueryWrapper<OfficeRecordEntity>().eq("user_id", userId));
+                new QueryWrapper<OfficeRecordEntity>().eq("user_id", userId).isNull("contest_problem_id"));
 
         OfficeStats stats = new OfficeStats();
         stats.setTotalAnswered(records.size());
@@ -230,7 +289,8 @@ public class OfficeService {
         Map<Integer, Long> submissionCounts = loadSubmissionCounts(questions);
         return questions.stream().map(entity -> new OfficeQuestionListItem(
                 entity.getId(), entity.getAppType(), entity.getCategory(), entity.getDifficulty(),
-                entity.getQuestionType(), entity.getContent(), entity.getVisible(), entity.getCreatedBy(),
+                entity.getQuestionType(), entity.getContent(), entity.getVisible(), entity.getContentVisibility(),
+                entity.getCreatedBy(),
                 entity.getCreatedBy() == null ? null : creatorNames.get(entity.getCreatedBy()),
                 submissionCounts.getOrDefault(entity.getId(), 0L), entity.getCreatedAt()
         )).toList();
@@ -270,6 +330,59 @@ public class OfficeService {
         }
     }
 
+    private void validateContestReady(OfficeQuestionEntity entity) {
+        if (entity.getContent() == null || entity.getContent().isBlank()
+                || entity.getAnswer() == null || entity.getAnswer().isBlank()) {
+            throw ApiException.conflict("Office 选择题缺少题干或正确答案，不能加入比赛");
+        }
+        List<String> options = parseStringList(entity.getOptions());
+        if (options.size() < 2 || options.stream().anyMatch(option -> option == null || option.isBlank())) {
+            throw ApiException.conflict("Office 选择题选项配置不完整，不能加入比赛");
+        }
+        String type = entity.getQuestionType();
+        if (!QUESTION_TYPES.contains(type)) {
+            throw ApiException.conflict("Office 选择题类型无效，不能加入比赛");
+        }
+        if ("TRUE_FALSE".equals(type)) {
+            if (!Set.of("T", "F").contains(entity.getAnswer().trim())) {
+                throw ApiException.conflict("判断题正确答案配置无效，不能加入比赛");
+            }
+            return;
+        }
+        List<String> answers = Arrays.stream(entity.getAnswer().split(","))
+                .map(String::trim).filter(value -> !value.isEmpty()).toList();
+        if (answers.isEmpty() || ("SINGLE_CHOICE".equals(type) && answers.size() != 1)
+                || answers.stream().distinct().count() != answers.size()
+                || answers.stream().anyMatch(value -> !isOptionIndex(value, options.size()))) {
+            throw ApiException.conflict("Office 选择题正确答案配置无效，不能加入比赛");
+        }
+    }
+
+    private List<String> validateContestSelection(OfficeQuestionEntity entity, List<String> selected) {
+        validateContestReady(entity);
+        List<String> safe = selected == null ? List.of() : selected.stream()
+                .filter(Objects::nonNull).map(String::trim).filter(value -> !value.isEmpty()).toList();
+        List<String> options = parseStringList(entity.getOptions());
+        boolean invalid = safe.isEmpty() || safe.stream().distinct().count() != safe.size();
+        if ("TRUE_FALSE".equals(entity.getQuestionType())) {
+            invalid = invalid || safe.size() != 1 || !Set.of("T", "F").contains(safe.get(0));
+        } else {
+            invalid = invalid || ("SINGLE_CHOICE".equals(entity.getQuestionType()) && safe.size() != 1)
+                    || safe.stream().anyMatch(value -> !isOptionIndex(value, options.size()));
+        }
+        if (invalid) throw ApiException.badRequest("所选答案格式无效");
+        return List.copyOf(safe);
+    }
+
+    private boolean isOptionIndex(String value, int optionCount) {
+        try {
+            int index = Integer.parseInt(value);
+            return index >= 0 && index < optionCount;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
     private void applyToEntity(OfficeQuestionEntity entity, OfficeQuestionUpsertRequest request) {
         entity.setAppType(request.getAppType().toUpperCase());
         entity.setCategory(request.getCategory());
@@ -281,6 +394,7 @@ public class OfficeService {
         entity.setAnswer(request.getAnswer() == null ? "" : request.getAnswer().trim());
         entity.setExplanation(request.getExplanation() == null ? "" : request.getExplanation());
         entity.setVisible(request.getVisible() == null || request.getVisible());
+        entity.setContentVisibility(ContentVisibility.parse(request.getContentVisibility()).name());
     }
 
     private List<String> parseStringList(String json) {

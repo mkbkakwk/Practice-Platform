@@ -14,6 +14,11 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:oj}
     password: ${RABBITMQ_PASSWORD:oj}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:750ms}
   jackson:
     time-zone: Asia/Shanghai
     date-format: yyyy-MM-dd HH:mm:ss
@@ -26,10 +31,10 @@ spring:
     baseline-on-migrate: true
     baseline-version: "1"
     validate-migration-naming: true
-  servlet:
-    multipart:
-      max-file-size: 20MB
-      max-request-size: 25MB
+    servlet:
+      multipart:
+        max-file-size: ${OFFICE_HTTP_MAX_FILE_SIZE:10MB}
+        max-request-size: ${OFFICE_HTTP_MAX_REQUEST_SIZE:11MB}
 
 mybatis-plus:
   configuration:
@@ -47,11 +52,47 @@ oj:
   cors:
     origin: ${CORS_ORIGIN:*}
   promote-first-admin: ${PROMOTE_FIRST_ADMIN:false}
+  build:
+    git-sha: ${APP_GIT_SHA:unknown}
+    version: ${APP_VERSION:dev}
+    time: ${APP_BUILD_TIME:unknown}
   rabbitmq:
-    exchange: oj.judge
-    routing-key: oj.judge.submit
-    queue: oj.judge.queue
+    exchange: ${OJ_RABBITMQ_EXCHANGE:oj.judge}
+    routing-key: ${OJ_RABBITMQ_ROUTING_KEY:oj.judge.submit}
+    queue: ${OJ_RABBITMQ_QUEUE:oj.judge.queue}
+    retry-exchange: ${OJ_RABBITMQ_RETRY_EXCHANGE:oj.judge.retry}
+    retry-routing-key: ${OJ_RABBITMQ_RETRY_ROUTING_KEY:oj.judge.retry}
+    retry-queue: ${OJ_RABBITMQ_RETRY_QUEUE:oj.judge.retry.queue}
+    dead-letter-exchange: ${OJ_RABBITMQ_DLX:oj.judge.dlx}
+    dead-letter-routing-key: ${OJ_RABBITMQ_DLQ_ROUTING_KEY:oj.judge.dead}
+    dead-letter-queue: ${OJ_RABBITMQ_DLQ:oj.judge.dlq}
+    retry-delay: ${JUDGE_RETRY_DELAY:5s}
+  outbox:
+    batch-size: ${OUTBOX_BATCH_SIZE:20}
+    poll-delay: ${OUTBOX_POLL_DELAY_MS:500}ms
+    lease: ${OUTBOX_LEASE:30s}
+    confirm-timeout: ${OUTBOX_CONFIRM_TIMEOUT:5s}
+    initial-retry-delay: ${OUTBOX_INITIAL_RETRY_DELAY:1s}
+    max-retry-delay: ${OUTBOX_MAX_RETRY_DELAY:1m}
+    retention: ${OUTBOX_RETENTION:7d}
+    cleanup-interval: ${OUTBOX_CLEANUP_INTERVAL_MS:3600000}ms
+    cleanup-batch-size: ${OUTBOX_CLEANUP_BATCH_SIZE:500}
+  status:
+    worker-readiness-url: ${WORKER_READINESS_URL:http://worker:8081/api/readiness}
+    runner-readiness-url: ${RUNNER_READINESS_URL:http://runner:8080/api/readiness}
   doc-storage: ${DOC_STORAGE:/tmp/oj-docs}
+  office:
+    max-upload-bytes: ${OFFICE_MAX_UPLOAD_BYTES:10485760}
+    max-expanded-bytes: ${OFFICE_MAX_EXPANDED_BYTES:33554432}
+    max-entry-bytes: ${OFFICE_MAX_ENTRY_BYTES:8388608}
+    max-zip-entries: ${OFFICE_MAX_ZIP_ENTRIES:2048}
+    min-inflate-ratio: ${OFFICE_MIN_INFLATE_RATIO:0.01}
+    max-result-items: ${OFFICE_MAX_RESULT_ITEMS:200}
+    max-result-bytes: ${OFFICE_MAX_RESULT_BYTES:262144}
+    max-concurrent-judges: ${OFFICE_MAX_CONCURRENT_JUDGES:4}
+    max-document-elements: ${OFFICE_MAX_DOCUMENT_ELEMENTS:20000}
+    max-text-chars: ${OFFICE_MAX_TEXT_CHARS:1000000}
+    orphan-min-age: ${OFFICE_ORPHAN_MIN_AGE:1h}
 
 logging:
   level:

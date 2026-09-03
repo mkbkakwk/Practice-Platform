@@ -2,23 +2,29 @@ package com.oj.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oj.common.ApiException;
 import com.oj.common.CurrentUser;
-import com.oj.config.AppProperties;
 import com.oj.dto.SubmitRequest;
 import com.oj.dto.SubmissionView;
 import com.oj.entity.ProblemEntity;
 import com.oj.entity.SubmissionEntity;
 import com.oj.entity.UserEntity;
+import com.oj.contest.ContentVisibility;
 import com.oj.mapper.SubmissionMapper;
 import com.oj.mapper.UserMapper;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.oj.reliability.JudgeMessage;
+import com.oj.reliability.JudgeOutboxRepository;
+import com.oj.observability.OperationalMetrics;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,25 +33,30 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class SubmissionService {
 
+    private static final Logger log = LoggerFactory.getLogger(SubmissionService.class);
+
     private static final Duration RATE_LIMIT = Duration.ofSeconds(5);
 
     private final SubmissionMapper submissionMapper;
     private final UserMapper userMapper;
     private final ProblemService problemService;
-    private final RabbitTemplate rabbitTemplate;
-    private final AppProperties appProperties;
+    private final JudgeOutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
+    private final OperationalMetrics metrics;
     private final Map<Integer, LocalDateTime> lastSubmit = new ConcurrentHashMap<>();
 
     public SubmissionService(SubmissionMapper submissionMapper, UserMapper userMapper,
-                             ProblemService problemService, RabbitTemplate rabbitTemplate,
-                             AppProperties appProperties) {
+                             ProblemService problemService, JudgeOutboxRepository outboxRepository,
+                             ObjectMapper objectMapper, OperationalMetrics metrics) {
         this.submissionMapper = submissionMapper;
         this.userMapper = userMapper;
         this.problemService = problemService;
-        this.rabbitTemplate = rabbitTemplate;
-        this.appProperties = appProperties;
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
+    @Transactional
     public int submit(SubmitRequest request) {
         Integer userId = CurrentUser.getId();
         if (userId == null) throw ApiException.unauthorized("请先登录");
@@ -56,41 +67,52 @@ public class SubmissionService {
         }
 
         ProblemEntity problem = problemService.getEntityById(request.getProblemId());
-        if (!Boolean.TRUE.equals(problem.getVisible())) {
+        if (!Boolean.TRUE.equals(problem.getVisible())
+                || !ContentVisibility.PUBLIC.name().equals(problem.getContentVisibility())) {
             throw ApiException.conflict("该题目已停用，无法继续提交");
         }
+
+        int submissionId = persistSubmission(userId, problem, request.getLanguage(), request.getCode(), null);
+        lastSubmit.put(userId, LocalDateTime.now());
+        return submissionId;
+    }
+
+    @Transactional
+    public int submitContest(ProblemEntity problem, String language, String code, long contestProblemId) {
+        Integer userId = CurrentUser.getId();
+        if (userId == null) throw ApiException.unauthorized("请先登录");
+        return persistSubmission(userId, problem, language, code, contestProblemId);
+    }
+
+    private int persistSubmission(int userId, ProblemEntity problem, String language,
+                                  String code, Long contestProblemId) {
 
         SubmissionEntity submission = new SubmissionEntity();
         submission.setUserId(userId);
         submission.setProblemId(problem.getId());
-        submission.setLanguage(request.getLanguage());
-        submission.setCode(request.getCode());
+        submission.setContestProblemId(contestProblemId);
+        submission.setLanguage(language);
+        submission.setCode(code);
         submission.setVerdict("PENDING");
         submission.setTimeMs(0);
         submission.setMemoryKb(0);
         submission.setPassed(0);
         submission.setTotal(0);
+        submission.setJudgeGeneration(0);
         submission.setMessage("排队中");
         submissionMapper.insert(submission);
 
         try {
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("submissionId", submission.getId());
-            payload.put("language", submission.getLanguage());
-            payload.put("code", submission.getCode());
-            payload.put("timeLimitMs", problem.getTimeLimit());
-            payload.put("memoryLimitKb", problem.getMemoryLimit() * 1024);
-            payload.put("testCasesJson", problem.getTestCases());
-            rabbitTemplate.convertAndSend(
-                    appProperties.getRabbitmq().getExchange(),
-                    appProperties.getRabbitmq().getRoutingKey(), payload);
-        } catch (Exception exception) {
-            submission.setVerdict("SE");
-            submission.setMessage("评测服务暂不可用: " + exception.getMessage());
-            submissionMapper.updateById(submission);
+            JudgeMessage message = JudgeMessage.initial(submission.getId(), 0, MDC.get("requestId"));
+            String payload = objectMapper.writeValueAsString(message);
+            outboxRepository.insert(message.eventId(), submission.getId(), 0, payload);
+            metrics.submissionAccepted();
+            log.info("Submission accepted submissionId={} problemId={} contestId={} eventId={}",
+                    submission.getId(), problem.getId(), contestProblemId, message.eventId());
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Unable to persist judge event", exception);
         }
 
-        lastSubmit.put(userId, LocalDateTime.now());
         return submission.getId();
     }
 
@@ -139,6 +161,7 @@ public class SubmissionService {
         view.setId(submission.getId());
         view.setUserId(submission.getUserId());
         view.setProblemId(submission.getProblemId());
+        view.setContestProblemId(submission.getContestProblemId());
         view.setLanguage(submission.getLanguage());
         if (includeCode) view.setCode(submission.getCode());
         view.setVerdict(submission.getVerdict());
