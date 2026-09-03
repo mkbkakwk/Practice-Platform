@@ -20,9 +20,20 @@ consistent_compose="$repo_root/test/fixtures/stage9b/consistent-compose.yml"
 db_user=stage9b
 db_name=stage9b
 backup_tool_sha="$(git -C "$repo_root" rev-parse HEAD)"
-historical_runtime_sha="f1e257d2fc719c2be92fa7cdd8406a98f475a4f1"
-git -C "$repo_root" cat-file -e "$historical_runtime_sha^{commit}" 2>/dev/null \
-  || { echo "STAGE 9B TEST FAILED: historical runtime fixture SHA is unavailable" >&2; exit 1; }
+# CI checkouts are intentionally shallow, so use an isolated commit object with
+# the current tree to exercise a valid runtime SHA that differs from the tool.
+# Formal release validation still requires its operator-supplied runtime SHA to
+# resolve in the checkout that performs the backup.
+historical_runtime_sha="$(
+  cd "$repo_root"
+  GIT_AUTHOR_NAME='Backup provenance fixture' \
+  GIT_AUTHOR_EMAIL='backup-provenance-fixture@example.invalid' \
+  GIT_COMMITTER_NAME='Backup provenance fixture' \
+  GIT_COMMITTER_EMAIL='backup-provenance-fixture@example.invalid' \
+  git commit-tree "$(git rev-parse HEAD^{tree})" -m 'backup provenance runtime fixture'
+)"
+[[ "$historical_runtime_sha" != "$backup_tool_sha" ]] \
+  || { echo "STAGE 9B TEST FAILED: runtime provenance fixture must differ from backup tool SHA" >&2; exit 1; }
 
 fail() { echo "STAGE 9B TEST FAILED: $*" >&2; exit 1; }
 assert_backup_permissions() {
