@@ -15,6 +15,7 @@ release_require_file "$formal_env_file" "production environment file"
 
 release_keys=(
   RELEASE_VERSION RELEASE_TAG RELEASE_GIT_SHA RELEASE_MAIN_SHA RELEASE_FLYWAY_VERSION RELEASE_BUILD_TIME POSTGRES_DB
+  PREVIOUS_PRODUCTION_GIT_SHA PREVIOUS_PRODUCTION_FLYWAY_VERSION BACKUP_TOOL_GIT_SHA T1_PRODUCTION_RUNTIME_GIT_SHA
   POSTGRES_IMAGE RABBITMQ_IMAGE BACKEND_IMAGE WORKER_IMAGE RUNNER_IMAGE FRONTEND_IMAGE
   EXPECTED_BACKEND_IMAGE_ID EXPECTED_WORKER_IMAGE_ID EXPECTED_RUNNER_IMAGE_ID EXPECTED_FRONTEND_IMAGE_ID
   EXPECTED_OCI_VERSION FORMAL_POSTGRES_VOLUME FORMAL_RABBITMQ_VOLUME
@@ -63,6 +64,20 @@ esac
 metadata_is_utc_build_time "$release_build_time" \
   || release_die "RELEASE_BUILD_TIME must be an immutable UTC ISO-8601 timestamp"
 unset release_build_time
+
+previous_production_git_sha="$(release_env_value "$release_env_file" PREVIOUS_PRODUCTION_GIT_SHA)"
+backup_tool_git_sha="$(release_env_value "$release_env_file" BACKUP_TOOL_GIT_SHA)"
+t1_production_runtime_git_sha="$(release_env_value "$release_env_file" T1_PRODUCTION_RUNTIME_GIT_SHA)"
+for provenance_sha in "$previous_production_git_sha" "$backup_tool_git_sha" "$t1_production_runtime_git_sha"; do
+  metadata_is_full_git_sha "$provenance_sha" \
+    || release_die "release backup provenance must use full 40-character Git SHAs"
+  git -C "$release_repo_root" cat-file -e "$provenance_sha^{commit}" 2>/dev/null \
+    || release_die "release backup provenance SHA does not exist locally"
+done
+[[ "$backup_tool_git_sha" == "$release_git_sha" ]] \
+  || release_die "BACKUP_TOOL_GIT_SHA must match RELEASE_GIT_SHA"
+[[ "$previous_production_git_sha" == "$t1_production_runtime_git_sha" ]] \
+  || release_die "T1_PRODUCTION_RUNTIME_GIT_SHA must match PREVIOUS_PRODUCTION_GIT_SHA"
 
 metadata_is_full_git_sha "$release_git_sha" \
   || release_die "RELEASE_GIT_SHA must be a full 40-character lowercase Git SHA"
@@ -189,6 +204,8 @@ health_json="$(curl --fail --silent --show-error "http://127.0.0.1:$frontend_por
 echo "Release preflight passed:"
 echo "  tag: $release_tag"
 echo "  source: $release_git_sha"
+echo "  backup tool: $backup_tool_git_sha"
+echo "  T1 production runtime: $t1_production_runtime_git_sha"
 echo "  Flyway: V$flyway_version"
 echo "  production health: OK"
 echo "No containers, images, networks, volumes, or database rows were modified."

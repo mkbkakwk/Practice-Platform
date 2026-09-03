@@ -13,6 +13,12 @@ metadata_is_full_git_sha "$full_sha" \
   || { echo "RELEASE METADATA TEST FAILED: full SHA was rejected" >&2; exit 1; }
 ! metadata_is_full_git_sha "$short_sha" \
   || { echo "RELEASE METADATA TEST FAILED: short image tag was accepted as a release SHA" >&2; exit 1; }
+metadata_require_matching_production_runtime "$full_sha" "$full_sha" "$full_sha" \
+  || { echo "RELEASE METADATA TEST FAILED: matching production provenance was rejected" >&2; exit 1; }
+! metadata_require_matching_production_runtime "$full_sha" "$short_sha" "$full_sha" \
+  || { echo "RELEASE METADATA TEST FAILED: malformed observed production SHA was accepted" >&2; exit 1; }
+! metadata_require_matching_production_runtime "$full_sha" "fedcba9876543210fedcba9876543210fedcba98" "$full_sha" \
+  || { echo "RELEASE METADATA TEST FAILED: runtime provenance mismatch was accepted" >&2; exit 1; }
 metadata_is_utc_build_time "$build_time" \
   || { echo "RELEASE METADATA TEST FAILED: UTC build timestamp was rejected" >&2; exit 1; }
 ! metadata_is_utc_build_time "unknown" \

@@ -115,17 +115,27 @@ backup_restrict_artifact() {
 }
 
 backup_verify_dir() {
-  local dir="$1" manifest mode sha created
+  local dir="$1" manifest mode format legacy_sha backup_tool_sha production_runtime_sha created
   dir="$(backup_shell_path "$dir")"
   [[ -d "$dir" && ! -L "$dir" ]] || backup_die "backup directory is missing or unsafe"
   [[ -f "$dir/.complete" && -f "$dir/manifest.json" && -f "$dir/SHA256SUMS" ]] || backup_die "backup is incomplete"
   [[ -f "$dir/database.dump" && -f "$dir/office.tar.gz" ]] || backup_die "backup artifacts are missing"
   manifest="$dir/manifest.json"
-  grep -Eq '"formatVersion"[[:space:]]*:[[:space:]]*1' "$manifest" || backup_die "unsupported manifest format"
+  format="$(sed -n 's/.*"formatVersion"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$manifest" | head -n 1)"
+  [[ "$format" == 1 || "$format" == 2 ]] || backup_die "unsupported manifest format"
   mode="$(backup_manifest_value "$manifest" mode)"
   [[ "$mode" == daily || "$mode" == consistent || "$mode" == weekly || "$mode" == monthly ]] || backup_die "invalid backup mode"
-  sha="$(backup_manifest_value "$manifest" gitSha)"
-  backup_is_full_sha "$sha" || backup_die "manifest Git SHA is invalid"
+  if [[ "$format" == 1 ]]; then
+    # Legacy Stage 9 backups recorded one ambiguous tool/source SHA.  Keep
+    # them verifiable; new backups use manifest format 2 below.
+    legacy_sha="$(backup_manifest_value "$manifest" gitSha)"
+    backup_is_full_sha "$legacy_sha" || backup_die "legacy manifest Git SHA is invalid"
+  else
+    backup_tool_sha="$(backup_manifest_value "$manifest" backupToolGitSha)"
+    production_runtime_sha="$(backup_manifest_value "$manifest" productionRuntimeGitSha)"
+    backup_is_full_sha "$backup_tool_sha" || backup_die "manifest backup-tool Git SHA is invalid"
+    backup_is_full_sha "$production_runtime_sha" || backup_die "manifest production runtime Git SHA is invalid"
+  fi
   created="$(backup_manifest_value "$manifest" createdAt)"
   backup_is_utc_time "$created" || backup_die "manifest timestamp is invalid"
   (cd "$dir" && sha256sum -c SHA256SUMS --status) || backup_die "backup checksum verification failed"

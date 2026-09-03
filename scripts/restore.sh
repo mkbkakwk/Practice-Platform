@@ -9,6 +9,15 @@ while [[ $# -gt 0 ]]; do case "$1" in --backup) backup="${2:-}"; shift 2;; --tar
 [[ -n "$backup" && -n "$db_container" && -n "$db_name" && -n "$db_user" && -n "$office_volume" ]] || usage
 backup="$(backup_shell_path "$backup")"
 backup_assert_project_container "$project" "$db_container"; backup_assert_volume "$office_volume"; backup_verify_dir "$backup"
+manifest="$backup/manifest.json"
+manifest_format="$(sed -n 's/.*"formatVersion"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$manifest" | head -n 1)"
+if [[ "$manifest_format" == 2 ]]; then
+  backup_note restore "backup tool Git SHA: $(backup_manifest_value "$manifest" backupToolGitSha)"
+  backup_note restore "backed-up Production runtime Git SHA: $(backup_manifest_value "$manifest" productionRuntimeGitSha)"
+else
+  backup_note restore "legacy manifest Git SHA: $(backup_manifest_value "$manifest" gitSha)"
+fi
+backup_note restore "backed-up Flyway: V$(backup_manifest_value "$manifest" flywayVersion)"
 table_count="$(docker exec "$db_container" psql -h 127.0.0.1 -p 5432 -U "$db_user" -d "$db_name" -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" | tr -d '\r\n')"
 [[ "$table_count" == 0 ]] || backup_die "restore target database is not empty"
 target_entries="$(docker run --rm -v "$office_volume:/target" postgres:16-alpine sh -c 'find /target -mindepth 1 -print -quit')"

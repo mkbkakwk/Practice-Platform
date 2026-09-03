@@ -11,6 +11,9 @@ tokens, user data, or raw environment files here.
 | Release Git SHA | `<full commit SHA used to build>` |
 | Main Merge Commit | `<full main merge commit SHA>` |
 | Release Tag | `<annotated tag>` |
+| Previous Production Git SHA | `<full previous runtime SHA>` |
+| Backup Tool Git SHA | `<full backup-tool checkout SHA>` |
+| T1 Production Runtime Git SHA | `<full runtime SHA recorded in the T1 backup>` |
 | CI Run | `<GitHub Actions run URL/ID>` |
 | Release PR | `<PR URL/number>` |
 
@@ -40,6 +43,8 @@ tokens, user data, or raw environment files here.
 | Field | Value |
 | --- | --- |
 | Backup ID | `<backup set identifier>` |
+| T1 Backup Tool Git SHA | `<manifest backupToolGitSha>` |
+| T1 Production Runtime Git SHA | `<manifest productionRuntimeGitSha>` |
 | PostgreSQL Backup | `<path/reference and SHA-256>` |
 | RabbitMQ Definitions | `<path/reference and SHA-256>` |
 | DOCX Backup | `<path/reference and SHA-256>` |
