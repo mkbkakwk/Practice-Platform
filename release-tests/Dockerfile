@@ -14,6 +14,7 @@ COPY docs/release-manifest-template.md docs/release-manifest-template.md
 COPY scripts/release-common.sh scripts/release-common.sh
 COPY scripts/release-metadata.sh scripts/release-metadata.sh
 COPY scripts/release-preflight.sh scripts/release-preflight.sh
+COPY scripts/release-t1-preflight.sh scripts/release-t1-preflight.sh
 COPY scripts/release-status.sh scripts/release-status.sh
 COPY scripts/staging-common.sh scripts/staging-common.sh
 COPY scripts/test-release-metadata.sh scripts/test-release-metadata.sh

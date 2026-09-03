@@ -16,7 +16,9 @@ Use an external host directory outside Git, PostgreSQL volumes, and Office volum
   --compose-file docker-compose.yml --compose-file docker-compose.staging.yml
 ```
 
-The script verifies free space before publication, writes a custom PostgreSQL dump and Office archive, records full Git SHA/Flyway/UTC metadata, checks SHA-256 and archive safety, atomically publishes `.complete`, and restarts Backend/Worker through an EXIT trap. New artifacts use `umask 077`: Linux meaningful modes are directory `700` and files `600`; Windows keeps compatible ACL semantics and must never be world-writable.
+The script verifies free space before publication, writes a custom PostgreSQL dump and Office archive, records separate backup-tool Git SHA, backed-up runtime Git SHA, Flyway, and UTC metadata, checks SHA-256 and archive safety, atomically publishes `.complete`, and restarts Backend/Worker through an EXIT trap. New artifacts use `umask 077`: Linux meaningful modes are directory `700` and files `600`; Windows keeps compatible ACL semantics and must never be world-writable.
+
+Formal Production backups must additionally supply `--production-runtime-git-sha <full-sha>`. The release T1 preflight verifies this value is the observed previous Production runtime; it never substitutes the backup tool checkout SHA.
 
 Run `./scripts/backup-verify.sh <backup-dir>` before considering a backup usable. Retention is `7 daily / 4 weekly / 3 monthly`; first use only `backup-retention.sh --dry-run`. Corrupt or incomplete directories are retained for investigation rather than deleted automatically.
 
