@@ -45,7 +45,7 @@ write quiescence, not a filesystem transaction snapshot.
 Each completed backup is atomically published below its category:
 
 ```text
-<backup-root>/<daily|consistent>/<UTC>_<full-40-char-sha>/
+<backup-root>/<daily|consistent>/<UTC>_<production-runtime-full-40-char-sha>/
   database.dump
   office.tar.gz
   manifest.json
@@ -53,8 +53,11 @@ Each completed backup is atomically published below its category:
   .complete
 ```
 
-The manifest contains the format version, UTC timestamp, mode, full source
-SHA, Flyway version, and artifact names. It never contains runtime credentials.
+Manifest format 2 contains the UTC timestamp, mode, `backupToolGitSha`,
+`productionRuntimeGitSha`, Flyway version, and artifact names. These identities
+are intentionally separate during a release: the tool may be newer than the
+Production runtime being backed up. Legacy format 1 manifests with `gitSha`
+remain verifiable as historical backups. No manifest contains runtime credentials.
 `SHA256SUMS` covers the dump, archive, and manifest. Partial work remains
 unpublished: only a directory with valid checksums and `.complete` is a backup.
 Backups use `umask 077`; never put a backup root in Git, a PostgreSQL volume,
@@ -96,7 +99,7 @@ PostgreSQL database and empty Office volume:
 ```
 
 Before restore, the script requires a supported manifest, `.complete`, all
-artifacts, checksums, a full SHA, and safe archive paths. Archives containing
+artifacts, checksums, provenance SHA(s), and safe archive paths. Archives containing
 absolute paths, `..`, or links are rejected. It never auto-runs new Flyway
 migrations; validate the restored Flyway history (currently V9), database
 content, Office file checksums, and DB-to-file references before starting a

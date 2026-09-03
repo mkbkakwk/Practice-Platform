@@ -19,6 +19,21 @@ backup_root="$(backup_shell_path "$(mktemp -d "$backup_parent/practice-platform-
 consistent_compose="$repo_root/test/fixtures/stage9b/consistent-compose.yml"
 db_user=stage9b
 db_name=stage9b
+backup_tool_sha="$(git -C "$repo_root" rev-parse HEAD)"
+# CI checkouts are intentionally shallow, so use an isolated commit object with
+# the current tree to exercise a valid runtime SHA that differs from the tool.
+# Formal release validation still requires its operator-supplied runtime SHA to
+# resolve in the checkout that performs the backup.
+historical_runtime_sha="$(
+  cd "$repo_root"
+  GIT_AUTHOR_NAME='Backup provenance fixture' \
+  GIT_AUTHOR_EMAIL='backup-provenance-fixture@example.invalid' \
+  GIT_COMMITTER_NAME='Backup provenance fixture' \
+  GIT_COMMITTER_EMAIL='backup-provenance-fixture@example.invalid' \
+  git commit-tree "$(git rev-parse HEAD^{tree})" -m 'backup provenance runtime fixture'
+)"
+[[ "$historical_runtime_sha" != "$backup_tool_sha" ]] \
+  || { echo "STAGE 9B TEST FAILED: runtime provenance fixture must differ from backup tool SHA" >&2; exit 1; }
 
 fail() { echo "STAGE 9B TEST FAILED: $*" >&2; exit 1; }
 assert_backup_permissions() {
@@ -111,13 +126,13 @@ fi
 backup() {
   BACKUP_MIN_FREE_BYTES=1 "$BASH" "$script_dir/backup.sh" \
     --environment test --mode daily --backup-root "$backup_root" --project "$project" \
-    --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office"
+    --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office" "$@"
 }
 consistent_backup() {
   BACKUP_MIN_FREE_BYTES=1 "$BASH" "$script_dir/backup.sh" \
     --environment test --mode consistent --backup-root "$backup_root" --project "$project" \
     --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office" \
-    --compose-file "$consistent_compose"
+    --compose-file "$consistent_compose" "$@"
 }
 
 command -v docker >/dev/null || fail "docker is required"
@@ -149,17 +164,28 @@ docker run --rm -v "$source_office:/office" postgres:16-alpine sh -ec '
 source_hash="$(docker run --rm -v "$source_office:/office:ro" postgres:16-alpine sh -c 'sha256sum "/office/nested/teacher reference.docx" | awk "{print \$1}"')"
 
 echo "==> Stage 9B create and verify backup"
-backup
+backup --production-runtime-git-sha "$historical_runtime_sha"
 backup_dir="$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 [[ -n "$backup_dir" ]] || fail "backup was not published"
-"$BASH" "$script_dir/backup-verify.sh" "$backup_dir"
+"$BASH" "$script_dir/backup-verify.sh" "$backup_dir" \
+  --expect-backup-tool-git-sha "$backup_tool_sha" \
+  --expect-production-runtime-git-sha "$historical_runtime_sha"
 grep -Eq '"flywayVersion"[[:space:]]*:[[:space:]]*"9"' "$backup_dir/manifest.json" || fail "Flyway metadata missing"
-grep -Eq '"gitSha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$backup_dir/manifest.json" || fail "full Git SHA missing"
+grep -Eq '"formatVersion"[[:space:]]*:[[:space:]]*2' "$backup_dir/manifest.json" || fail "manifest v2 missing"
+grep -Eq '"backupToolGitSha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$backup_dir/manifest.json" || fail "backup tool Git SHA missing"
+grep -Eq '"productionRuntimeGitSha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$backup_dir/manifest.json" || fail "production runtime Git SHA missing"
 assert_backup_permissions "$backup_dir"
 assert_archive_helper_permissions "$backup_dir"
 
+echo "==> Stage 9B preserve legacy manifest verification"
+legacy_dir="$backup_root/daily/legacy-v1"
+cp -a "$backup_dir" "$legacy_dir"
+sed -i 's/"formatVersion": 2/"formatVersion": 1/; /"backupToolGitSha"/d; /"productionRuntimeGitSha"/d; /"mode": "daily"/a\  "gitSha": "'"$backup_tool_sha"'",' "$legacy_dir/manifest.json"
+(cd "$legacy_dir" && sha256sum database.dump office.tar.gz manifest.json > SHA256SUMS)
+"$BASH" "$script_dir/backup-verify.sh" "$legacy_dir"
+
 echo "==> Stage 9B create and verify quiesced backup"
-consistent_backup
+consistent_backup --production-runtime-git-sha "$backup_tool_sha"
 consistent_dir="$(find "$backup_root/consistent" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 [[ -n "$consistent_dir" ]] || fail "consistent backup was not published"
 "$BASH" "$script_dir/backup-verify.sh" "$consistent_dir"
@@ -167,6 +193,14 @@ assert_backup_permissions "$consistent_dir"
 assert_archive_helper_permissions "$consistent_dir"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-backend-1")" == true ]] || fail "consistent backup did not restore Backend"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-worker-1")" == true ]] || fail "consistent backup did not restore Worker"
+
+echo "==> Stage 9B require explicit release runtime provenance"
+if "$BASH" "$script_dir/backup.sh" --environment release --mode daily --backup-root "$backup_root" --project "$project" --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office" >/dev/null 2>&1; then
+  fail "release backup accepted missing production runtime Git SHA"
+fi
+if "$BASH" "$script_dir/backup.sh" --environment release --mode daily --backup-root "$backup_root" --project "$project" --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office" --production-runtime-git-sha not-a-sha >/dev/null 2>&1; then
+  fail "release backup accepted malformed production runtime Git SHA"
+fi
 
 echo "==> Stage 9B reject disk exhaustion before backup"
 if BACKUP_MIN_FREE_BYTES=999999999999999999 "$BASH" "$script_dir/backup.sh" --environment test --mode daily --backup-root "$backup_root" --project "$project" --db-container "$source_db" --db-name "$db_name" --db-user "$db_user" --office-volume "$source_office"; then fail "disk guard accepted impossible threshold"; fi
@@ -177,7 +211,7 @@ if consistent_backup; then fail "symlink-bearing Office storage was backed up"; 
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-backend-1")" == true ]] || fail "consistent backup did not restore Backend"
 [[ "$(docker inspect --format '{{.State.Running}}' "${project}-worker-1")" == true ]] || fail "consistent backup did not restore Worker"
 docker run --rm -v "$source_office:/office" postgres:16-alpine sh -c 'rm /office/unsafe-link'
-[[ "$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" == 1 ]] || fail "partial backup was published"
+[[ "$(find "$backup_root/daily" -mindepth 1 -maxdepth 1 -type d ! -name legacy-v1 | wc -l | tr -d " ")" == 1 ]] || fail "partial backup was published"
 
 echo "==> Stage 9B reject checksum corruption and archive traversal"
 corrupt="$backup_root/daily/corrupt"

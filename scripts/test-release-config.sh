@@ -23,7 +23,7 @@ for file in "$compose_file" "$staging_compose_file" "$staging_common" "$release_
 done
 [ ! -e "$publish_workflow" ] || fail "remote registry publishing workflow must be removed"
 
-for script in scripts/release-common.sh scripts/release-metadata.sh scripts/release-preflight.sh scripts/release-status.sh scripts/test-release-metadata.sh; do
+for script in scripts/release-common.sh scripts/release-metadata.sh scripts/release-preflight.sh scripts/release-t1-preflight.sh scripts/release-status.sh scripts/test-release-metadata.sh; do
   bash -n "$script" || fail "invalid Bash syntax in $script"
 done
 bash scripts/test-release-metadata.sh || fail "release metadata validation failed"
@@ -51,7 +51,7 @@ done
 
 release_version="$(awk -F= '$1 == "RELEASE_VERSION" {sub(/^[^=]*=/, ""); print}' "$release_example")"
 [ -n "$release_version" ] || fail "RELEASE_VERSION is empty"
-for key in RELEASE_BUILD_TIME EXPECTED_RUNNER_IMAGE_ID FORMAL_RUNNER_CONTAINER; do
+for key in RELEASE_BUILD_TIME EXPECTED_RUNNER_IMAGE_ID FORMAL_RUNNER_CONTAINER PREVIOUS_PRODUCTION_GIT_SHA PREVIOUS_PRODUCTION_FLYWAY_VERSION BACKUP_TOOL_GIT_SHA T1_PRODUCTION_RUNTIME_GIT_SHA; do
   value="$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$release_example")"
   [ -n "$value" ] || fail "$release_example is missing $key"
 done
@@ -117,6 +117,10 @@ grep -Fq 'RUNNER_TOKEN' scripts/release-preflight.sh \
   || fail "release preflight must require the Runner token"
 grep -Fq 'metadata_is_full_git_sha "$release_git_sha"' scripts/release-preflight.sh \
   || fail "release preflight must require a full Git SHA"
+grep -Fq 'T1_PRODUCTION_RUNTIME_GIT_SHA must match PREVIOUS_PRODUCTION_GIT_SHA' scripts/release-preflight.sh \
+  || fail "release preflight must validate explicit T1 runtime provenance"
+grep -Fq 'metadata_require_matching_production_runtime' scripts/release-t1-preflight.sh \
+  || fail "T1 preflight must compare expected, observed, and declared production runtime identity"
 grep -Fq 'metadata_is_utc_build_time "$release_build_time"' scripts/release-preflight.sh \
   || fail "release preflight must require an immutable UTC build time"
 grep -Fq '*/*|*:latest|*@*)' scripts/release-preflight.sh \
@@ -154,7 +158,7 @@ grep -Fq 'org.opencontainers.image.revision: "${STAGING_FULL_GIT_SHA:?STAGING_FU
 grep -Fq 'org.opencontainers.image.created: "${STAGING_BUILD_TIME:?STAGING_BUILD_TIME is required}"' "$staging_compose_file" \
   || fail "staging images must carry immutable build metadata"
 
-for field in 'Release Version' 'Release Git SHA' 'Main Merge Commit' \
+for field in 'Release Version' 'Release Git SHA' 'Main Merge Commit' 'Previous Production Git SHA' 'Backup Tool Git SHA' 'T1 Production Runtime Git SHA' \
   'Backend Image' 'Worker Image' 'Frontend Image' 'Flyway Version' \
   'Database Volume' 'RabbitMQ Volume' 'DOCX Volume' 'Backup ID' 'Release PR'; do
   grep -Fq "$field" "$manifest_template" || fail "manifest template is missing $field"
