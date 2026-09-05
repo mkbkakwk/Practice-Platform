@@ -23,6 +23,7 @@ tokens, user data, or raw environment files here.
 | --- | --- | --- | --- | --- |
 | Backend | `oj-backend:<release>` | `<sha256:...>` | `<full SHA>` | `<release tag>` |
 | Worker | `oj-worker:<release>` | `<sha256:...>` | `<full SHA>` | `<release tag>` |
+| Runner | `oj-runner:<release>` | `<sha256:...>` | `<full SHA>` | `<release tag>` |
 | Frontend | `oj-frontend:<release>` | `<sha256:...>` | `<full SHA>` | `<release tag>` |
 
 ## Runtime and persistence
@@ -50,6 +51,7 @@ tokens, user data, or raw environment files here.
 | DOCX Backup | `<path/reference and SHA-256>` |
 | Rollback Backend Image | `<immutable image ID/digest>` |
 | Rollback Worker Image | `<immutable image ID/digest>` |
+| Rollback Runner Image | `<immutable image ID/digest or NOT PRESENT in previous topology>` |
 | Rollback Frontend Image | `<immutable image ID/digest>` |
 
 ## Verification
@@ -59,6 +61,8 @@ tokens, user data, or raw environment files here.
 - [ ] Local image tags resolve to the recorded Image IDs.
 - [ ] Flyway reports the expected version with no unexpected migration.
 - [ ] All external volumes and the production network exist.
-- [ ] Backend and frontend health checks pass.
+- [ ] PostgreSQL, RabbitMQ, Backend, Worker, Runner and Frontend health checks pass at the full-topology gate.
+- [ ] Worker uses remote Runner; only Runner mounts the Docker socket.
+- [ ] OPS credential readiness was proven before maintenance; full ops-check runs post-commit.
 - [ ] Rollback images and backups are accessible.
 - [ ] Production counts and health are recorded before and after deployment.
