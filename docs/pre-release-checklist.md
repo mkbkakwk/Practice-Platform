@@ -10,6 +10,7 @@ School operators: follow [SCHOOL_DEPLOYMENT.md](SCHOOL_DEPLOYMENT.md) and [OPERA
 - [ ] OPS credentials exist and authenticate; full ops-check is scheduled after commit, not during holdback.
 - [ ] External env-forwarding backup wrapper, isolated success/failure evidence, destination capacity and secure evidence capture are ready.
 - [ ] Restore drill and exact pre-commit recovery procedure are approved, including schema compatibility, DB+Office pairing and zero-message conditions.
+- [ ] Known-good `ROLLBACK_SHA` is explicitly identified and verified as an accessible full commit SHA; the rollback target is compatible with the corresponding database and Office recovery state.
 - [ ] The independent business-access barrier and operator-only inspection path have been rehearsed.
 
 ## Maintenance and fresh T1
