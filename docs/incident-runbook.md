@@ -1,6 +1,8 @@
 # Incident and Troubleshooting Runbook
 
-Start with read-only evidence: `ops-check.sh`, `staging-status.sh`, bounded health/readiness endpoints, and structured logs. Do not use `docker system prune`, `docker volume prune`, volume deletion, queue purge, Outbox deletion, database drop, or `rm -rf` as routine recovery.
+Start with read-only evidence: `release-status.sh` for Production (`staging-status.sh` only for Staging), bounded health/readiness endpoints, and structured logs. Run `ops-check.sh` when the full topology and OPS credentials are available, not during Backend/Runner-only holdback. See the current [school operations guide](OPERATIONS.md). Do not use `docker system prune`, `docker volume prune`, volume deletion, queue purge, Outbox deletion, database drop, or `rm -rf` as routine recovery.
+
+After the Production release commit point, recovery is incident-specific: there is no automatic V4 rollback or blind T1 restore. The table below is diagnostic guidance, not authorization to redeploy or mutate data.
 
 | Symptom | Check first | Healthy state / safe recovery | Stop and escalate |
 | --- | --- | --- | --- |
