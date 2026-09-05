@@ -1,77 +1,39 @@
-# Contest scoring, standings, freeze, and rejudge
+# 比赛计分、排行榜、封榜与重判
 
-Stage 7 adds derived contest standings without introducing a persisted ranking
-truth table. PostgreSQL submissions remain authoritative and all phase checks
-use the server-side injected `Clock`.
+Stage 7 增加基于提交数据计算的排行榜，不另建一张作为权威来源的排名表。PostgreSQL 中的提交仍是权威数据，所有阶段判断均使用服务端注入的 `Clock`。
 
-## Scoring modes
+## 计分模式
 
-`Contest.scoring_mode` is `SCORE` or `ICPC`; historical contests migrate to
-`SCORE`. It can be changed only while a contest is a draft and has no contest
-submissions. An ICPC contest accepts only algorithm contest problems; the
-backend rejects Office Choice and DOCX additions even if a client bypasses the
-management UI.
+`Contest.scoring_mode` 为 `SCORE` 或 `ICPC`，历史比赛迁移为 `SCORE`。只有草稿且不存在比赛提交时才能修改模式。ICPC 比赛只接受算法题；即使客户端绕过管理界面，后端也会拒绝加入 Office 选择题或 DOCX 题。
 
-### SCORE
+### SCORE：按得分排名
 
-Every contest problem is worth 100 points.
+每道比赛题满分 100 分。
 
-- Algorithm: `AC` is 100 and ordinary student terminal failures (`WA`, `TLE`,
-  `MLE`, `OLE`, `RE`, `CE`, `SE`) are 0. `PENDING`, `JUDGING`, and
-  `JUDGE_FAILED` are not an effective new result.
-- Office Choice: a correct submission is 100; an incorrect one is 0.
-- Office DOCX: the existing canonical/effective document score is used.
+- 算法题：`AC` 为 100 分；普通终态失败（`WA`、`TLE`、`MLE`、`OLE`、`RE`、`CE`、`SE`）为 0 分。`PENDING`、`JUDGING`、`JUDGE_FAILED` 不构成新的有效结果。
+- Office 选择题：正确为 100 分，错误为 0 分。
+- Office DOCX：采用现有标准化评测流程确定的有效文档得分。
 
-Each problem takes the highest effective score across submissions. Participants
-with no submissions remain in the standings with score 0. Total score orders
-descending; equal totals use competition rank, with user ID only as a stable
-display order.
+每道题取所有提交中的最高有效分。没有提交的参赛人仍显示在榜单中，得分为 0。总分按降序排列；同分采用竞赛排名规则（例如 1、1、3），用户 ID 仅用于保持展示顺序稳定。
 
-### ICPC
+### ICPC：按解题数和罚时排名
 
-ICPC is algorithm-only. A problem is solved on its first effective `AC`.
-Before that AC, only `WA`, `TLE`, `MLE`, `OLE`, `RE`, `CE`, and `SE` add a wrong
-attempt. `JUDGE_FAILED` and non-terminal states never penalize students.
+ICPC 仅适用于算法题。某题首次出现有效 `AC` 时视为解出。在该次 AC 之前，只有 `WA`、`TLE`、`MLE`、`OLE`、`RE`、`CE`、`SE` 计为错误尝试；`JUDGE_FAILED` 和非终态不计罚时。
 
-Per solved problem penalty is whole minutes from contest start to the first AC
-plus 20 minutes per prior wrong attempt. Standings order by solved count
-descending, then penalty ascending; equal pairs use competition rank and user
-ID only makes output deterministic.
+每道已解题的罚时为比赛开始到首次 AC 的整分钟数，加上此前每次错误尝试的 20 分钟。排行榜先按解题数降序，再按罚时升序；两项相同则并列排名，用户 ID 仅保证输出顺序确定。
 
-## Freeze
+## 封榜
 
-`freeze_at` is optional and must satisfy `start_at < freeze_at < end_at`. It is
-draft-only configuration. During a running contest at or after `freeze_at`, a
-non-manager standings response derives only from submissions in
-`[start_at, freeze_at)`. The exact freeze timestamp is post-freeze.
+`freeze_at` 可不设置；设置时必须满足 `start_at < freeze_at < end_at`，且只能在草稿阶段配置。比赛进行到封榜时刻及之后，非管理者看到的排行榜只根据 `[start_at, freeze_at)` 内提交计算，恰好在封榜时刻提交的数据属于封榜后数据。
 
-Contest owner Teachers and Administrators receive a server-authorized live view;
-there is no client `live=true` switch. An ended contest reveals standings from
-the full `[start_at, end_at)` submission window. Freeze never hides a student's
-own submission result.
+比赛创建教师和管理员可获得服务端授权的实时视图，不存在由客户端传入 `live=true` 即可解锁的开关。比赛结束后公开整个 `[start_at, end_at)` 区间的榜单。封榜不隐藏学生本人的提交结果。
 
-## Algorithm rejudge
+## 算法重判
 
-Only contest owner Teachers and Administrators can queue a rejudge, and only in
-RUNNING or ENDED contests. Supported scopes are one algorithm submission, one
-algorithm contest problem, or every algorithm submission in a contest.
+只有比赛创建教师和管理员可以发起重判，且比赛必须处于 `RUNNING` 或 `ENDED`。支持的范围包括单条算法提交、一道算法比赛题的全部提交，以及整场比赛的全部算法提交。
 
-Every selected submission increments `judge_generation`; the generation is part
-of the deterministic judge event identity and the transactional outbox unique
-key. Workers default missing legacy message generations to zero and use
-generation-aware compare-and-set updates. A delayed old completion therefore
-cannot overwrite a newer generation.
+每个被选中的提交都会递增 `judge_generation`。该代次属于确定性的评测事件标识，也是事务型 Outbox 唯一键的一部分。Worker 对缺少代次的历史消息默认使用 0，并执行带代次条件的比较并更新操作。因此，延迟完成的旧代次结果不能覆盖新代次。
 
-`algorithm_judge_history` records one result per `(submission_id,
-judge_generation)`. While a rejudge is pending, judging, or infrastructure
-failed, standings retain the newest previous non-infrastructure terminal history
-record instead of replacing a student's valid score with a temporary zero.
-`rejudge_batch` and `rejudge_batch_item` retain the manager-visible audit and
-progress model.
+`algorithm_judge_history` 为每个 `(submission_id, judge_generation)` 保存一条结果。重判处于待处理、评测中或基础设施失败状态时，排行榜保留最近一次不属于基础设施失败的历史终态结果，不会暂时把学生原有有效成绩改为零。`rejudge_batch` 与 `rejudge_batch_item` 保存管理者可见的审计记录和进度。
 
-Office Choice and Office DOCX automatic historical rejudge are intentionally
-unsupported in Stage 7. Correct historical rejudge requires immutable,
-versioned answer-key/reference inputs; current Office authoring permits
-replacement, so silently judging old submissions against the current document
-would be incorrect audit semantics. The backend returns a conflict rather than
-performing a no-op.
+Stage 7 有意不支持 Office 选择题和 DOCX 的自动历史重判。正确的历史重判需要不可变、带版本的答案或参考文档；当前 Office 编辑流程允许替换这些内容。如果直接用现有文档重新评判历史提交，就会破坏审计语义。因此后端返回冲突，而不是假装执行成功或进行空操作。

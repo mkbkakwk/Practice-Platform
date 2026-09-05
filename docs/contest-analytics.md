@@ -1,29 +1,13 @@
-# Contest analytics
+# 比赛教学分析
 
-Stage 8 provides owner-Teacher and Admin-only, read-only analytics for one contest.
-`GET /api/contests/{id}/analytics` returns compact overview, problem, twelve-bucket
-timeline, and distribution data. `GET /api/contests/{id}/analytics/participants`
-is paginated and supports a server-side username query.
+Stage 8 为比赛创建教师和管理员提供单场比赛的只读分析功能。`GET /api/contests/{id}/analytics` 返回精简概览、题目统计、十二段时间分布及成绩分布；`GET /api/contests/{id}/analytics/participants` 返回分页参赛人数据，支持在服务端按用户名查询。
 
-Analytics is derived from participants, contest problems, and real submission rows.
-It has no analytics truth table, cache, queue, or background rebuild. Stage 7 standings
-remain the single source for SCORE/ICPC rank, score, solved, penalty, and effective
-judge-result semantics. Rejudge generations never add submissions; a rejudge can only
-change the effective outcome of its original submission.
+分析数据由参赛人、比赛题目和真实提交计算，不另建权威分析表、缓存、队列或后台重建任务。SCORE／ICPC 排名、得分、解题数、罚时及有效评测结果的语义，均沿用 Stage 7 排行榜。重判代次不会增加提交次数，只能改变原提交的有效结果。
 
-Problem success rate is successful participants divided by all registered participants.
-Algorithm acceptance rate excludes pending/judging/infrastructure-failed outcomes.
-`JUDGE_FAILED` is reported separately and never becomes a student wrong attempt. DOCX
-uses each submitter's best non-failed scored submission; averages and medians are among
-scored submitters, while perfect-score rate uses all participants. `NEEDS_REVIEW` with a
-score is included.
+题目成功率为成功参赛人数除以全部已报名人数。算法通过率排除待处理、评测中和基础设施失败的结果；`JUDGE_FAILED` 单独统计，不计为学生的错误尝试。
 
-Manager analytics remains live during a freeze. Students cannot call either analytics
-endpoint, so it cannot bypass frozen standings. Responses intentionally exclude source
-code, choice answers/explanations, DOCX comparison/reference data, storage metadata,
-and all authentication fields.
+DOCX 统计使用每名提交者最高的非失败已评分结果：平均分和中位数以已有评分的提交者为分母，满分率以全部参赛人为分母。带有得分的 `NEEDS_REVIEW` 记录也纳入统计。
 
-The timeline has twelve equal buckets from contest start to `min(now, endAt)` and uses
-original submission time. Before a contest starts it is empty. SCORE distribution uses
-0%, 1–20%, 21–40%, 41–60%, 61–80%, 81–99%, and 100%; ICPC distribution groups by
-solved count.
+封榜期间，管理者分析保持实时。学生无权调用这两个分析接口，因此无法借此绕过封榜。响应不包含源代码、选择题答案／解析、DOCX 比较／参考答案数据、存储元数据或任何认证字段。
+
+时间轴从比赛开始划分到 `min(now, endAt)`，分成十二个等长区间，按原始提交时间统计；比赛开始前返回空时间轴。SCORE 成绩分布分为 0%、1–20%、21–40%、41–60%、61–80%、81–99%、100%；ICPC 分布按解题数分组。

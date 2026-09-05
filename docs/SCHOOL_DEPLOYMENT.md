@@ -1,6 +1,6 @@
 # 学校部署指南
 
-本指南面向校园 IT 管理员、计算机教师和机房管理员。Practice-Platform 用于编程练习、比赛、教学分析与 Office 文档实践。已验收基线为 **v0.9.1 / `f273f3be519019841f050275d2b04bc2f4406797` / Flyway V9**，已通过小范围真实 Production Pilot。
+本指南面向校园 IT 管理员、计算机教师和机房管理员。Practice-Platform 用于编程练习、比赛、教学分析与 Office 文档实践。已验收基线为 **v0.9.1 / `f273f3be519019841f050275d2b04bc2f4406797` / Flyway V9**，已通过真实生产环境的小范围试点。
 
 常规课堂／校园使用已完成试点验收；**大规模同时比赛容量尚未认证**。本指南不承诺某个在线人数或每秒评测量。
 
@@ -9,7 +9,7 @@
 | 用途 | 配置 | 数据与操作边界 |
 | --- | --- | --- |
 | 个人体验／开发 | [docker-compose.yml](../docker-compose.yml) | 可构建，含开发默认值；只能在隔离开发机使用 |
-| Integration / Staging | [docker-compose.staging.yml](../docker-compose.staging.yml) | 验证变更，独立账号、卷、网络与端口 |
+| 集成分支 / 预发布环境 | [docker-compose.staging.yml](../docker-compose.staging.yml) | 验证变更，独立账号、卷、网络与端口 |
 | 学校正式服务 | [docker-compose.release.yml](../docker-compose.release.yml) | 无 `build:`，使用固定本地镜像、外部持久卷和正式密钥 |
 
 开发 Compose 的固定容器名可能与正式环境冲突，不能仅用不同项目名 `-p` 就认为已经隔离。不要在学校正在使用的服务器运行 README 的开发启动命令。
@@ -27,7 +27,7 @@
 
 使用 [Docker 官方 Ubuntu 安装指南](https://docs.docker.com/engine/install/ubuntu/) 安装 Engine、Compose 和 Buildx，并安排补丁维护。不要把测试用的一键安装脚本当作正式升级策略。Docker 管理权限接近宿主机管理权限，只授予可信操作员。
 
-Judge 容量主要受同时提交数、语言编译成本、用例数量与运行时间、Runner 并发／CPU／内存／PID 限制影响。在线浏览人数不等于同时评测能力。大型校级比赛前须用代表性题目单独压测，并记录延迟、队列峰值、失败率和资源余量。
+评测容量主要受同时提交数、语言编译成本、用例数量与运行时间、Runner 并发／CPU／内存／PID 限制影响。在线浏览人数不等于同时评测能力。大型校级比赛前须用代表性题目单独压测，并记录延迟、队列峰值、失败率和资源余量。
 
 ## 3. 校园网络与六服务拓扑
 
@@ -78,7 +78,7 @@ test "$(git rev-parse HEAD)" = f273f3be519019841f050275d2b04bc2f4406797
 test -z "$(git status --porcelain)"
 ```
 
-不要部署任意 `main` HEAD 或 Integration 的同步合并 SHA。保留完整所需 Git 历史，以便验证工具和被备份运行版本的 commit。
+不要部署任意 `main` HEAD 或集成分支的同步合并 SHA。保留完整所需 Git 历史，以便验证工具和被备份运行版本的 Git 提交。
 
 ### 密钥文件
 
@@ -92,20 +92,20 @@ test -z "$(git status --porcelain)"
 | 校园来源 | `CORS_ORIGIN=https://oj.school.example`，匹配实际协议、主机和端口，不使用 `*` 或遗漏为 localhost |
 | Runner | `RUNNER_TOKEN` 随机独立；`DOCKER_SOCKET_GID` 用 `stat -c %g /var/run/docker.sock` 获取，不猜测 |
 | 沙箱镜像 | `RUNNER_DOCKER_PYTHON_IMAGE`、`RUNNER_DOCKER_JAVASCRIPT_IMAGE`、`RUNNER_DOCKER_C_IMAGE`、`RUNNER_DOCKER_CPP_IMAGE`、`RUNNER_DOCKER_JAVA_IMAGE`；镜像须已在本机验收 |
-| 运维身份 | `OPS_ADMIN_USERNAME`、`OPS_ADMIN_PASSWORD`：已存在的本校 Admin 凭据；示例文件未包含这两项，需在外部文件安全补充 |
+| 运维身份 | `OPS_ADMIN_USERNAME`、`OPS_ADMIN_PASSWORD`：已存在的本校管理员凭据；示例文件未包含这两项，需在外部文件安全补充 |
 | 安全初始化 | `PROMOTE_FIRST_ADMIN=false`；正式 Compose 还会强制关闭，见首次管理员章节 |
 
-每个 key 只定义一次，不让密钥与发布文件互相覆盖。使用干净的操作员 shell，避免已导出的开发变量覆盖 Compose 的 `--env-file` 值。使用纯 `KEY=value`、UTF-8 无 BOM、无多行值；现有 release helper 按行读取，不是通用 dotenv 解释器。自动生成密钥宜用高熵 hex 等无需引号／插值的字符集。已有凭据含 `$`、空格或引号时，须在隔离环境核对 Compose、Bash 与应用实际收到的值；不要改密码来掩盖解析问题。不要执行不可信 env 文件，不要使用 `set -x` 或输出完整 `docker compose config`。
+每个变量名只定义一次，不让密钥与发布文件互相覆盖。使用干净的操作员 shell，避免已导出的开发变量覆盖 Compose 的 `--env-file` 值。使用纯 `KEY=value`、UTF-8 无 BOM、无多行值；现有发布辅助脚本按行读取，不是通用的环境变量文件解析器。自动生成密钥宜用高熵十六进制字符串等无需引号／插值的字符集。已有凭据含 `$`、空格或引号时，须在隔离环境核对 Compose、Bash 与应用实际收到的值；不要改密码来掩盖解析问题。不要执行不可信的环境变量文件，不要使用 `set -x` 或输出完整 `docker compose config`。
 
 ### 发布元数据，不含密码
 
 单独保存 `/etc/practice-platform/releases/v0.9.1.env`。从学校自己的验收清单填写，不复制其他服务器的卷 ID 或备份路径。[不可变发布合同](immutable-release-workflow.md) 列出完整字段。
 
-核心值为 `RELEASE_VERSION=v0.9.1`、`RELEASE_TAG=v0.9.1`、`RELEASE_GIT_SHA` / `RELEASE_MAIN_SHA` 均为上面的完整发布 SHA，`RELEASE_FLYWAY_VERSION=9`、`EXPECTED_OCI_VERSION=v0.9.1`。`RELEASE_BUILD_TIME` 必须是发布镜像的真实固定 UTC 构建时间，不能每次重启重新生成。
+发布字段的核心值为 `RELEASE_VERSION=v0.9.1`、`RELEASE_TAG=v0.9.1`、`RELEASE_GIT_SHA` / `RELEASE_MAIN_SHA` 均为上面的完整发布 SHA，`RELEASE_FLYWAY_VERSION=9`、`EXPECTED_OCI_VERSION=v0.9.1`。`RELEASE_BUILD_TIME` 必须是发布镜像的真实固定 UTC 构建时间，不能每次重启重新生成。
 
-应用使用 `BACKEND_IMAGE` / `WORKER_IMAGE` / `RUNNER_IMAGE` / `FRONTEND_IMAGE`，例如本地固定标签 `oj-backend:v0.9.1`；并填写四个 `EXPECTED_*_IMAGE_ID`。`POSTGRES_IMAGE` / `RABBITMQ_IMAGE` 使用验收过的 digest 引用。Compose 不拉取也不构建，必须提前导入学校收到的已验收镜像（以及沙箱镜像），核对 ID、架构和 OCI SHA／版本。不能把其他机器重建得到的镜像自动视为原已接受制品。
+应用使用 `BACKEND_IMAGE` / `WORKER_IMAGE` / `RUNNER_IMAGE` / `FRONTEND_IMAGE`，例如本地固定标签 `oj-backend:v0.9.1`；并填写四个 `EXPECTED_*_IMAGE_ID`。`POSTGRES_IMAGE` / `RABBITMQ_IMAGE` 使用验收过的内容摘要（digest）引用。Compose 不拉取也不构建，必须提前导入学校收到的已验收镜像（以及沙箱镜像），核对 ID、架构和 OCI SHA／版本。不能把其他机器重建得到的镜像自动视为原已接受制品。
 
-显式指定这两个外部文件，避免 release helper 回落到历史 v0.4.0 默认路径：
+显式指定这两个外部文件，避免发布辅助脚本回落到历史 v0.4.0 默认路径：
 
 ```bash
 export FORMAL_ENV_FILE=/etc/practice-platform/production.env
@@ -126,7 +126,7 @@ formal_compose config --services
 | 数据 | 元数据变量 | 保护要求 |
 | --- | --- | --- |
 | PostgreSQL | `FORMAL_POSTGRES_VOLUME` | 业务权威数据库 |
-| RabbitMQ | `FORMAL_RABBITMQ_VOLUME` | 消息持久状态，不用 purge 掩盖错误 |
+| RabbitMQ | `FORMAL_RABBITMQ_VOLUME` | 消息持久状态，不用清空队列掩盖错误 |
 | Office DOCX | `FORMAL_DOCS_VOLUME` | 必须与数据库配对备份／恢复 |
 | 服务网络 | `FORMAL_NETWORK` | `external: true`，使用审批过的网络 |
 
@@ -141,7 +141,7 @@ docker volume create school-oj-office
 docker network create school-oj-network
 ```
 
-这四个名字仅用于新安装示例，必须原样对应本校元数据；不能用于替换既有 Production 存储。服务器还需备份到另一受控介质或主机，不能让在线卷与唯一备份同时丢失。
+这四个名字仅用于新安装示例，必须原样对应本校元数据；不能用于替换既有生产环境存储。服务器还需备份到另一受控介质或主机，不能让在线卷与唯一备份同时丢失。
 
 ## 6. 校园反向代理
 
@@ -180,17 +180,17 @@ server {
 }
 ```
 
-校内 HTTP 模式可使用单个 `listen 80` server 和相同代理 location，不配置 TLS 跳转；同步改成实际 HTTP `CORS_ORIGIN`。Caddy 可承担同样入口，但证书签发／内部 CA 信任应由学校管理。配置通过 `nginx -t` 后才按学校变更流程加载。[Nginx 代理参数参考](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)。
+校内 HTTP 模式可使用单个 `listen 80` server 配置块和相同的 location 代理配置，不配置 TLS 跳转；同步改成实际 HTTP `CORS_ORIGIN`。Caddy 可承担同样入口，但证书签发／内部 CA 信任应由学校管理。配置通过 `nginx -t` 后才按学校变更流程加载。[Nginx 代理参数参考](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)。
 
 上传大小取外层代理、内置 Frontend Nginx、Backend 三者最低限制。当前 [Frontend 配置](../frontend/nginx.conf) 未覆盖 Nginx 默认 `client_max_body_size`（[默认 1m](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size)）；仅提高外层限制不能保证较大 Office 文件可上传。遇到 413 应记录并走配置／版本验收流程，不直接修改已接受镜像。
 
 ## 7. 新校首次安装与管理员初始化
 
-这是**尚未向师生开放、数据库完全为空**的新安装流程，不是现有 Production 的密码恢复流程。
+这是**尚未向师生开放、数据库完全为空**的新安装流程，不是现有生产环境的密码恢复流程。
 
 1. 完成固定源码／镜像、密钥、卷、网络、存储空间核验，外层校园入口保持关闭。先 `formal_compose up -d db rabbitmq`，等待健康。
-2. 源码 [AuthService](../backend-spring/src/main/java/com/oj/service/AuthService.java) 只在 `promoteFirstAdmin=true` 且**用户总数为 0**时提升首次注册者。正式 Compose 强制 `PROMOTE_FIRST_ADMIN=false`，只改 env 不会启用；没有默认管理员密码，也不能靠 `OPS_ADMIN_*` 自动创建账号。
-3. 在 Git 外准备**一次性、审批过的初始化 override**，仅含下方设置。保持入口关闭且只有操作员通过 localhost／SSH 隧道访问；已有任何用户或状态不明，停止并交给账号恢复流程，禁止删用户重新初始化。
+2. 源码 [AuthService](../backend-spring/src/main/java/com/oj/service/AuthService.java) 只在 `promoteFirstAdmin=true` 且**用户总数为 0**时提升首次注册者。正式 Compose 强制 `PROMOTE_FIRST_ADMIN=false`，只改环境变量文件不会启用；没有默认管理员密码，也不能靠 `OPS_ADMIN_*` 自动创建账号。
+3. 在 Git 外准备**一次性、审批过的初始化覆盖配置**，仅含下方设置。保持入口关闭且只有操作员通过 localhost／SSH 隧道访问；已有任何用户或状态不明，停止并交给账号恢复流程，禁止删用户重新初始化。
 
 ```yaml
 services:
@@ -199,7 +199,7 @@ services:
       PROMOTE_FIRST_ADMIN: "true"
 ```
 
-例如保存为 `/etc/practice-platform/bootstrap-admin.yml` 后（正常发布不得带此 override）：
+例如保存为 `/etc/practice-platform/bootstrap-admin.yml` 后（正常发布不得带此覆盖配置）：
 
 ```bash
 docker compose --env-file "$FORMAL_ENV_FILE" --env-file "$RELEASE_ENV_FILE" \
@@ -208,8 +208,8 @@ docker compose --env-file "$FORMAL_ENV_FILE" --env-file "$RELEASE_ENV_FILE" \
 formal_compose up -d --no-deps runner frontend
 ```
 
-4. Backend 会在空数据库初始化至 V9。通过正常注册 UI 创建唯一首位管理员，使用学校批准的随机密码，验证角色为 ADMIN。不使用开发 seed，不直接改业务表，不让学生抢先注册。
-5. 立即以**不带 override 的正式 Compose**重建 Backend 容器，使 `PROMOTE_FIRST_ADMIN=false` 恢复生效；不是重建镜像：
+4. Backend 会在空数据库初始化至 V9。通过正常注册界面创建唯一首位管理员，使用学校批准的随机密码，验证角色为 ADMIN。不使用开发演示数据，不直接改业务表，不让学生抢先注册。
+5. 立即以**不带覆盖配置的正式 Compose**重建 Backend 容器，使 `PROMOTE_FIRST_ADMIN=false` 恢复生效；不是重建镜像：
 
 ```bash
 formal_compose up -d --no-deps --force-recreate backend
@@ -217,28 +217,28 @@ formal_compose up -d --no-deps worker
 formal_compose ps
 ```
 
-6. 等六服务全部健康，核查 Backend 实际初始化开关已关闭，再验证 Admin 登录。移除一次性 override 的运行引用并妥善收管。不要在正常 Production 留下开启设置。
-7. 将该本校 Admin 的运维凭据安全配置为外部文件中的 `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD`，验证登录和只读 Admin 授权。不要打印凭据／JWT。先建立初始配对备份、恢复演练和完整运维就绪证据，再开放校园入口。
+6. 等六服务全部健康，核查 Backend 实际初始化开关已关闭，再验证管理员登录。移除一次性覆盖配置的运行引用并妥善收管。不要在正常生产环境留下开启设置。
+7. 将该本校管理员的运维凭据安全配置为外部文件中的 `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD`，验证登录和管理员只读权限。不要打印凭据／JWT。先建立初始配对备份、恢复演练和完整运维就绪证据，再开放校园入口。
 
-完整 `release-preflight.sh` 还要求前序运行身份与多类恢复文件，**不是空白安装向导**。新安装不存在“前一 Production SHA”，不能用历史 V4 身份或空文件伪造它；如尚无这些证据，应明确记录为首次安装验收范围，建立首个运行与恢复基线，再使用适用的完整发布审计。不要声称该脚本在空白系统上 PASS。
+完整 `release-preflight.sh` 还要求前序运行身份与多类恢复文件，**不是空白安装向导**。新安装不存在“前一生产环境 SHA”，不能用历史 V4 身份或空文件伪造它；如尚无这些证据，应明确记录为首次安装验收范围，建立首个运行与恢复基线，再使用适用的完整发布审计。不要声称该脚本在空白系统上通过。
 
 ## 8. 师生入门
 
-Admin 使用产品内用户管理分配 Teacher 角色；Teacher 创建题目、测试用例、Office 练习和比赛；学生正常注册／登录（`USER`）、参与活动并查看结果。不得在 DB 手工改角色或判定来让验收通过。
+管理员通过产品内用户管理功能分配教师角色；教师创建题目、测试用例、Office 练习和比赛；学生正常注册／登录（`USER`）、参与活动并查看结果。不得在 DB 手工改角色或判定来让验收通过。
 
-先用最少的真实试点账号演练 AC／WA、比赛榜单、Analytics、Office 提交与授权下载，核对最终消息／Outbox 清空、文档引用完整。保留试点记录，不为了测试结束而删除正式数据。
+先用最少的真实试点账号演练 AC／WA、比赛榜单、教学分析、Office 提交与授权下载，核对最终消息／Outbox 清空、文档引用完整。保留试点记录，不为了测试结束而删除正式数据。
 
-## 9. 已有学校环境升级：受控 holdback
+## 9. 已有学校环境升级：受控分阶段启动
 
-正常变更链：**Issue → 功能／修复分支 → Docker 测试 → PR → Integration/Staging → 已接受固定发布 → fresh T1 → 受控部署 → 观察**。这里不是自动发布脚本，必须有针对本校当前版本、入口和恢复方法的审批及演练。
+正常变更链：**Issue → 功能／修复分支 → Docker 测试 → PR → 集成分支／预发布环境 → 已接受固定发布 → 全新 T1 → 受控部署 → 观察**。这里不是自动发布脚本，必须有针对本校当前版本、入口和恢复方法的审批及演练。
 
 | 阶段 | 必须完成 | 不应做 |
 | --- | --- | --- |
-| 维护前 | 当前身份／健康、Office、无遗留任务、队列、OPS 登录就绪、备份 wrapper、恢复包 | 未备好凭据就进入维护 |
-| 维护与 T1 | 独立入口写入屏障生效；停 Frontend/Worker；确认无消费者／在途工作；fresh 配对备份全验证；备份退出后重新 hold Worker | 复用已恢复营业前的历史 T1；purge |
-| 提交点前 | 仅 Backend + Runner；预期 Flyway；身份／就绪／sandbox／Office／队列／Outbox；Worker/Frontend 未运行 | full ops-check、上传、提交、比赛写操作 |
+| 维护前 | 当前身份／健康、Office、无遗留任务、队列、OPS 登录就绪、备份封装程序、恢复包 | 未备好凭据就进入维护 |
+| 维护与 T1 | 独立入口写入屏障生效；停 Frontend/Worker；确认无消费者／在途工作；全新配对备份完整验证；备份退出后再次确认 Worker 停止 | 复用已恢复营业前的历史 T1；清空队列 |
+| 提交点前 | 仅 Backend + Runner；预期 Flyway；身份／就绪／沙箱／Office／队列／Outbox；Worker/Frontend 未运行 | 完整 ops-check、上传、提交、比赛写操作 |
 | 提交顺序 | 启 Worker → Worker→Runner／零消息 → 启 Frontend → 路由与六服务验收 → 记录提交点 → 开放业务入口 | 把容器启动等同于重新开放写入 |
-| 提交点后 | Admin/Auth、Contest/Analytics、Office 只读验收、完整 ops-check、运行观察 | 自动回退旧库或盲恢复 T1 |
+| 提交点后 | 管理员／权限、比赛／教学分析、Office 只读验收、完整 ops-check、运行观察 | 自动回退旧库或盲恢复 T1 |
 
 **写入屏障必须独立于 Frontend 容器。** 本项目没有单一全局只读开关；可在已演练的外层反向代理／防火墙限制正常用户访问，仅允许操作员验收。覆盖所有正常入口，保持到提交点之后。仅停旧 Frontend 不足以在新 Frontend 启动后继续关闭业务访问。
 
@@ -260,4 +260,4 @@ formal_compose up -d --no-deps frontend
 
 ## 10. 上线后
 
-按 [OPERATIONS.md](OPERATIONS.md) 安排巡检、配对备份、异机副本、保留策略和定期隔离恢复演练。课堂规模试点通过不等于大型比赛认证；后续工作由真实反馈、缺陷、容量需求和明确新需求驱动，不自动启动新开发阶段。
+按 [运维手册](OPERATIONS.md) 安排巡检、配对备份、异机副本、保留策略和定期隔离恢复演练。课堂规模试点通过不等于大型比赛认证；后续工作由真实反馈、缺陷、容量需求和明确新需求驱动，不自动启动新开发阶段。

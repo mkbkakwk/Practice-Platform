@@ -1,37 +1,37 @@
-# Release Checklist by Phase
+# 分阶段发布检查清单
 
-School operators: follow [SCHOOL_DEPLOYMENT.md](SCHOOL_DEPLOYMENT.md) and [OPERATIONS.md](OPERATIONS.md). This checklist records gates; it does not authorize a deployment. Test and Staging smoke may create isolated data; Production pre-commit acceptance must not.
+学校操作员请先阅读[学校部署指南](SCHOOL_DEPLOYMENT.md)和[日常运维手册](OPERATIONS.md)。本清单用于记录检查结果，本身不构成部署授权。测试和预发布环境的冒烟测试可以创建隔离数据；生产环境在发布提交点之前不得执行此类业务写入。
 
-## Before maintenance
+## 维护前
 
-- [ ] Exact accepted tag/source and four local application Image IDs/OCI labels are recorded; no moving branch or rebuild during deployment.
-- [ ] Current Production identity, Flyway, six-service health, Office references and storage mappings are verified.
-- [ ] Work is drained: queues, unacknowledged messages, nonterminal Outbox and unexpected legacy work are understood and quiescent.
-- [ ] OPS credentials exist and authenticate; full ops-check is scheduled after commit, not during holdback.
-- [ ] External env-forwarding backup wrapper, isolated success/failure evidence, destination capacity and secure evidence capture are ready.
-- [ ] Restore drill and exact pre-commit recovery procedure are approved, including schema compatibility, DB+Office pairing and zero-message conditions.
-- [ ] Known-good `ROLLBACK_SHA` is explicitly identified and verified as an accessible full commit SHA; the rollback target is compatible with the corresponding database and Office recovery state.
-- [ ] The independent business-access barrier and operator-only inspection path have been rehearsed.
+- [ ] 已记录通过验收的精确标签、源码版本，以及四个本地应用镜像的 ID 和 OCI 标签；部署时不使用移动分支，也不重新构建镜像。
+- [ ] 已核对当前生产环境的运行版本、Flyway 版本、六服务健康状态、Office 引用和存储映射。
+- [ ] 已确认并排空待处理工作，包括队列消息、未确认消息、非终态 Outbox 记录和异常遗留任务。
+- [ ] OPS 凭据已准备好且能够登录；完整 ops-check 安排在发布提交点之后，不用于 Worker／Frontend 暂缓启动阶段。
+- [ ] 外部备份封装程序已支持环境变量文件转发；隔离成功／失败演练证据、目标目录容量和安全证据记录均已就绪。
+- [ ] 恢复演练及提交点前的具体恢复流程已获批准，涵盖数据库结构兼容性、数据库与 Office 配对恢复以及零消息条件。
+- [ ] 已明确指定并验证已知可用的 `ROLLBACK_SHA`：它必须是可访问的完整提交 SHA，且回退目标必须与对应的数据库和 Office 恢复状态兼容。
+- [ ] 已演练独立的业务访问屏障和仅供操作员使用的检查通道。
 
-## Maintenance and fresh T1
+## 维护与全新 T1 备份
 
-- [ ] Access is closed; Frontend and Worker are stopped; no in-flight work remains.
-- [ ] A new consistent backup from this boundary has exit 0, manifest, checksums, archive integrity, completion marker and correct tool/runtime provenance.
-- [ ] Dump/restore and DB-to-Office evidence meet the approved recovery contract; the T1 is not an old backup from before resumed business activity.
-- [ ] Worker is re-held after backup cleanup; Frontend remains held; queues/Outbox remain quiescent.
+- [ ] 已关闭业务访问并停止 Frontend、Worker；没有在途任务。
+- [ ] 在本次静默边界创建了全新一致性备份，退出码为 0；清单、校验和、归档完整性、完成标记及工具／运行版本来源信息均正确。
+- [ ] 数据库导出／恢复和数据库到 Office 的引用验证符合已批准的恢复要求；本次 T1 不是恢复营业之前的旧备份。
+- [ ] 备份清理流程结束后已再次确认 Worker 停止、Frontend 继续停止，队列及 Outbox 仍处于静默状态。
 
-## Pre-commit holdback
+## 发布提交点前：暂缓启动 Worker 和 Frontend
 
-- [ ] Only new Backend and Runner have started; existing DB/RabbitMQ storage is preserved.
-- [ ] Expected Flyway only, exact identity, Backend/Runner readiness, sandbox, Office and zero-message/nonterminal-Outbox gates pass.
-- [ ] Worker and Frontend are actually not running; normal business access remains closed; no mutating smoke has run.
-- [ ] Full ops-check and Frontend-dependent authenticated workflows have not been misapplied as holdback gates.
+- [ ] 仅启动新版 Backend 和 Runner；保留既有数据库、RabbitMQ 及其存储。
+- [ ] 仅出现预期的 Flyway 迁移；版本身份、Backend／Runner 就绪、沙箱、Office、零消息及无非终态 Outbox 等检查均通过。
+- [ ] 已核实 Worker、Frontend 实际未运行；正常业务访问仍关闭，未执行会写入业务数据的冒烟测试。
+- [ ] 未将完整 ops-check 或依赖 Frontend 的认证流程误当作本阶段的验收条件。
 
-## Commit and observation
+## 发布提交点与运行观察
 
-- [ ] Start only Worker; verify identity, readiness, remote Runner and zero-message/Outbox recheck.
-- [ ] Start only Frontend; verify loopback port publication, routing and six-service health while the independent access barrier remains closed.
-- [ ] Record release commit UTC; only then reopen business access and record UTC.
-- [ ] Run full-topology Admin/Auth, Contest/Analytics and Office read checks, full ops-check and operational observation. Do not invent Production fixtures to satisfy a read-only check.
-- [ ] Record any missing-fixture deferral honestly; actual failures require incident-specific assessment, not automatic old-version restore.
-- [ ] Retain T1, previous images and sanitized evidence; record maintenance end UTC after acceptance. Never print secrets or prune recovery evidence as part of closeout.
+- [ ] 单独启动 Worker，验证版本、就绪状态、远程 Runner 联通性，并再次检查队列和 Outbox。
+- [ ] 单独启动 Frontend，验证回环地址端口映射、路由和六服务健康；独立访问屏障仍保持关闭。
+- [ ] 记录发布提交点的 UTC 时间，然后才开放业务访问，并记录开放时间。
+- [ ] 在完整拓扑下执行管理员／权限、比赛／分析、Office 的只读检查，以及完整 ops-check 和运行观察；不为只读验收临时创建生产测试数据。
+- [ ] 如实记录因缺少已有测试数据而暂缓的检查；真实故障必须按具体事故评估，不得自动恢复旧版本。
+- [ ] 保留 T1、旧镜像和脱敏证据；验收通过后记录维护结束的 UTC 时间。不得输出秘密，也不得在收尾时清理恢复证据。

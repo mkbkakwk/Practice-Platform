@@ -1,20 +1,20 @@
-# Incident and Troubleshooting Runbook
+# 故障排查与事故处置手册
 
-Start with read-only evidence: `release-status.sh` for Production (`staging-status.sh` only for Staging), bounded health/readiness endpoints, and structured logs. Run `ops-check.sh` when the full topology and OPS credentials are available, not during Backend/Runner-only holdback. See the current [school operations guide](OPERATIONS.md). Do not use `docker system prune`, `docker volume prune`, volume deletion, queue purge, Outbox deletion, database drop, or `rm -rf` as routine recovery.
+首先收集只读证据：生产环境使用 `release-status.sh`，预发布环境才使用 `staging-status.sh`，同时检查健康／就绪接口和有界结构化日志。完整拓扑及 OPS 凭据就绪后再运行 `ops-check.sh`，不要在仅启动 Backend／Runner 的阶段运行。日常操作见[学校运维手册](OPERATIONS.md)。不得把 `docker system prune`、`docker volume prune`、删卷、清空队列、删除 Outbox、删除数据库或 `rm -rf` 当作常规恢复手段。
 
-After the Production release commit point, recovery is incident-specific: there is no automatic V4 rollback or blind T1 restore. The table below is diagnostic guidance, not authorization to redeploy or mutate data.
+越过生产发布提交点后，恢复必须根据具体事故制定方案：不得自动回退 V4，也不得盲目恢复 T1。下表仅用于诊断，不构成重新部署或修改数据的授权。
 
-| Symptom | Check first | Healthy state / safe recovery | Stop and escalate |
+| 现象 | 优先检查 | 正常状态／安全处置原则 | 需要停止并升级处理的情况 |
 | --- | --- | --- | --- |
-| Backend unhealthy | health, readiness, PostgreSQL/Flyway, version SHA | health/readiness 200; correct SHA; known-good application redeploy only if compatible | migration or data compatibility uncertain |
-| Worker unhealthy | DB, Rabbit listener/connectivity, Runner readiness | Worker readiness 200; Runner sandbox available | retry/DLQ grows or Worker repeatedly restarts |
-| Runner unhealthy | Runner readiness and images | readiness 200 and sandboxAvailable true | Docker/socket/image policy cannot be restored safely |
-| PostgreSQL unhealthy | container health, bounded probe, disk | DB healthy; Flyway known | corruption or restore to a live target is contemplated |
-| RabbitMQ unhealthy | container health, Worker readiness, queues | Backend may remain ready; Worker recovers | DLQ/nonzero retry backlog persists |
-| Judge stuck / Outbox backlog | submission ID, event ID, Outbox, queues | event publishes and Worker commits verdict | stale backlog or repeated infrastructure failure |
-| Office file missing | DB record-to-file reference, volume health | file exists and checksum matches backup | restore target would be live |
-| Disk low / backup stale | ops-check disk and backup age | free space and valid current backup | retention would delete evidence |
-| Version mismatch / restart loop | Admin version, OCI labels, restart counts | exact SHA and zero unexpected restarts | migration compatibility or data loss suspected |
-| JSON logging regression | structured records and release logging gate | safe fields retained; endpoints/secrets absent | any secret/connection metadata appears |
+| Backend 不健康 | 健康、就绪、PostgreSQL／Flyway、版本 SHA | 健康／就绪接口返回 200，SHA 正确；仅在兼容性已确认时考虑部署已知可用的应用版本 | 迁移或数据兼容性不明确 |
+| Worker 不健康 | 数据库、RabbitMQ 监听器及连接、Runner 就绪状态 | Worker 就绪接口返回 200，Runner 沙箱可用 | 重试／死信队列增长，或 Worker 反复重启 |
+| Runner 不健康 | Runner 就绪状态和镜像 | 就绪接口返回 200，`sandboxAvailable=true` | 无法安全恢复 Docker、socket 或镜像策略 |
+| PostgreSQL 不健康 | 容器健康、有时间上限的探测、磁盘 | 数据库健康，Flyway 版本已确认 | 疑似数据损坏，或需要向在线数据库恢复数据 |
+| RabbitMQ 不健康 | 容器健康、Worker 就绪、队列 | Backend 可能仍就绪；消息服务恢复后 Worker 恢复 | 死信或重试积压持续存在 |
+| 评测卡住／Outbox 积压 | 提交 ID、事件 ID、Outbox、队列 | 事件能够发布，Worker 能够提交判定结果 | 积压长期不变，或基础设施故障反复出现 |
+| Office 文件缺失 | 数据库到文件的引用、存储卷健康 | 文件存在，校验和与备份一致 | 需要恢复到在线存储 |
+| 磁盘不足／备份过期 | ops-check 的空间和备份年龄结果 | 空间充足，存在有效且足够新的备份 | 保留策略可能删除仍需保存的证据 |
+| 版本不一致／重启循环 | 管理员版本接口、OCI 标签、重启次数 | SHA 精确匹配，无异常重启 | 疑似迁移不兼容或数据丢失 |
+| JSON 日志安全性退化 | 结构化日志及发布日志测试 | 保留安全字段，不出现服务端点或秘密 | 出现任何秘密或连接元数据 |
 
-Record UTC time, exact SHA, component, safe symptom, correlation/submission/event IDs where relevant, read-only checks, recovery action, and post-recovery verification. Production requires a separate approved change window.
+记录 UTC 时间、精确 SHA、组件、脱敏症状、必要的关联／提交／事件 ID、只读检查、获批恢复操作及恢复后验证结果。生产变更须另行获得批准并安排操作窗口。
