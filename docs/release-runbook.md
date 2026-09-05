@@ -1,5 +1,7 @@
 # Release Runbook
 
+> 学校正式部署入口：[SCHOOL_DEPLOYMENT.md](SCHOOL_DEPLOYMENT.md)；日常运维：[OPERATIONS.md](OPERATIONS.md)。下面保留的 Staging／Stage 9D 命令是隔离演练，不是当前 Production 的自动操作指令。正式升级使用选择性 Backend+Runner holdback，之后单独启 Worker/Frontend；OPS 凭据在维护前就绪，完整 ops-check 在提交点后执行。不要把下文 full-topology smoke 用于 Worker/Frontend held 的阶段。
+
 This runbook is for a controlled release rehearsal or a separately approved Production maintenance window. It does not authorize Production changes by itself. Every command is bound to `DEPLOY_SHA`, an exact 40-character Git commit; never substitute `HEAD`, `main`, `latest`, or a branch name.
 
 ## Stop conditions

@@ -1,5 +1,7 @@
 # Backup and Restore Runbook
 
+> 学校操作员请先读 [OPERATIONS.md](OPERATIONS.md)。下面的 Staging 示例保留为技术演练；正式备份须用已验证的外部 wrapper 将 formal/release dotenv 显式转发给每次内部 Compose 调用。非 daily 备份退出时会尝试启动 Backend/Worker，发布窗口必须随后重新 hold Worker。不要用隔离 restore 命令指向 Production。
+
 This operator runbook complements `backup-restore.md`. Authoritative recovery data is PostgreSQL plus Office persistent files. RabbitMQ message storage is not an authoritative backup.
 
 ## Backup
