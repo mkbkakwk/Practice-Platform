@@ -1,3 +1,5 @@
+@import './graphite.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -70,6 +72,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
   }
 }

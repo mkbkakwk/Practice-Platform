@@ -1,4 +1,4 @@
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { cpp } from "@codemirror/lang-cpp";
 import { java } from "@codemirror/lang-java";
 import { javascript } from "@codemirror/lang-javascript";
@@ -11,7 +11,18 @@ interface CodeEditorProps {
   ariaLabel: string;
   height?: string;
   readOnly?: boolean;
+  appearance?: "light" | "graphite";
 }
+
+// Only the contest pilot opts in; editor behavior and language extensions stay unchanged.
+const graphiteEditorTheme = EditorView.theme({
+  "&": { backgroundColor: "hsl(var(--surface-elevated))", color: "hsl(var(--foreground))" },
+  ".cm-content": { caretColor: "hsl(var(--brand))", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: "13px" },
+  ".cm-gutters": { backgroundColor: "hsl(var(--surface-elevated))", color: "hsl(var(--muted-foreground))", borderRight: "none" },
+  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "hsl(var(--secondary))" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "hsl(var(--brand) / .2)" },
+  "&.cm-focused": { outline: "2px solid hsl(var(--ring))", outlineOffset: "-2px" },
+}, { dark: true });
 
 export function CodeEditor({
   value,
@@ -20,14 +31,15 @@ export function CodeEditor({
   ariaLabel,
   height = "360px",
   readOnly = false,
+  appearance = "light",
 }: CodeEditorProps) {
   return (
-    <div className="overflow-hidden rounded-md border" data-testid="code-editor">
+    <div className={appearance === "graphite" ? "overflow-hidden rounded-md" : "overflow-hidden rounded-md border"} data-testid="code-editor">
       <CodeMirror
         aria-label={ariaLabel}
         value={value}
         height={height}
-        theme="light"
+        theme={appearance === "graphite" ? graphiteEditorTheme : "light"}
         extensions={languageExtensions(language)}
         onChange={onChange}
         readOnly={readOnly}

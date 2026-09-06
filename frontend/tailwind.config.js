@@ -4,7 +4,24 @@ module.exports = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Cascadia Code', 'Consolas', 'Liberation Mono', 'monospace'],
+      },
       colors: {
+        surface: "hsl(var(--surface) / <alpha-value>)",
+        elevated: "hsl(var(--surface-elevated) / <alpha-value>)",
+        subtle: "hsl(var(--text-secondary) / <alpha-value>)",
+        brand: "hsl(var(--brand) / <alpha-value>)",
+        success: "hsl(var(--success) / <alpha-value>)",
+        danger: "hsl(var(--danger) / <alpha-value>)",
+        warning: "hsl(var(--warning) / <alpha-value>)",
+        info: "hsl(var(--info) / <alpha-value>)",
+        violet: "hsl(var(--violet) / <alpha-value>)",
+        rose: "hsl(var(--rose) / <alpha-value>)",
+        "rank-gold": "hsl(var(--rank-gold) / <alpha-value>)",
+        "rank-silver": "hsl(var(--rank-silver) / <alpha-value>)",
+        "rank-bronze": "hsl(var(--rank-bronze) / <alpha-value>)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

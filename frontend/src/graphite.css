@@ -1,0 +1,117 @@
+/* Pilot palette is opt-in. Non-pilot pages keep their existing light theme. */
+@layer base {
+  :root {
+    --graphite-100: 213.33 25.71% 93.14%; /* #E9EDF2 */
+    --graphite-200: 216.00 20.55% 85.69%; /* #D3D9E2 */
+    --graphite-300: 216.00 17.01% 71.18%; /* #A9B3C2 */
+    --graphite-400: 213.33 12.22% 56.67%; /* #838F9E */
+    --graphite-500: 220.65 16.23% 37.45%; /* #505A6F */
+    --graphite-600: 220.71 21.88% 25.10%; /* #323B4E */
+    --graphite-700: 220.00 23.08% 17.84%; /* #232A38 */
+    --graphite-750: 220.00 24.32% 14.51%; /* #1C222E */
+    --graphite-800: 218.57 24.14% 11.37%; /* #161B24 */
+    --graphite-850: 218.18 24.44% 8.82%; /* #11151C */
+    --graphite-900: 220.00 23.08% 7.65%; /* #0F1218 */
+    --graphite-950: 220.00 23.08% 5.10%; /* #0A0C10 */
+    --surface: 240 4.8% 95.9%;
+    --surface-elevated: 240 5% 92%;
+    --text-secondary: 240 5% 30%;
+    --brand: 234 65% 46%;
+    --success: 156 55% 28%;
+    --danger: 356 55% 40%;
+    --warning: 38 65% 30%;
+    --info: 216 45% 40%;
+    --violet: 253 40% 45%;
+    --rose: 347 43% 40%;
+    --rank-gold: 40 60% 32%;
+    --rank-silver: 220 10% 40%;
+    --rank-bronze: 24 40% 35%;
+  }
+
+  .graphite-theme,
+  .graphite-theme.dark {
+    color-scheme: dark;
+    --background: var(--graphite-950);
+    --foreground: var(--graphite-100);
+    --card: var(--graphite-900);
+    --card-foreground: var(--graphite-100);
+    --popover: var(--graphite-800);
+    --popover-foreground: var(--graphite-100);
+    --surface: var(--graphite-850);
+    --surface-elevated: var(--graphite-800);
+    --text-secondary: var(--graphite-300);
+    --muted: var(--graphite-800);
+    --muted-foreground: var(--graphite-400);
+    --secondary: var(--graphite-750);
+    --secondary-foreground: var(--graphite-200);
+    --accent: var(--graphite-750);
+    --accent-foreground: var(--graphite-100);
+    --border: var(--graphite-700);
+    --input: var(--graphite-600);
+    --brand: 233.47 100.00% 71.18%;
+    --primary: var(--brand);
+    --primary-foreground: var(--graphite-950);
+    --ring: var(--brand);
+    --success: 155.69 45.67% 49.80%;
+    --danger: 356.07 61.62% 61.18%;
+    --warning: 38.03 64.55% 56.86%;
+    --info: 216.00 47.62% 67.06%;
+    --violet: 255.88 52.31% 74.51%;
+    --rose: 347.14 52.50% 68.63%;
+    --destructive: var(--danger);
+    --destructive-foreground: var(--graphite-950);
+    --rank-gold: 39.53 60.00% 57.84%;
+    --rank-silver: 220.00 9.78% 63.92%;
+    --rank-bronze: 23.88 40.83% 52.94%;
+  }
+
+  .graphite-theme :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+  .graphite-theme ::selection { background: hsl(var(--brand) / .25); }
+}
+
+@layer components {
+  .pilot-page { @apply mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8; animation: pilot-enter 180ms ease-out; }
+  .pilot-link { @apply inline-flex items-center gap-2 rounded-sm text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground; }
+  .pilot-kicker { @apply text-xs font-medium tracking-widest text-muted-foreground; }
+  .pilot-numeric { @apply font-mono tabular-nums; }
+  .pilot-notice { @apply flex items-start gap-3 rounded-lg border p-4 text-sm leading-6; }
+  .pilot-problem-label { @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-elevated font-mono text-xs font-semibold tabular-nums; }
+  .pilot-row { @apply border-t transition-colors duration-150 hover:bg-elevated; }
+  .pilot-row-current { background: hsl(var(--brand) / .055); }
+  .pilot-row-current > :first-child { box-shadow: inset 2px 0 hsl(var(--brand)); }
+  .pilot-running-dot { @apply h-1.5 w-1.5 rounded-full bg-current; animation: pilot-pulse 2400ms ease-in-out infinite; }
+  /* Tone the same brand against graphite, without changing brand/verdict tokens.
+     Scope to primary buttons; badges, focus and the accepted standings stay intact. */
+  .graphite-theme [data-slot="button"][data-variant="default"] {
+    color: hsl(var(--foreground));
+    background-color: color-mix(in srgb, hsl(var(--brand)) 26%, hsl(var(--surface-elevated)));
+    border: 1px solid hsl(var(--brand) / .4);
+  }
+  .graphite-theme [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
+    background-color: color-mix(in srgb, hsl(var(--brand)) 38%, hsl(var(--surface-elevated)));
+    border-color: hsl(var(--brand) / .55);
+  }
+  .graphite-theme [data-slot="button"][data-variant="default"]:active:not(:disabled) {
+    background-color: color-mix(in srgb, hsl(var(--brand)) 18%, hsl(var(--surface-elevated)));
+  }
+  /* Portalled navigation must inherit the same opt-in palette and quiet motion. */
+  .graphite-theme[data-slot="sheet-content"] { animation: pilot-enter 180ms ease-out; transition-duration: 150ms; }
+  .graphite-theme[data-slot="select-content"] { animation: pilot-enter 150ms ease-out; }
+}
+
+@keyframes pilot-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pilot-pulse { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+
+/* Keep controls and live state intact; remove nonessential motion everywhere,
+   including Radix portals rendered outside the application shell. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
