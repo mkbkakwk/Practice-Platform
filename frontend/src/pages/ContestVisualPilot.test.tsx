@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, ApiError, type ContestStanding, type PublicUser } from "@/lib/api";
 import { VerdictBadge, VERDICT_LABEL } from "@/lib/verdict";
 import { ContestPhaseBadge } from "@/components/contest/ContestVisuals";
+import { Button } from "@/components/ui/button";
 import ContestStandings from "./ContestStandings";
 
 const auth = vi.hoisted(() => ({ user: { id: 10, username: "same-name", role: "USER" } as PublicUser | null }));
@@ -85,6 +86,14 @@ describe("graphite standings presentation preserves the server contract", () => 
 });
 
 describe("status information is not color-only", () => {
+  it("keeps destructive surfaces opaque in dark mode and preserves disabled behavior", () => {
+    render(<Button variant="destructive" disabled>测试操作</Button>);
+    const button = screen.getByRole("button", { name: "测试操作" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveClass("text-destructive-foreground", "dark:hover:bg-destructive");
+    expect(button).not.toHaveClass("dark:bg-destructive/60");
+  });
+
   it("retains a readable label and explicit verdict identity for every verdict", () => {
     render(<>{Object.keys(VERDICT_LABEL).map((key) => <VerdictBadge key={key} verdict={key as keyof typeof VERDICT_LABEL} />)}</>);
     for (const [verdict, label] of Object.entries(VERDICT_LABEL)) {

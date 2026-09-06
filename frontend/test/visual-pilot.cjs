@@ -81,6 +81,29 @@ async function main() {
       await page.locator('.cm-editor').waitFor();
       assert.equal(await page.locator('.graphite-theme').first().evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
       assert.equal(await page.locator('.pilot-running-dot').evaluate((el) => getComputedStyle(el).animationDuration), '1e-05s');
+      const contrast = await page.locator('.graphite-theme').first().evaluate((root) => {
+        const probe = document.createElement('span');
+        // Read final token colors synchronously, without interpolating even .01ms.
+        probe.style.setProperty('transition', 'none', 'important');
+        root.append(probe);
+        const rgb = (variable) => {
+          probe.style.color = `hsl(var(--${variable}))`;
+          return getComputedStyle(probe).color.match(/[\d.]+/g).slice(0, 3).map(Number);
+        };
+        const luminance = (value) => value.map((c) => { c /= 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+        const ratio = (a, b) => (Math.max(luminance(a), luminance(b)) + .05) / (Math.min(luminance(a), luminance(b)) + .05);
+        const card = rgb('card');
+        const result = {};
+        for (const token of ['foreground', 'text-secondary', 'muted-foreground', 'success', 'danger', 'warning', 'info', 'violet', 'rose', 'rank-gold', 'rank-silver', 'rank-bronze']) {
+          const fg = rgb(token);
+          const background = token.endsWith('foreground') || token === 'text-secondary' ? card : fg.map((channel, i) => channel * .1 + card[i] * .9);
+          result[token] = ratio(fg, background);
+        }
+        for (const token of ['primary', 'destructive']) result[token] = ratio(rgb(`${token}-foreground`), rgb(token));
+        probe.remove();
+        return result;
+      });
+      for (const [token, value] of Object.entries(contrast)) assert(value >= 4.5, `${token}: text contrast ${value.toFixed(2)} is below 4.5`);
       await snap('contest');
       await page.getByRole('combobox').click();
       await page.getByRole('listbox').waitFor();
@@ -120,7 +143,7 @@ async function main() {
       }
       assert.deepEqual(unexpected, [], 'All network requests must be local, supported GET fixtures');
       assert.deepEqual(errors, [], 'No browser runtime exceptions');
-      results.push({ width, overflow: 'PASS', focus: 'PASS', reducedMotion: 'PASS', portals: 'PASS', currentUser: 'PASS', pageErrors: 0, unexpectedRequests: 0 });
+      results.push({ width, overflow: 'PASS', focus: 'PASS', reducedMotion: 'PASS', portals: 'PASS', currentUser: 'PASS', minimumTokenContrast: Number(Math.min(...Object.values(contrast)).toFixed(2)), pageErrors: 0, unexpectedRequests: 0 });
       await context.close();
     }
     await fs.writeFile(path.join(output, 'summary.json'), JSON.stringify({ source: 'ISOLATED UI FIXTURES — NOT PRODUCTION', results }, null, 2));
