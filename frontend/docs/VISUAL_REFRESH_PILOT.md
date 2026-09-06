@@ -53,7 +53,11 @@ node frontend/test/visual-pilot.cjs
 docker stop practice-platform-visual-pilot-preview
 ```
 
-## 人工 Review（尚待确认）
+## 最终人工 Review（方向已接受，polish 待确认）
+
+已接受 Dark Graphite / Low Saturation 方向及 375px 排行榜。本次 polish 只压缩页头留白、减少说明/导航/编辑器的嵌套卡片外框，并用现有灰阶区分工作区和输入区。主按钮以同一个 brand 混合石墨底形成常态、hover、active 层级；brand、Verdict、rank token 和排行榜高亮不变。未增加页面、数据、动效类别或业务功能。
+
+隔离浏览器检查额外验证主按钮三态对比度、键盘焦点与空代码禁用行为；所有原有断言保留。
 
 - 石墨黑是否克制，层级和分隔线是否清晰？
 - 中文字体、题意阅读、代码编辑和数字是否舒服？

@@ -83,6 +83,20 @@
   .pilot-row-current { background: hsl(var(--brand) / .055); }
   .pilot-row-current > :first-child { box-shadow: inset 2px 0 hsl(var(--brand)); }
   .pilot-running-dot { @apply h-1.5 w-1.5 rounded-full bg-current; animation: pilot-pulse 2400ms ease-in-out infinite; }
+  /* Tone the same brand against graphite, without changing brand/verdict tokens.
+     Scope to primary buttons; badges, focus and the accepted standings stay intact. */
+  .graphite-theme [data-slot="button"][data-variant="default"] {
+    color: hsl(var(--foreground));
+    background-color: color-mix(in srgb, hsl(var(--brand)) 26%, hsl(var(--surface-elevated)));
+    border: 1px solid hsl(var(--brand) / .4);
+  }
+  .graphite-theme [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
+    background-color: color-mix(in srgb, hsl(var(--brand)) 38%, hsl(var(--surface-elevated)));
+    border-color: hsl(var(--brand) / .55);
+  }
+  .graphite-theme [data-slot="button"][data-variant="default"]:active:not(:disabled) {
+    background-color: color-mix(in srgb, hsl(var(--brand)) 18%, hsl(var(--surface-elevated)));
+  }
   /* Portalled navigation must inherit the same opt-in palette and quiet motion. */
   .graphite-theme[data-slot="sheet-content"] { animation: pilot-enter 180ms ease-out; transition-duration: 150ms; }
   .graphite-theme[data-slot="select-content"] { animation: pilot-enter 150ms ease-out; }

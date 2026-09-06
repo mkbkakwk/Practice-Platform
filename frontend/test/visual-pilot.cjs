@@ -74,6 +74,7 @@ async function main() {
       async function snap(name) {
         const dimensions = await page.evaluate(() => ({ width: innerWidth, document: document.documentElement.scrollWidth }));
         assert(dimensions.document <= dimensions.width, `${name}: unexpected document overflow ${JSON.stringify(dimensions)}`);
+        if (name !== 'navigation') await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.screenshot({ path: path.join(output, `${name}-${width}.png`), fullPage: name !== 'navigation' });
       }
       await page.goto(`${origin}/#/contests/7`);
@@ -104,6 +105,47 @@ async function main() {
         return result;
       });
       for (const [token, value] of Object.entries(contrast)) assert(value >= 4.5, `${token}: text contrast ${value.toFixed(2)} is below 4.5`);
+      const primary = page.getByRole('button', { name: '提交代码', exact: true });
+      const buttonAppearance = () => primary.evaluate((el) => {
+        const rgb = (color) => {
+          const values = color.match(/[\d.]+/g).slice(0, 3).map(Number);
+          return color.startsWith('color(srgb') ? values.map((value) => value * 255) : values;
+        };
+        const luminance = (color) => rgb(color).map((c) => { c /= 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+        const style = getComputedStyle(el);
+        const background = luminance(style.backgroundColor);
+        const foreground = luminance(style.color);
+        return { background, contrast: (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05) };
+      });
+      await page.mouse.move(0, 0);
+      const defaultButton = await buttonAppearance();
+      await primary.hover();
+      await page.waitForFunction((node) => node.matches(':hover'), await primary.elementHandle());
+      const hoveredButton = await buttonAppearance();
+      await page.mouse.down();
+      const activeButton = await buttonAppearance();
+      // Release outside the button: this is a visual state check, not a submit.
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+      assert(hoveredButton.background > defaultButton.background, 'Primary hover is slightly brighter');
+      assert(activeButton.background < defaultButton.background, 'Primary pressed state is slightly darker');
+      for (const state of [defaultButton, hoveredButton, activeButton]) assert(state.contrast >= 4.5, 'Primary text retains contrast in every state');
+      const editor = page.locator('.cm-content[contenteditable="true"]');
+      await editor.fill('');
+      assert(await primary.isDisabled(), 'Empty code still disables submission');
+      await editor.fill('a, b = map(int, input().split())\nprint(a + b)\n');
+      assert(await primary.isEnabled());
+      await page.keyboard.press('Tab');
+      await primary.focus();
+      assert.equal(await primary.evaluate((el) => getComputedStyle(el).outlineStyle), 'solid');
+      await primary.evaluate((el) => el.blur());
+      assert.equal(await primary.evaluate((el) => getComputedStyle(el).transitionDuration), '1e-05s');
+      assert.equal(await page.locator('.pilot-page').evaluate((el) => getComputedStyle(el).animationDuration), '1e-05s');
+      if (width === 1440) {
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        assert.equal(await primary.evaluate((el) => getComputedStyle(el).transitionDuration), '0.15s');
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+      }
       await snap('contest');
       await page.getByRole('combobox').click();
       await page.getByRole('listbox').waitFor();
@@ -143,7 +185,7 @@ async function main() {
       }
       assert.deepEqual(unexpected, [], 'All network requests must be local, supported GET fixtures');
       assert.deepEqual(errors, [], 'No browser runtime exceptions');
-      results.push({ width, overflow: 'PASS', focus: 'PASS', reducedMotion: 'PASS', portals: 'PASS', currentUser: 'PASS', minimumTokenContrast: Number(Math.min(...Object.values(contrast)).toFixed(2)), pageErrors: 0, unexpectedRequests: 0 });
+      results.push({ width, overflow: 'PASS', focus: 'PASS', reducedMotion: 'PASS', portals: 'PASS', currentUser: 'PASS', primaryStates: 'PASS', disabledSubmission: 'PASS', minimumTokenContrast: Number(Math.min(...Object.values(contrast)).toFixed(2)), minimumButtonContrast: Number(Math.min(defaultButton.contrast, hoveredButton.contrast, activeButton.contrast).toFixed(2)), pageErrors: 0, unexpectedRequests: 0 });
       await context.close();
     }
     await fs.writeFile(path.join(output, 'summary.json'), JSON.stringify({ source: 'ISOLATED UI FIXTURES — NOT PRODUCTION', results }, null, 2));

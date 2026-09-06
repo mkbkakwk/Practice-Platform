@@ -36,9 +36,9 @@ export function ContestError({ message }: { message: string }) {
 }
 
 export function ContestClock({ countdown }: { countdown: string }) {
-  return <div className="min-w-0 rounded-lg border bg-surface px-5 py-4 sm:min-w-56">
-    <p className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"><Clock3 aria-hidden="true" className="h-3.5 w-3.5" />比赛时间</p>
-    <p className="pilot-numeric text-lg font-medium sm:text-xl">{countdown}</p>
-    <p className="mt-2 text-xs text-muted-foreground">状态与提交权限以服务端为准</p>
+  return <div className="min-w-0 border-l-2 border-border py-1 pl-4 sm:shrink-0">
+    <p className="mb-1.5 flex items-center gap-2 text-xs text-subtle"><Clock3 aria-hidden="true" className="h-3.5 w-3.5" />比赛时间</p>
+    <p className="pilot-numeric text-xl font-medium tracking-tight sm:text-2xl">{countdown}</p>
+    <p className="mt-1.5 text-xs text-muted-foreground">状态与提交权限以服务端为准</p>
   </div>;
 }

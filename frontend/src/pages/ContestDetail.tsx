@@ -366,23 +366,23 @@ export default function ContestDetail() {
 
   return <main className="pilot-page">
     <ContestBackLink />
-    <section className="my-5 rounded-xl border bg-card p-5 sm:p-7" aria-labelledby="contest-title">
-      <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+    <section className="my-4 rounded-xl border bg-card p-5 sm:p-6" aria-labelledby="contest-title">
+      <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
         <div className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <ContestPhaseBadge phase={contest.phase} />
             <Badge variant="neutral">{contest.scoringMode}</Badge>
             <span className="pilot-numeric ml-1 text-xs text-muted-foreground">Contest #{contest.id}</span>
           </div>
           <h1 id="contest-title" className="break-words text-2xl font-semibold leading-snug tracking-tight sm:text-3xl">{contest.title}</h1>
-          <p className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <p className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <time dateTime={contest.startAt} className="pilot-numeric">{formatTime(contest.startAt)}</time>
             <span>—</span><time dateTime={contest.endAt} className="pilot-numeric">{formatTime(contest.endAt)}</time>
           </p>
         </div>
         {countdown && <ContestClock countdown={countdown} />}
       </div>
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t pt-4">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
         <div className="flex flex-wrap items-center gap-3 text-xs text-subtle">
           <span>{contest.accessType === "OPEN" ? "公开报名" : "邀请制"}</span>
           <span className="h-3 border-l" aria-hidden="true" />
@@ -397,11 +397,11 @@ export default function ContestDetail() {
       </div>
     </section>
     {error && <div className="mb-4"><ContestError message={error} /></div>}
-    <Card className="mb-5 gap-3 p-5">
-      <h2 className="pilot-kicker flex items-center gap-2"><BookOpen aria-hidden="true" className="h-3.5 w-3.5" />比赛说明</h2>
+    <section className="mb-6 mt-5 space-y-2 border-l border-border/70 py-1 pl-4" aria-labelledby="contest-description-title">
+      <h2 id="contest-description-title" className="flex items-center gap-2 text-sm font-medium text-subtle"><BookOpen aria-hidden="true" className="h-3.5 w-3.5" />比赛说明</h2>
       <Markdown>{contest.description || "暂无比赛说明。"}</Markdown>
       {contest.accessType === "INVITE_ONLY" && !contest.participant && user?.role === "USER" && <p className="text-sm text-warning">邀请制比赛仅对受邀学生开放。</p>}
-    </Card>
+    </section>
     {contest.phase === "UPCOMING" && <p className="mb-4 rounded border border-info/25 bg-info/10 p-3 text-sm text-info">比赛尚未开始；CONTEST_ONLY 题目正文将在服务端确认开赛且你是参赛者后开放。</p>}
     {contest.phase === "CANCELLED" && <p className="mb-4 rounded border border-danger/25 bg-danger/10 p-3 text-sm text-danger">比赛已取消，历史信息保留，但不能创建新提交。</p>}
     {detail.problems.length === 0 ? <Card className="p-8 text-center text-muted-foreground" role="status">当前阶段没有可展示的题目</Card> : <>
@@ -409,7 +409,7 @@ export default function ContestDetail() {
         {detail.problems.map((problem) => <ProblemNavButton key={problem.contestProblemId} problem={problem} active={problem.contestProblemId === activeProblem?.contestProblemId} compact onClick={() => selectProblem(problem.contestProblemId)} />)}
       </div>
       <div className="grid gap-5 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[244px_minmax(0,1fr)]">
-        <Card className="hidden h-fit p-3 md:block"><h2 className="mb-3 flex items-center justify-between px-2 text-sm font-semibold">题目导航 <span className="pilot-numeric text-xs text-muted-foreground">{detail.problems.length}</span></h2><div className="space-y-1">{detail.problems.map((problem) => <ProblemNavButton key={problem.contestProblemId} problem={problem} active={problem.contestProblemId === activeProblem?.contestProblemId} onClick={() => selectProblem(problem.contestProblemId)} />)}</div></Card>
+        <aside className="hidden h-fit min-w-0 border-r border-border/60 py-2 pr-4 md:block"><h2 className="mb-3 flex items-center justify-between px-2 text-sm font-semibold">题目导航 <span className="pilot-numeric text-xs text-muted-foreground">{detail.problems.length}</span></h2><div className="space-y-1">{detail.problems.map((problem) => <ProblemNavButton key={problem.contestProblemId} problem={problem} active={problem.contestProblemId === activeProblem?.contestProblemId} onClick={() => selectProblem(problem.contestProblemId)} />)}</div></aside>
         {activeProblem && <ContestProblemPanel
           problem={activeProblem}
           phase={contest.phase}
@@ -502,14 +502,14 @@ function ContestProblemPanel({
   const code = draft ? (draft.codeByLanguage[draft.language] ?? "") : "";
   const busy = run?.busy != null;
 
-  return <Card className="min-w-0 gap-0 p-5" data-testid={`contest-problem-${problem.contestProblemId}`}>
-    <div className="mb-4 flex flex-wrap items-center gap-3 border-b pb-4"><span className="pilot-problem-label">{problem.label}</span><h2 className="min-w-0 break-words text-lg font-semibold">{problem.title}</h2><span className="text-xs text-muted-foreground">{problemTypeLabel(problem.problemType)}</span></div>
+  return <Card className="min-w-0 gap-0 border-border/80 bg-surface p-4 sm:p-5" data-testid={`contest-problem-${problem.contestProblemId}`}>
+    <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-border/60 pb-4"><span className="pilot-problem-label">{problem.label}</span><h2 className="min-w-0 break-words text-lg font-semibold">{problem.title}</h2><span className="text-xs text-muted-foreground">{problemTypeLabel(problem.problemType)}</span></div>
     {content?.description && <Markdown>{content.description}</Markdown>}
     {content?.inputFmt && <section className="mt-4"><h3 className="text-sm font-semibold">输入</h3><Markdown>{content.inputFmt}</Markdown></section>}
     {content?.outputFmt && <section className="mt-4"><h3 className="text-sm font-semibold">输出</h3><Markdown>{content.outputFmt}</Markdown></section>}
     {content?.samples && content.samples.length > 0 && <section className="mt-5"><h3 className="mb-3 text-sm font-semibold">样例</h3><div className="space-y-4">{content.samples.map((sample, index) => <div key={index}><h4 className="mb-2 text-xs font-semibold text-muted-foreground">样例 {index + 1}</h4><div className="grid gap-3 sm:grid-cols-2"><SampleBox label="输入" value={sample.input} /><SampleBox label="输出" value={sample.output} /></div></div>)}</div></section>}
 
-    {canSubmit && problem.problemType === "ALGORITHM" && <section className="mt-5 space-y-3 border-t pt-5">
+    {canSubmit && problem.problemType === "ALGORITHM" && <section className="mt-6 space-y-3 border-t border-border/60 pt-4">
       {languageError && <p role="alert" className="rounded border border-danger/25 bg-danger/10 p-3 text-sm text-danger">{languageError}</p>}
       <div className="w-full sm:w-52"><Select value={draft?.language ?? ""} disabled={languages.length === 0 || busy} onValueChange={onLanguageChange}><SelectTrigger aria-label={`${problem.label} 编程语言`}><SelectValue placeholder="选择语言" /></SelectTrigger><SelectContent className="graphite-theme dark">{languages.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
       <CodeEditor ariaLabel={`${problem.label} 源代码`} value={code} language={draft?.language ?? ""} onChange={onCodeChange} height="360px" appearance="graphite" />
@@ -570,7 +570,7 @@ function problemTypeLabel(type: ContestProblemItem["problemType"]) {
 }
 
 function SampleBox({ label, value }: { label: string; value: string }) {
-  return <div><div className="mb-1 text-xs font-medium text-muted-foreground">{label}</div><pre className="overflow-x-auto rounded-md border bg-background p-3 font-mono text-xs text-subtle">{value}</pre></div>;
+  return <div><div className="mb-1.5 text-xs font-medium text-subtle">{label}</div><pre className="overflow-x-auto rounded-md bg-elevated p-3 font-mono text-xs tabular-nums text-foreground">{value}</pre></div>;
 }
 
 function countdownLabel(phase: ContestDetailModel["contest"]["phase"], startAt: string, endAt: string, now: number) {
