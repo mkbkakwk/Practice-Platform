@@ -1,123 +1,65 @@
-# Office DOCX judging
+# Office DOCX 评测设计
 
-## Supported scope
+## 支持范围
 
-Stage 5 hardens the existing document-formatting exercise. It accepts only OOXML
-Word `.docx` packages. Office choice questions may still be tagged Word, Excel,
-or PowerPoint; that quiz metadata does not mean XLSX or PPTX file judging exists.
+Stage 5 加固了已有的文档排版练习，仅接受 OOXML Word `.docx` 文件包。Office 选择题仍可标注 Word、Excel 或 PowerPoint 分类，但选择题分类不代表系统支持 XLSX 或 PPTX 文件评测。
 
-Unsupported file-judging formats include `.doc`, `.docm`, `.xlsx`, `.xlsm`,
-`.pptx`, encrypted/password-protected Office files, macro packages, embedded
-objects, and documents with external relationships. The service never executes
-macros, Microsoft Office, or LibreOffice.
+文件评测不支持 `.doc`、`.docm`、`.xlsx`、`.xlsm`、`.pptx`、加密／密码保护的 Office 文件、宏文件包、嵌入对象及带外部关系的文档。服务不会执行宏、Microsoft Office 或 LibreOffice。
 
-## Upload and package validation
+## 上传与文件包验证
 
-Uploads are untrusted input. The HTTP multipart default is 10 MiB per file and
-11 MiB per request. The Office service independently enforces a 10 MiB stream
-limit before Apache POI opens the file. Defaults may be lowered through the
-`OFFICE_*` settings in `.env.example`.
+上传内容是不可信输入。HTTP multipart 默认限制为单文件 10 MiB、单请求 11 MiB；Office 服务在 Apache POI 打开文件前，还会独立执行 10 MiB 的流式大小限制。可通过 `.env.example` 中的 `OFFICE_*` 配置降低默认限额。实际上传还受前端代理限制，见[学校部署指南](SCHOOL_DEPLOYMENT.md)。
 
-The validator requires all of the following:
+验证器要求同时满足：
 
-- a simple `.docx` display filename without path separators, drive paths, or
-  traversal components;
-- an allowed DOCX/ZIP MIME type plus a ZIP signature;
-- required OOXML entries and the DOCX main-part content type;
-- no duplicate or unsafe ZIP entry names;
-- no macros, embedded objects, external relationships, or encrypted OLE2
-  wrapper;
-- no more than 2,048 entries, 8 MiB per expanded entry, 32 MiB total expanded
-  content, and a minimum inflate ratio of 0.01.
+- 展示文件名是简单的 `.docx` 名称，不含路径分隔符、驱动器路径或目录穿越成分。
+- MIME 类型属于允许的 DOCX／ZIP 类型，且文件具有 ZIP 签名。
+- 存在必需的 OOXML 条目，主文档内容类型为 DOCX。
+- ZIP 条目名称不重复，且不存在不安全路径。
+- 不含宏、嵌入对象、外部关系或加密 OLE2 包装。
+- 最多 2,048 个条目；每个条目解压后最多 8 MiB，总解压内容最多 32 MiB；压缩比安全阈值不低于 0.01。
 
-Apache POI `poi-ooxml` is 5.4.1. This is the first maintained line containing the
-duplicate-entry fix for CVE-2025-31672. POI `ZipSecureFile` limits remain enabled;
-the project validator provides an additional streaming boundary before parsing.
-Client errors are stable categories and never include POI stack traces or server
-paths.
+项目使用 Apache POI `poi-ooxml` 5.4.1；原安全加固选用该版本以包含 CVE-2025-31672 的重复条目修复。POI `ZipSecureFile` 限制保持启用，项目验证器在解析前额外提供流式检查边界。返回客户端的是稳定错误类别，不包含 POI 堆栈或服务器路径。
 
-## Storage lifecycle
+## 存储生命周期
 
-The original filename is display-only. The service streams an upload to a unique
-temporary file under the configured storage root, validates and parses it, then
-atomically moves it to a server-generated UUID `.docx` filename. The database
-stores that storage ID for new records; historical absolute paths remain readable
-only when they resolve to a regular, non-symlink file directly under the storage
-root.
+原始文件名仅用于展示。服务将上传内容流式写入存储根目录下唯一的临时文件，验证并解析后，再原子移动为服务器生成的 UUID `.docx` 文件名。新记录在数据库中保存存储 ID；历史绝对路径只有在解析为存储根目录直接子级的普通、非符号链接文件时才允许读取。
 
-If parsing or persistence fails, temporary and newly committed files are removed.
-Rejected student uploads retain a bounded `FAILED` database result but no untrusted
-file. Exercise deletion commits database deletion before file cleanup, and a
-scheduled reconciler removes only old, UUID-named, unreferenced managed files.
-It never follows symlinks or deletes user-provided paths.
+解析或持久化失败时，移除临时文件及本次新保存的文件。被拒绝的学生上传会保留受大小限制的 `FAILED` 数据库结果，不保留不可信文件。删除练习时先提交数据库删除，再清理文件；定时核对程序只移除旧的、UUID 命名、未被引用的托管文件，不跟随符号链接，也不删除用户提供的任意路径。
 
-Starter and reference documents are stored independently and both use the same
-validator and parser before replacing the active file. The starter is the
-student input document; the reference is the server-only judging answer. A DOCX
-exercise is not contest-ready and cannot accept submissions until both exist.
-Only the owning teacher or an administrator may download a reference. Students
-may download a PUBLIC starter (or a contest-gated CONTEST_ONLY starter) and only
-their own submissions; teachers may download submissions for exercises they own.
+操作素材和参考答案独立存储，替换生效前均经过同一验证器与解析器。操作素材供学生编辑，参考答案仅用于服务端评测。两者不齐全的 DOCX 练习不能用于比赛，也不能接收提交。
 
-## Canonical model and normalization
+只有创建教师或管理员能下载参考答案。学生可下载 `PUBLIC` 操作素材（或经比赛权限控制的 `CONTEST_ONLY` 素材），且只能下载自己的提交；教师可下载自己练习下的学生提交。
 
-POI objects never enter the comparator or database. A parse produces immutable
-paragraph, run, and table records.
+## 标准化模型与归一化
 
-Supported Word properties are:
+POI 对象不会直接传入比较器或数据库。解析结果是不可变的段落、文本片段（run）和表格记录。
 
-- paragraph order and text;
-- paragraph alignment, first/left/right indent in twips, before/after spacing in
-  twips, and line spacing in hundredths of a line;
-- every run's text, direct font family, size in hundredths of a point, bold,
-  italic, underline, and color;
-- table order, row count, column count, cell order, and cell text.
+支持的 Word 属性包括：
 
-Text normalization converts CRLF and CR to LF, applies Unicode NFC, preserves
-leading and internal spaces, and removes trailing whitespace only at paragraph or
-cell boundaries. Comparisons are case-sensitive and exact. Font names are
-case-normalized. Missing direct formatting is a canonical explicit value; Stage 5
-does not resolve theme, character-style, paragraph-style, or document-default
-cascades.
+- 段落顺序和文字。
+- 段落对齐、首行／左／右缩进、段前／段后间距（单位为 twip，即 1/20 磅），以及以百分之一行为单位的行距。
+- 每个文本片段的文字、直接设置的字体、以百分之一磅为单位的字号、粗体、斜体、下划线和颜色。
+- 表格顺序、行数、列数、单元格顺序及单元格文字。
 
-Unsupported judging properties include page rendering, margins/sections, images,
-merged-cell formatting, borders/shading, tracked changes, fields, shapes, SmartArt,
-and pixel-level layout. Office judging is deterministic rule comparison, not a
-pixel-perfect Microsoft Word rendering engine.
+文字归一化将 CRLF、CR 转为 LF，采用 Unicode NFC，保留开头及中间空格，只移除段落或单元格末尾的空白。比较区分大小写并要求精确匹配；字体名称会统一大小写。未直接设置的格式也有明确的标准化值。Stage 5 不解析主题、字符样式、段落样式或文档默认值的层叠继承。
 
-## Scoring and results
+不支持页面渲染、页边距／分节、图片、合并单元格格式、边框／底纹、修订、域、形状、SmartArt 或像素级布局评测。Office 评测是确定性的规则比较，不是与 Microsoft Word 像素级一致的渲染引擎。
 
-The judge version is `office-docx-v1`. Every supported canonical rule has equal
-weight. A failed rule receives zero for that rule; the final integer score is the
-nearest percentage in the inclusive range 0–100. There is no fuzzy comparison or
-undocumented tolerance.
+## 评分与结果
 
-Results include total/earned score, pass state, bounded error items, total error
-count, truncation state, judge version, and judge timestamp. At most 200 error
-items are retained and the serialized JSONB detail is capped at 256 KiB. Reference
-paragraph and table text is not returned to students; details identify the target
-and mismatch category and may expose only formatting expectations.
+评测版本为 `office-docx-v1`，所有支持的标准化规则权重相同。规则不通过则该项为零；最终得分为四舍五入后的整数百分比，范围为 0–100。不采用模糊比较或未说明的容差。
 
-Submission states are `PENDING`, `JUDGING`, `COMPLETED`, and `FAILED`, while legacy
-`AUTO_CHECKED`, `NEEDS_REVIEW`, and `REVIEWED` records remain readable. A failed
-parse is persisted as `FAILED` with a sanitized category and does not remain
-pending.
+结果包含总分／得分、通过状态、限量错误项、错误总数、截断状态、评测版本及时间。最多保留 200 个错误项，序列化后的 JSONB 详情最多 256 KiB。参考答案中的段落和表格正文不返回学生；详情只定位目标与不匹配类别，必要时仅披露格式要求。
 
-## Resource model and tests
+提交状态为 `PENDING`（待处理）、`JUDGING`（评测中）、`COMPLETED`（已完成）、`FAILED`（失败）。历史 `AUTO_CHECKED`、`NEEDS_REVIEW`、`REVIEWED` 记录仍可读取。解析失败会保存为 `FAILED` 并记录脱敏类别，不会一直停留在待处理状态。
 
-Parsing is file-backed, opens OOXML packages with `PackageAccess.READ`, and closes
-`OPCPackage`, `XWPFDocument`, ZIP streams, and file streams with try-with-resources.
-Read-only package access prevents concurrent judges from mutating a shared
-reference document. Element and text complexity have hard caps.
-Each backend instance admits at most four concurrent Office judges by default;
-additional valid requests wait for a permit rather than spawning unbounded parser
-threads.
+## 资源模型与测试
 
-`OfficeDocumentSecurityIT` is part of the normal backend Docker test task and is
-not skipped. It covers forged and corrupted files, oversized and high-compression
-packages, huge XML, traversal, macros/embeddings, encrypted packages, external
-relationships, and malformed OOXML. Comparator tests require ten identical runs
-to produce an identical model-level result, and storage tests exercise 20 concurrent
-unique uploads plus immediate Windows-compatible deletion. The integration suite
-also judges 20 simultaneous submissions, checks that all storage IDs and results
-remain isolated, and verifies the configured peak of four active parsers.
+解析以文件为基础，用 `PackageAccess.READ` 打开 OOXML 包，通过 try-with-resources 关闭 `OPCPackage`、`XWPFDocument`、ZIP 流和文件流。只读访问防止并发评测修改共享参考答案。元素数量及文本复杂度均有硬上限。
+
+每个后端实例默认最多同时执行四个 Office 评测，额外的有效请求等待许可，不创建无限解析线程。
+
+`OfficeDocumentSecurityIT` 纳入正常后端 Docker 测试，不跳过。它覆盖伪造／损坏文件、超大／高压缩包、巨大 XML、目录穿越、宏／嵌入对象、加密包、外部关系和畸形 OOXML。
+
+比较器测试要求连续十次运行得到完全相同的模型结果；存储测试覆盖 20 个并发唯一上传，以及兼容 Windows 的即时删除。集成测试还同时评测 20 个提交，确认存储 ID 和结果相互隔离，并验证活动解析器峰值为配置的四个。这些是测试范围，不是大规模生产容量认证。

@@ -1,12 +1,12 @@
-# Backup and Restore Runbook
+# 备份与恢复操作手册
 
-> 学校操作员请先读 [OPERATIONS.md](OPERATIONS.md)。下面的 Staging 示例保留为技术演练；正式备份须用已验证的外部 wrapper 将 formal/release dotenv 显式转发给每次内部 Compose 调用。非 daily 备份退出时会尝试启动 Backend/Worker，发布窗口必须随后重新 hold Worker。不要用隔离 restore 命令指向 Production。
+> 学校操作员请先读[运维手册](OPERATIONS.md)。下文预发布示例用于技术演练。正式备份须使用已验证的外部封装程序，将正式配置和发布元数据两个环境变量文件显式转发给每次内部 Compose 调用。非 daily 备份退出时会尝试启动 Backend／Worker，发布窗口内须随后重新确认 Worker 停止。不得将隔离恢复命令指向生产环境。
 
-This operator runbook complements `backup-restore.md`. Authoritative recovery data is PostgreSQL plus Office persistent files. RabbitMQ message storage is not an authoritative backup.
+本手册补充[备份与恢复设计](backup-restore.md)。权威恢复数据是 PostgreSQL 与 Office 持久文件，RabbitMQ 消息存储不是权威备份。
 
-## Backup
+## 备份
 
-Use an external host directory outside Git, PostgreSQL volumes, and Office volumes. Daily backups are online and may have slight DB/Office skew; releases and recovery drills require a consistent logical pair with planned Backend/Worker write quiescence.
+使用 Git、PostgreSQL 卷和 Office 卷之外的宿主机目录。每日备份在线执行，数据库与 Office 可能存在轻微时间差；发布和恢复演练要求先安排 Backend／Worker 停写，再生成逻辑一致的配对备份。
 
 ```bash
 ./scripts/backup.sh --environment staging --mode consistent \
@@ -18,15 +18,17 @@ Use an external host directory outside Git, PostgreSQL volumes, and Office volum
   --compose-file docker-compose.yml --compose-file docker-compose.staging.yml
 ```
 
-The script verifies free space before publication, writes a custom PostgreSQL dump and Office archive, records separate backup-tool Git SHA, backed-up runtime Git SHA, Flyway, and UTC metadata, checks SHA-256 and archive safety, atomically publishes `.complete`, and restarts Backend/Worker through an EXIT trap. New artifacts use `umask 077`: Linux meaningful modes are directory `700` and files `600`; Windows keeps compatible ACL semantics and must never be world-writable.
+尖括号内容均须先替换为实际值。脚本在发布备份前检查剩余空间，生成 PostgreSQL 自定义格式导出与 Office 归档，分别记录备份工具 Git SHA、被备份运行版本 Git SHA、Flyway 和 UTC 元数据；验证 SHA-256 与归档安全性后，以原子方式发布带 `.complete` 的备份，并通过 EXIT 处理逻辑重新启动 Backend／Worker。
 
-Formal Production backups must additionally supply `--production-runtime-git-sha <full-sha>`. The release T1 preflight verifies this value is the observed previous Production runtime; it never substitutes the backup tool checkout SHA.
+新文件采用 `umask 077`：Linux 目录权限为 `700`、文件为 `600`；Windows 应使用兼容的受限 ACL，绝不能允许所有用户写入。
 
-Run `./scripts/backup-verify.sh <backup-dir>` before considering a backup usable. Retention is `7 daily / 4 weekly / 3 monthly`; first use only `backup-retention.sh --dry-run`. Corrupt or incomplete directories are retained for investigation rather than deleted automatically.
+正式生产备份还必须提供 `--production-runtime-git-sha <full-sha>`。发布 T1 预检会验证该值等于实际观察到的上一生产运行版本，不会用备份工具的 checkout SHA 代替。
 
-## Isolated restore
+认定备份可用前，先运行 `./scripts/backup-verify.sh <backup-dir>`。默认保留 7 份 daily、4 份 weekly、3 份 monthly；首先只运行 `backup-retention.sh --dry-run` 查看计划。损坏或不完整的目录保留调查，不自动删除。
 
-Never restore to Staging or Production. Provision fresh PostgreSQL, fresh Office volume, isolated network, and a project named `practice-platform-stage9d-drill-*`, then run:
+## 隔离恢复
+
+不得向在线预发布或生产环境恢复。先准备全新的 PostgreSQL、Office 卷和隔离网络，项目名使用 `practice-platform-stage9d-drill-*`，再执行：
 
 ```bash
 ./scripts/restore.sh --backup <verified-backup-dir> --target isolated --confirm-isolated \
@@ -34,4 +36,6 @@ Never restore to Staging or Production. Provision fresh PostgreSQL, fresh Office
   --db-name <fresh-db-name> --db-user <fresh-db-user> --office-volume <fresh-office-volume>
 ```
 
-The guard rejects live/non-isolated target names, non-empty targets, incomplete/checksum-invalid backups, archive traversal, and links. Validate Flyway V9 and failed migrations `0`; backup-time DB counts; Office file counts and representative SHA-256; and DB-to-Office references. Start an isolated application only if every dependency, including RabbitMQ, is isolated. Record backup age and restore duration as RPO/RTO evidence, then remove only the drill's resources.
+保护逻辑拒绝在线／非隔离目标名、非空目标、不完整或校验失败的备份，以及含路径穿越或链接的归档。对本手册的 V9 演练，验证 Flyway V9、失败迁移数为 0、备份时的数据库计数、Office 文件数及代表性 SHA-256，并检查数据库到 Office 的引用。
+
+只有包括 RabbitMQ 在内的全部依赖都已隔离，才能启动演练应用。记录备份年龄和恢复耗时，作为恢复点目标（RPO）与恢复时间目标（RTO）的证据；结束后仅按批准范围移除本次演练资源。
