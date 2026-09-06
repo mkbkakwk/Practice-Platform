@@ -31,8 +31,8 @@ import ContestStandings from "@/pages/ContestStandings";
 import ContestAnalytics from "@/pages/ContestAnalytics";
 import { Toaster } from "sonner";
 
-function Layout({ label, children }: { label?: string; children: React.ReactNode }) {
-  return <div className="min-h-screen bg-white text-zinc-900"><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
+function Layout({ label, children, graphite = false }: { label?: string; children: React.ReactNode; graphite?: boolean }) {
+  return <div className={graphite ? "graphite-theme dark min-h-screen bg-background text-foreground" : "min-h-screen bg-white text-zinc-900"}><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
 }
 
 export default function App() {
@@ -48,8 +48,8 @@ export default function App() {
             <Route path="/submissions" element={<Layout label="提交记录"><Submissions /></Layout>} />
             <Route path="/leaderboard" element={<Layout label="排行榜"><Leaderboard /></Layout>} />
             <Route path="/contests" element={<Layout label="比赛"><ContestList /></Layout>} />
-            <Route path="/contests/:id" element={<Layout label="比赛详情"><ContestDetail /></Layout>} />
-            <Route path="/contests/:id/standings" element={<Layout label="比赛排名"><ContestStandings /></Layout>} />
+            <Route path="/contests/:id" element={<Layout graphite label="比赛详情"><ContestDetail /></Layout>} />
+            <Route path="/contests/:id/standings" element={<Layout graphite label="比赛排名"><ContestStandings /></Layout>} />
             <Route path="/office" element={<Layout label="Office 练习"><OfficeList /></Layout>} />
             <Route path="/office/:id" element={<Layout label="Office 练习"><OfficePractice /></Layout>} />
             <Route path="/office/docs" element={<Layout label="排版练习"><OfficeDocList /></Layout>} />

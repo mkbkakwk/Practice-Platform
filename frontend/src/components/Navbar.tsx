@@ -32,14 +32,14 @@ export function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-white/80 backdrop-blur">
-      <div className="flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
-        <Link to="/" className="mr-2 flex items-center gap-2 font-bold">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-white"><Code2 className="h-4 w-4" /></span>
+    <header className="graphite-theme dark sticky top-0 z-40 w-full border-b bg-background/95 text-foreground">
+      <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-2 px-4 font-sans sm:px-6 lg:px-8">
+        <Link to="/" aria-label="Algorithm OJ 首页" className="mr-2 flex shrink-0 items-center gap-2 rounded-sm text-sm font-semibold tracking-tight">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-elevated text-foreground"><Code2 className="h-4 w-4" /></span>
           <span className="hidden sm:inline">Algorithm OJ</span>
         </Link>
         {showStagingBadge && (
-          <span data-testid="staging-build" className="rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+          <span data-testid="staging-build" className="rounded border border-warning/25 bg-warning/10 px-2 py-1 font-mono text-xs text-warning">
             <span className="sm:hidden">STG · {(buildSha || "unknown").slice(0, 7)}</span>
             <span className="hidden sm:inline">STAGING · {buildSha || "unknown"}</span>
           </span>
@@ -47,12 +47,12 @@ export function Navbar() {
         <nav aria-label="主导航" className="hidden items-center gap-1 xl:flex">
           {links.map((link) => {
             const Icon = link.icon;
-            return <Link key={link.to} to={link.to} className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors", link.match(location.pathname) ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-100")}><Icon className="h-4 w-4" />{link.label}</Link>;
+            return <Link key={link.to} to={link.to} aria-current={link.match(location.pathname) ? "page" : undefined} className={cn("flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[13px] font-medium transition-colors duration-150", link.match(location.pathname) ? "border-border bg-elevated text-foreground" : "border-transparent text-muted-foreground hover:bg-surface hover:text-foreground")}><Icon className="h-4 w-4" />{link.label}</Link>;
           })}
         </nav>
         <div className="ml-auto hidden items-center gap-2 xl:flex">
           {user ? <>
-            <span className="hidden items-center gap-1.5 text-sm text-zinc-600 sm:flex"><UserCircle className="h-4 w-4" />{user.username}{user.role === "ADMIN" && <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">管理员</span>}{user.role === "TEACHER" && <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">老师</span>}</span>
+            <span className="hidden items-center gap-1.5 max-w-48 text-sm text-subtle sm:flex"><UserCircle className="h-4 w-4" /><span className="max-w-28 truncate" title={user.username}>{user.username}</span>{user.role === "ADMIN" && <span className="rounded border border-border bg-elevated px-1.5 py-0.5 text-[10px] font-semibold text-subtle">管理员</span>}{user.role === "TEACHER" && <span className="rounded border border-border bg-elevated px-1.5 py-0.5 text-[10px] font-semibold text-subtle">老师</span>}</span>
             <Button variant="ghost" size="sm" onClick={() => { logout(); navigate("/"); }}><LogOut className="mr-1 h-4 w-4" />退出</Button>
           </> : <><Button variant="ghost" size="sm" onClick={() => navigate("/login")}>登录</Button><Button size="sm" onClick={() => navigate("/register")}>注册</Button></>}
         </div>
@@ -62,7 +62,7 @@ export function Navbar() {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent className="w-[min(22rem,90vw)]" aria-describedby="mobile-navigation-description">
+          <SheetContent className="graphite-theme dark w-[min(22rem,90vw)] border-border text-foreground" aria-describedby="mobile-navigation-description">
             <SheetHeader>
               <SheetTitle>导航</SheetTitle>
               <SheetDescription id="mobile-navigation-description">
@@ -76,9 +76,10 @@ export function Navbar() {
                   <SheetClose asChild key={link.to}>
                     <Link
                       to={link.to}
+                      aria-current={link.match(location.pathname) ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                        link.match(location.pathname) ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100",
+                        "flex items-center gap-3 rounded-md border border-transparent px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+                        link.match(location.pathname) ? "border-border bg-elevated text-foreground" : "text-muted-foreground hover:bg-surface hover:text-foreground",
                       )}
                     >
                       <Icon className="h-4 w-4" />

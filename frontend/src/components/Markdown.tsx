@@ -16,32 +16,32 @@ export function Markdown({ children, className = "" }: { children: string; class
   return (
     <div
       className={
-        "max-w-none " +
+        "min-w-0 max-w-none break-words " +
         // 标题
-        "[&_h1]:mt-0 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-zinc-900 " +
-        "[&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-zinc-900 " +
-        "[&_h3]:mt-4 [&_h3]:mb-1.5 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-zinc-800 " +
+        "[&_h1]:mt-0 [&_h1]:mb-3 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-foreground " +
+        "[&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-foreground " +
+        "[&_h3]:mt-4 [&_h3]:mb-1.5 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-foreground " +
         // 段落
-        "[&_p]:my-2.5 [&_p]:leading-7 [&_p]:text-zinc-700 " +
+        "[&_p]:my-2.5 [&_p]:leading-7 [&_p]:text-subtle " +
         // 列表
-        "[&_ul]:my-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:text-zinc-700 " +
-        "[&_ol]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:text-zinc-700 " +
+        "[&_ul]:my-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:text-subtle " +
+        "[&_ol]:my-2.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:text-subtle " +
         "[&_li]:my-1 " +
         // 行内代码
-        "[&_code]:rounded [&_code]:bg-zinc-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[13px] [&_code]:font-mono [&_code]:text-pink-600 " +
+        "[&_code]:rounded [&_code]:bg-elevated [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[13px] [&_code]:font-mono [&_code]:text-info " +
         // 代码块
         "[&_pre]:my-3 [&_pre]:rounded-md [&_pre]:bg-zinc-900 [&_pre]:p-3 [&_pre]:overflow-x-auto " +
         "[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[13px] [&_pre_code]:text-zinc-100 [&_pre_code]:leading-6 " +
         // 引用
-        "[&_blockquote]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-zinc-300 [&_blockquote]:bg-zinc-50 [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_blockquote]:text-zinc-600 " +
+        "[&_blockquote]:my-3 [&_blockquote]:border-l-4 [&_blockquote]:border-border [&_blockquote]:bg-surface [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_blockquote]:text-subtle " +
         // 链接
-        "[&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2 " +
+        "[&_a]:text-info [&_a]:underline [&_a]:underline-offset-2 " +
         // 表格
         "[&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm " +
-        "[&_th]:border [&_th]:border-zinc-300 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:bg-zinc-50 [&_th]:text-left [&_th]:font-semibold [&_th]:text-zinc-800 " +
-        "[&_td]:border [&_td]:border-zinc-300 [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:text-zinc-700 " +
+        "[&_th]:border [&_th]:border-border [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:bg-surface [&_th]:text-left [&_th]:font-semibold [&_th]:text-foreground " +
+        "[&_td]:border [&_td]:border-border [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:text-subtle " +
         // 分隔线
-        "[&_hr]:my-4 [&_hr]:border-zinc-200 " +
+        "[&_hr]:my-4 [&_hr]:border-border " +
         // 图片
         "[&_img]:max-w-full [&_img]:rounded " +
         // KaTeX 公式块：横向滚动防溢出

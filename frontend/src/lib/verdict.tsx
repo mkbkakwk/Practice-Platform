@@ -15,23 +15,25 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
   JUDGE_FAILED: "评测失败",
 };
 
+// Semantic status colors work in both the existing light UI and graphite pilot.
 export const VERDICT_CLASS: Record<Verdict, string> = {
-  PENDING: "bg-blue-100 text-blue-700 border-blue-200",
-  JUDGING: "bg-blue-100 text-blue-700 border-blue-200",
-  AC: "bg-green-100 text-green-700 border-green-200",
-  WA: "bg-red-100 text-red-700 border-red-200",
-  TLE: "bg-orange-100 text-orange-700 border-orange-200",
-  MLE: "bg-orange-100 text-orange-700 border-orange-200",
-  OLE: "bg-orange-100 text-orange-700 border-orange-200",
-  RE: "bg-red-100 text-red-700 border-red-200",
-  CE: "bg-zinc-200 text-zinc-700 border-zinc-300",
-  SE: "bg-zinc-200 text-zinc-700 border-zinc-300",
-  JUDGE_FAILED: "bg-zinc-200 text-zinc-700 border-zinc-300",
+  PENDING: "bg-info/10 text-info border-info/25",
+  JUDGING: "bg-info/10 text-info border-info/25",
+  AC: "bg-success/10 text-success border-success/25",
+  WA: "bg-danger/10 text-danger border-danger/25",
+  TLE: "bg-warning/10 text-warning border-warning/25",
+  MLE: "bg-warning/10 text-warning border-warning/25",
+  OLE: "bg-warning/10 text-warning border-warning/25",
+  RE: "bg-rose/10 text-rose border-rose/25",
+  CE: "bg-violet/10 text-violet border-violet/25",
+  SE: "bg-elevated text-subtle border-border",
+  JUDGE_FAILED: "bg-elevated text-subtle border-border",
 };
 
 export function VerdictBadge({ verdict, className }: { verdict: Verdict; className?: string }) {
   return (
     <span
+      title={verdict}
       className={cn(
         "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
         VERDICT_CLASS[verdict],
