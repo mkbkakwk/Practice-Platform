@@ -52,7 +52,7 @@ export const DIFFICULTY_LABEL: Record<string, string> = {
 };
 
 export const DIFFICULTY_CLASS: Record<string, string> = {
-  EASY: "bg-green-100 text-green-700 border-green-200",
-  MEDIUM: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  HARD: "bg-red-100 text-red-700 border-red-200",
+  EASY: "bg-success/10 text-success border-success/25",
+  MEDIUM: "bg-warning/10 text-warning border-warning/25",
+  HARD: "bg-danger/10 text-danger border-danger/25",
 };

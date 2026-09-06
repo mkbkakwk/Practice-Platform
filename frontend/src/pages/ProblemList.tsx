@@ -40,19 +40,20 @@ export default function ProblemList() {
   ];
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">题库</h1>
-        <span className="text-sm text-zinc-500">共 {total} 题</span>
+    <div className="pilot-page">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">题库</h1>
+        <span className="text-sm text-muted-foreground">共 {total} 题</span>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="text-sm text-zinc-500">难度：</span>
+        <span className="text-sm text-muted-foreground">难度：</span>
         {diffs.map((d) => (
           <Button
             key={d.key}
             size="sm"
             variant={difficulty === d.key ? "default" : "outline"}
+            aria-pressed={difficulty === d.key}
             onClick={() => {
               setDifficulty(d.key);
               setPage(1);
@@ -63,39 +64,41 @@ export default function ProblemList() {
         ))}
       </div>
 
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="overflow-x-auto" role="region" aria-label="训练题库表格" tabIndex={0}>
+        <table className="w-full min-w-[480px] text-sm">
+          <caption className="sr-only">训练题库</caption>
+          <thead className="bg-surface text-left text-xs text-muted-foreground">
             <tr>
-              <th className="w-16 px-4 py-3 font-medium">#</th>
-              <th className="px-4 py-3 font-medium">题目</th>
-              <th className="w-24 px-4 py-3 font-medium">难度</th>
-              <th className="hidden w-28 px-4 py-3 font-medium lg:table-cell">创建者</th>
-              <th className="hidden w-40 px-4 py-3 font-medium sm:table-cell">标签</th>
-              <th className="hidden w-32 px-4 py-3 font-medium md:table-cell whitespace-nowrap">时间/内存</th>
+              <th scope="col" className="w-16 px-4 py-3 font-medium">#</th>
+              <th scope="col" className="px-4 py-3 font-medium">题目</th>
+              <th scope="col" className="w-24 px-4 py-3 font-medium">难度</th>
+              <th scope="col" className="hidden w-28 px-4 py-3 font-medium lg:table-cell">创建者</th>
+              <th scope="col" className="hidden w-40 px-4 py-3 font-medium sm:table-cell">标签</th>
+              <th scope="col" className="hidden w-32 px-4 py-3 font-medium md:table-cell whitespace-nowrap">时间/内存</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
-                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                  <span role="status" aria-label="加载训练题库"><Loader2 aria-hidden="true" className="mx-auto h-5 w-5 animate-spin" /><span className="sr-only">加载中</span></span>
                 </td>
               </tr>
             ) : problems.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-zinc-400">
+                <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                   暂无题目
                 </td>
               </tr>
             ) : (
               problems.map((p) => (
-                <tr key={p.id} className="transition-colors hover:bg-zinc-50">
-                  <td className="px-4 py-3 text-zinc-400">{p.id}</td>
+                <tr key={p.id} className="transition-colors duration-150 hover:bg-elevated">
+                  <td className="pilot-numeric px-4 py-3 text-muted-foreground">{p.id}</td>
                   <td className="px-4 py-3">
                     <Link
                       to={`/problem/${p.slug}`}
-                      className="font-medium text-zinc-900 hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       {p.title}
                     </Link>
@@ -110,7 +113,7 @@ export default function ProblemList() {
                       {DIFFICULTY_LABEL[p.difficulty]}
                     </span>
                   </td>
-                  <td className="hidden px-4 py-3 text-xs text-zinc-600 lg:table-cell">
+                  <td className="hidden pilot-numeric px-4 py-3 text-xs text-subtle lg:table-cell">
                     {p.createdBy == null ? "系统预置" : (p.creatorUsername ?? "未知")}
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
@@ -118,14 +121,14 @@ export default function ProblemList() {
                       {(p.tags || []).slice(0, 3).map((t) => (
                         <span
                           key={t}
-                          className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600"
+                          className="rounded bg-elevated px-1.5 py-0.5 text-xs text-subtle"
                         >
                           {t}
                         </span>
                       ))}
                     </div>
                   </td>
-                  <td className="hidden px-4 py-3 text-xs text-zinc-500 md:table-cell">
+                  <td className="hidden pilot-numeric whitespace-nowrap px-4 py-3 text-xs text-muted-foreground md:table-cell">
                     {p.timeLimit}ms / {p.memoryLimit}MB
                   </td>
                 </tr>
@@ -133,6 +136,7 @@ export default function ProblemList() {
             )}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {totalPages > 1 && (
@@ -145,7 +149,7 @@ export default function ProblemList() {
           >
             上一页
           </Button>
-          <span className="text-sm text-zinc-600">
+          <span className="text-sm text-subtle">
             {page} / {totalPages}
           </span>
           <Button

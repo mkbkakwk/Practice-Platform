@@ -22,15 +22,15 @@ export default function OfficeDocList() {
   }, []);
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="pilot-page">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">排版练习（文档上传）</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="text-2xl font-semibold tracking-tight">排版练习（文档上传）</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             按要求排版 Word 文档后上传，系统自动解析格式并与老师参考文档比对
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link to="/office">← 选择题练习</Link>
           </Button>
@@ -49,24 +49,24 @@ export default function OfficeDocList() {
         </div>
       </div>
 
-      <div className="mb-4 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+      <div className="mb-4 flex items-center gap-2 rounded-md border border-info/25 bg-info/10 p-3 text-sm text-info">
         <Upload className="h-4 w-4 shrink-0" />
         <span>流程：下载要求 → 在 Word 中排版 → 上传 .docx → 系统自动比对 → 老师复核</span>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : exercises.length === 0 ? (
-        <Card className="p-12 text-center text-zinc-400">暂无排版练习</Card>
+        <Card className="p-12 text-center text-muted-foreground">暂无排版练习</Card>
       ) : (
         <div className="grid gap-3">
           {exercises.map((ex) => (
-            <Card key={ex.id} className="flex items-center gap-4 p-4 transition-colors hover:bg-zinc-50">
-              <FileText className="h-8 w-8 shrink-0 text-blue-500" />
+            <Card key={ex.id} className="flex flex-col items-start gap-4 p-5 transition-colors duration-150 hover:bg-elevated sm:flex-row sm:items-center">
+              <FileText className="h-8 w-8 shrink-0 text-info" />
               <div className="min-w-0 flex-1">
-                <Link to={`/office/docs/${ex.id}`} className="font-medium text-zinc-900 hover:underline">
+                <Link to={`/office/docs/${ex.id}`} className="font-medium text-foreground hover:underline">
                   {ex.title}
                 </Link>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -74,13 +74,13 @@ export default function OfficeDocList() {
                     {DIFFICULTY_LABEL[ex.difficulty]}
                   </span>
                   {ex.hasTeacherDoc ? (
-                    <span className="text-xs text-green-600">✓ 已上传参考文档</span>
+                    <span className="text-xs text-success">✓ 已上传参考文档</span>
                   ) : (
-                    <span className="text-xs text-zinc-400">未上传参考文档</span>
+                    <span className="text-xs text-muted-foreground">未上传参考文档</span>
                   )}
-                  {!ex.visible && <span className="text-xs text-zinc-400">（隐藏）</span>}
-                  <span className="text-xs text-zinc-500">创建者：{ex.createdBy == null ? "系统预置" : (ex.creatorUsername ?? "未知")}</span>
-                  <span className="text-xs text-zinc-400">{new Date(ex.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
+                  {!ex.visible && <span className="text-xs text-muted-foreground">（隐藏）</span>}
+                  <span className="text-xs text-muted-foreground">创建者：{ex.createdBy == null ? "系统预置" : (ex.creatorUsername ?? "未知")}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(ex.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
                 </div>
               </div>
               <Button size="sm" asChild>

@@ -18,13 +18,13 @@ const STATUS_LABEL: Record<string, string> = {
   REVIEWED: "已复核",
 };
 const STATUS_CLASS: Record<string, string> = {
-  PENDING: "bg-zinc-100 text-zinc-700",
-  JUDGING: "bg-blue-100 text-blue-700",
-  COMPLETED: "bg-green-100 text-green-700",
-  FAILED: "bg-red-100 text-red-700",
-  AUTO_CHECKED: "bg-green-100 text-green-700",
-  NEEDS_REVIEW: "bg-yellow-100 text-yellow-700",
-  REVIEWED: "bg-blue-100 text-blue-700",
+  PENDING: "border-info/25 bg-info/10 text-info",
+  JUDGING: "border-info/25 bg-info/10 text-info",
+  COMPLETED: "border-success/25 bg-success/10 text-success",
+  FAILED: "border-danger/25 bg-danger/10 text-danger",
+  AUTO_CHECKED: "border-success/25 bg-success/10 text-success",
+  NEEDS_REVIEW: "border-warning/25 bg-warning/10 text-warning",
+  REVIEWED: "border-info/25 bg-info/10 text-info",
 };
 
 export default function OfficeDocExerciseDetail() {
@@ -88,39 +88,39 @@ export default function OfficeDocExerciseDetail() {
   }
 
   if (loading) {
-    return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
+    return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
   if (!exercise) {
-    return <div className="px-4 py-6"><Card className="p-8 text-center text-zinc-500">{error || "练习不存在"}</Card></div>;
+    return <div className="px-4 py-6"><Card className="p-8 text-center text-muted-foreground">{error || "练习不存在"}</Card></div>;
   }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-      <Link to="/office/docs" className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800">
+      <Link to="/office/docs" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> 返回列表
       </Link>
 
-      <h1 className="mb-2 text-2xl font-bold">{exercise.title}</h1>
-      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-zinc-500">
+      <h1 className="mb-2 text-2xl font-semibold tracking-tight">{exercise.title}</h1>
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         <span>{exercise.teacherDocName ? "参考文档已上传" : "暂无参考文档"}</span>
         <span>创建者：{exercise.createdBy == null ? "系统预置" : (exercise.creatorUsername ?? "未知")}</span>
         <span>创建于 {new Date(exercise.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
       </div>
 
       {/* Requirements */}
-      <Card className="mb-4 p-5">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-700">排版要求</h2>
-        <div className="prose prose-sm max-w-none">
+      <Card className="mb-4 gap-3 p-5">
+        <h2 className="mb-3 text-sm font-semibold text-subtle">排版要求</h2>
+        <div className="min-w-0">
           <Markdown>{exercise.description}</Markdown>
         </div>
         {exercise.starterDocName && (
           <div className="mt-4 border-t pt-3">
-            <h3 className="mb-2 text-sm font-semibold text-zinc-700">① 下载待修改文件</h3>
+            <h3 className="mb-2 text-sm font-semibold text-subtle">① 下载待修改文件</h3>
             <Button variant="outline" size="sm" disabled={downloadingStarter} onClick={() => void handleStarterDownload()}>
               {downloadingStarter ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Download className="mr-1 h-4 w-4" />}
               {downloadingStarter ? "下载中..." : `下载 ${exercise.starterDocName}`}
             </Button>
-            <p className="mt-3 text-sm text-zinc-600">② 在本地 Word / WPS 中按上述要求修改文件</p>
+            <p className="mt-3 text-sm text-subtle">② 在本地 Word / WPS 中按上述要求修改文件</p>
           </div>
         )}
         {exercise.teacherDocName && (user?.role === "TEACHER" || user?.role === "ADMIN") && (
@@ -135,9 +135,9 @@ export default function OfficeDocExerciseDetail() {
       </Card>
 
       {/* Upload area */}
-      <Card className="mb-4 p-5">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-700">③ 上传修改后的 DOCX</h2>
-        <p className="mb-3 text-xs text-zinc-500">请上传 .docx 格式的 Word 文档（最大 10MB）</p>
+      <Card className="mb-4 gap-3 bg-surface p-5">
+        <h2 className="mb-3 text-sm font-semibold text-subtle">③ 上传修改后的 DOCX</h2>
+        <p className="mb-3 text-xs text-muted-foreground">请上传 .docx 格式的 Word 文档（最大 10MB）</p>
         <input
           ref={fileRef}
           type="file"
@@ -149,23 +149,23 @@ export default function OfficeDocExerciseDetail() {
             e.target.value = "";
           }}
         />
-        <Button onClick={() => fileRef.current?.click()} disabled={uploading || !exercise.teacherDocName || !exercise.starterDocName}>
+        <Button className="max-w-full self-start whitespace-normal" onClick={() => fileRef.current?.click()} disabled={uploading || !exercise.teacherDocName || !exercise.starterDocName}>
           {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
           {uploading ? "上传中..." : "选择 .docx 文件上传"}
         </Button>
         {(!exercise.teacherDocName || !exercise.starterDocName) && (
-          <p className="mt-2 text-xs text-red-500">练习尚未同时准备起始文档和参考文档，暂无法提交</p>
+          <p className="mt-2 text-xs text-danger">练习尚未同时准备起始文档和参考文档，暂无法提交</p>
         )}
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Card>
 
       {/* Results */}
       {submission && (
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-700">比对结果</h2>
-            <div className="flex items-center gap-3">
-              <span className={cn("rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap", STATUS_CLASS[submission.status])}>
+        <Card className="gap-3 p-5">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-sm font-semibold text-subtle">比对结果</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={cn("rounded-md border px-2 py-1 text-xs font-medium whitespace-nowrap", STATUS_CLASS[submission.status])}>
                 {STATUS_LABEL[submission.status]}
               </span>
               {(user?.role === "TEACHER" || user?.role === "ADMIN") && (
@@ -178,39 +178,39 @@ export default function OfficeDocExerciseDetail() {
 
           {/* Score */}
           {submission.score != null && (
-            <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+            <div className="mb-4 rounded-md border border-info/25 bg-info/10 p-4">
               <div className="flex items-center gap-4">
-                <span className="text-2xl font-bold text-blue-700">{submission.score}</span>
-                <span className="text-sm text-zinc-600">分</span>
+                <span className="pilot-numeric text-2xl font-semibold text-foreground">{submission.score}</span>
+                <span className="text-sm text-subtle">分</span>
               </div>
               {submission.status === "REVIEWED" && submission.teacherComment && (
-                <p className="mt-2 text-sm text-zinc-700"><span className="font-medium">老师评语：</span>{submission.teacherComment}</p>
+                <p className="mt-2 text-sm text-subtle"><span className="font-medium">老师评语：</span>{submission.teacherComment}</p>
               )}
             </div>
           )}
 
           {submission.status === "FAILED" && (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="mb-4 rounded-md border border-danger/25 bg-danger/10 p-4 text-sm text-danger">
               文档未能完成判题：{failureLabel(submission.errorCategory)}。请检查文件后重新上传。
             </div>
           )}
 
           {submission.resultDetail && (
-            <div className="mb-4 rounded-md border border-zinc-200 p-4">
+            <div className="mb-4 rounded-md border border-border p-4">
               <div className="mb-3 flex flex-wrap items-baseline gap-3">
-                <h3 className="text-sm font-medium text-zinc-700">安全判题反馈</h3>
-                <span className="text-sm text-zinc-600">
+                <h3 className="text-sm font-medium text-subtle">安全判题反馈</h3>
+                <span className="text-sm text-subtle">
                   {submission.resultDetail.earnedScore} / {submission.resultDetail.totalScore}
                 </span>
-                <span className="text-xs text-zinc-500">
+                <span className="text-xs text-muted-foreground">
                   {submission.resultDetail.totalErrorCount} 项差异
                 </span>
               </div>
-              <ul className="space-y-2 text-sm text-zinc-600">
+              <ul className="space-y-2 text-sm text-subtle">
                 {submission.resultDetail.items.slice(0, 20).map((item) => (
-                  <li key={item.ruleId} className="rounded bg-zinc-50 p-3">
-                    <p className="font-medium text-zinc-700">{item.target}：{item.message}</p>
-                    <p className="mt-1 text-xs text-zinc-500">
+                  <li key={item.ruleId} className="rounded bg-surface p-3">
+                    <p className="font-medium text-subtle">{item.target}：{item.message}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
                       你的结果：{formatVal(item.actual)} · 要求：{formatVal(item.expected)}
                       <span className="ml-2">得分 {item.earned}/{item.score}</span>
                     </p>
@@ -218,7 +218,7 @@ export default function OfficeDocExerciseDetail() {
                 ))}
               </ul>
               {submission.resultDetail.truncated && (
-                <p className="mt-2 text-xs text-zinc-500">
+                <p className="mt-2 text-xs text-muted-foreground">
                   仅显示部分错误，共 {submission.resultDetail.totalErrorCount} 项。
                 </p>
               )}

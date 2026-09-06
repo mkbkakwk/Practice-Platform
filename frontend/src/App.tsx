@@ -41,19 +41,19 @@ export default function App() {
       <AuthProvider>
         <HashRouter>
           <Routes>
-            <Route path="/login" element={<Layout label="登录"><Login /></Layout>} />
-            <Route path="/register" element={<Layout label="注册"><Register /></Layout>} />
-            <Route path="/" element={<Layout label="题库"><ProblemList /></Layout>} />
-            <Route path="/problem/:slug" element={<Layout label="题目详情"><ProblemDetail /></Layout>} />
-            <Route path="/submissions" element={<Layout label="提交记录"><Submissions /></Layout>} />
+            <Route path="/login" element={<Layout graphite label="登录"><Login /></Layout>} />
+            <Route path="/register" element={<Layout graphite label="注册"><Register /></Layout>} />
+            <Route path="/" element={<Layout graphite label="题库"><ProblemList /></Layout>} />
+            <Route path="/problem/:slug" element={<Layout graphite label="题目详情"><ProblemDetail /></Layout>} />
+            <Route path="/submissions" element={<Layout graphite label="提交记录"><Submissions /></Layout>} />
             <Route path="/leaderboard" element={<Layout label="排行榜"><Leaderboard /></Layout>} />
             <Route path="/contests" element={<Layout label="比赛"><ContestList /></Layout>} />
             <Route path="/contests/:id" element={<Layout graphite label="比赛详情"><ContestDetail /></Layout>} />
             <Route path="/contests/:id/standings" element={<Layout graphite label="比赛排名"><ContestStandings /></Layout>} />
-            <Route path="/office" element={<Layout label="Office 练习"><OfficeList /></Layout>} />
-            <Route path="/office/:id" element={<Layout label="Office 练习"><OfficePractice /></Layout>} />
-            <Route path="/office/docs" element={<Layout label="排版练习"><OfficeDocList /></Layout>} />
-            <Route path="/office/docs/:id" element={<Layout label="排版练习"><OfficeDocExerciseDetail /></Layout>} />
+            <Route path="/office" element={<Layout graphite label="Office 练习"><OfficeList /></Layout>} />
+            <Route path="/office/:id" element={<Layout graphite label="Office 练习"><OfficePractice /></Layout>} />
+            <Route path="/office/docs" element={<Layout graphite label="排版练习"><OfficeDocList /></Layout>} />
+            <Route path="/office/docs/:id" element={<Layout graphite label="排版练习"><OfficeDocExerciseDetail /></Layout>} />
 
             <Route path="/admin/problems" element={<Layout label="算法题管理"><TeacherGuard><AdminProblemList /></TeacherGuard></Layout>} />
             <Route path="/admin/problems/new" element={<Layout label="新建题目"><TeacherGuard><ProblemForm mode="create" /></TeacherGuard></Layout>} />
