@@ -14,7 +14,7 @@ interface CodeEditorProps {
   appearance?: "light" | "graphite";
 }
 
-// Only the contest pilot opts in; editor behavior and language extensions stay unchanged.
+// Contest and practice workspaces opt in; behavior and language extensions stay unchanged.
 const graphiteEditorTheme = EditorView.theme({
   "&": { backgroundColor: "hsl(var(--surface-elevated))", color: "hsl(var(--foreground))" },
   ".cm-content": { caretColor: "hsl(var(--brand))", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: "13px" },

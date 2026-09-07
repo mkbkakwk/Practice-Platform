@@ -153,15 +153,15 @@ export default function ProblemDetail() {
   if (loading)
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
 
   if (!problem)
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <p className="text-zinc-500">{error || "题目不存在"}</p>
-        <Link to="/" className="mt-4 inline-block text-sm text-zinc-900 underline">
+        <p className="text-muted-foreground">{error || "题目不存在"}</p>
+        <Link to="/" className="mt-4 inline-block text-sm text-foreground underline">
           返回题库
         </Link>
       </div>
@@ -170,18 +170,18 @@ export default function ProblemDetail() {
   const ac = result?.verdict === "AC";
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8">
-      <Link to="/" className="mb-3 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900">
+    <div className="pilot-page">
+      <Link to="/" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> 返回题库
       </Link>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* Left: description */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-xl">{problem.title}</CardTitle>
+                <h1 className="break-words text-xl font-semibold tracking-tight">{problem.title}</h1>
                 <span
                   className={cn(
                     "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
@@ -190,7 +190,7 @@ export default function ProblemDetail() {
                 >
                   {DIFFICULTY_LABEL[problem.difficulty]}
                 </span>
-                <span className="ml-auto flex items-center gap-3 text-xs text-zinc-500">
+                <span className="pilot-numeric flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3.5 w-3.5" /> {problem.timeLimit}ms
                   </span>
@@ -199,14 +199,14 @@ export default function ProblemDetail() {
                   </span>
                 </span>
               </div>
-              <div className="text-xs text-zinc-500">
+              <div className="text-xs text-muted-foreground">
                 创建者：{problem.createdBy == null ? "系统预置" : (problem.creatorUsername ?? "未知")}
                 <span className="ml-3">创建于 {new Date(problem.createdAt).toLocaleString("zh-CN", { hour12: false })}</span>
               </div>
               {(problem.tags || []).length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {(problem.tags || []).map((t) => (
-                    <span key={t} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">
+                    <span key={t} className="rounded bg-elevated px-1.5 py-0.5 text-xs text-subtle">
                       {t}
                     </span>
                   ))}
@@ -219,22 +219,22 @@ export default function ProblemDetail() {
           </Card>
 
           {Array.isArray(problem.samples) && problem.samples.length > 0 && (
-            <Card>
+            <Card className="gap-3 border-0 bg-transparent shadow-none">
               <CardHeader>
                 <CardTitle className="text-base">样例</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="min-w-0 space-y-4">
                 {problem.samples.map((s, i) => (
                   <div key={i} className="grid gap-2 sm:grid-cols-2">
                     <div>
-                      <p className="mb-1 text-xs font-medium text-zinc-500">样例输入 {i + 1}</p>
-                      <pre className="overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">样例输入 {i + 1}</p>
+                      <pre className="overflow-x-auto rounded-md bg-elevated p-3 font-mono text-sm tabular-nums text-foreground">
                         {s.input}
                       </pre>
                     </div>
                     <div>
-                      <p className="mb-1 text-xs font-medium text-zinc-500">样例输出 {i + 1}</p>
-                      <pre className="overflow-x-auto rounded-md bg-zinc-900 p-3 text-xs text-zinc-100">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">样例输出 {i + 1}</p>
+                      <pre className="overflow-x-auto rounded-md bg-elevated p-3 font-mono text-sm tabular-nums text-foreground">
                         {s.output}
                       </pre>
                     </div>
@@ -246,17 +246,17 @@ export default function ProblemDetail() {
         </div>
 
         {/* Right: editor + result */}
-        <div className="space-y-4">
-          <Card>
+        <div className="min-w-0 space-y-4">
+          <Card className="bg-surface">
             <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-3">
                 <CardTitle className="text-base">代码编辑器</CardTitle>
                 <div className="ml-auto w-44">
                   <Select value={langId || undefined} onValueChange={onLangChange} disabled={languages.length === 0}>
-                    <SelectTrigger size="sm">
+                    <SelectTrigger size="sm" aria-label="编程语言">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="graphite-theme dark">
                       {languages.map((l) => (
                         <SelectItem key={l.id} value={l.id}>
                           {l.name}
@@ -270,13 +270,14 @@ export default function ProblemDetail() {
             <CardContent>
               <CodeEditor
                 ariaLabel="源代码"
+                appearance="graphite"
                 value={code}
                 language={langId}
                 onChange={setCode}
               />
 
               {!user && (
-                <p className="mt-3 text-sm text-amber-600">
+                <p className="mt-3 text-sm text-warning">
                   请先{" "}
                   <Link to="/login" className="underline">
                     登录
@@ -285,7 +286,7 @@ export default function ProblemDetail() {
                 </p>
               )}
 
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button onClick={submit} disabled={submitting || polling || !user || !langId} className="gap-1.5">
                   {(submitting || polling) ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -314,7 +315,7 @@ export default function ProblemDetail() {
                 </Button>
               </div>
 
-              {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
+              {error && <p className="mt-3 text-sm text-danger" role="alert">{error}</p>}
             </CardContent>
           </Card>
 
@@ -323,9 +324,9 @@ export default function ProblemDetail() {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   {ac ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <CheckCircle2 className="h-5 w-5 text-success" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-600" />
+                    <XCircle className="h-5 w-5 text-danger" />
                   )}
                   评测结果
                   <VerdictBadge verdict={result.verdict} className="ml-1" />
@@ -333,37 +334,37 @@ export default function ProblemDetail() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-4 text-sm">
-                  <span className="text-zinc-600">
-                    通过测试点：<span className="font-semibold text-zinc-900">{result.passed}/{result.total}</span>
+                  <span className="text-subtle">
+                    通过测试点：<span className="font-semibold text-foreground">{result.passed}/{result.total}</span>
                   </span>
-                  <span className="flex items-center gap-1 text-zinc-600">
+                  <span className="flex items-center gap-1 text-subtle">
                     <Clock className="h-3.5 w-3.5" />
                     {result.timeMs}ms
                   </span>
                 </div>
-                {result.message && <p className="text-sm text-zinc-700">{result.message}</p>}
+                {result.message && <p className="text-sm text-subtle">{result.message}</p>}
 
                 {result.detail?.failedCase != null && (
-                  <div className="space-y-2 rounded-md border bg-zinc-50 p-3">
-                    <p className="text-xs font-medium text-zinc-500">
+                  <div className="space-y-2 rounded-md border bg-surface p-3">
+                    <p className="text-xs font-medium text-muted-foreground">
                       第 {result.detail.failedCase} 个测试点
                     </p>
                     {result.detail.input != null && (
                       <div>
-                        <p className="text-xs font-medium text-zinc-500">输入</p>
-                        <pre className="mt-1 overflow-x-auto rounded bg-white p-2 text-xs">{result.detail.input}</pre>
+                        <p className="text-xs font-medium text-muted-foreground">输入</p>
+                        <pre className="mt-1 overflow-x-auto rounded bg-card p-2 text-xs">{result.detail.input}</pre>
                       </div>
                     )}
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
-                        <p className="text-xs font-medium text-zinc-500">期望输出</p>
-                        <pre className="mt-1 overflow-x-auto rounded bg-white p-2 text-xs text-green-700">
+                        <p className="text-xs font-medium text-muted-foreground">期望输出</p>
+                        <pre className="mt-1 overflow-x-auto rounded bg-card p-2 text-xs text-success">
                           {result.detail.expected}
                         </pre>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-zinc-500">你的输出</p>
-                        <pre className="mt-1 overflow-x-auto rounded bg-white p-2 text-xs text-red-700">
+                        <p className="text-xs font-medium text-muted-foreground">你的输出</p>
+                        <pre className="mt-1 overflow-x-auto rounded bg-card p-2 text-xs text-danger">
                           {result.detail.actual}
                         </pre>
                       </div>

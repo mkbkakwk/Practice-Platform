@@ -10,9 +10,9 @@ import { cn } from "@/lib/utils";
 
 const APP_LABEL: Record<string, string> = { WORD: "Word", EXCEL: "Excel", PPT: "PPT" };
 const APP_CLASS: Record<string, string> = {
-  WORD: "bg-blue-100 text-blue-700 border-blue-200",
-  EXCEL: "bg-green-100 text-green-700 border-green-200",
-  PPT: "bg-orange-100 text-orange-700 border-orange-200",
+  WORD: "bg-info/10 text-info border-info/25",
+  EXCEL: "bg-success/10 text-success border-success/25",
+  PPT: "bg-warning/10 text-warning border-warning/25",
 };
 const QTYPE_LABEL: Record<string, string> = {
   SINGLE_CHOICE: "单选题",
@@ -104,16 +104,16 @@ export default function OfficePractice() {
   if (loading) {
     return (
       <div className="flex items-center justify-center px-4 py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (error && !question) {
     return (
-      <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="pilot-page">
         <Card className="p-8 text-center">
-          <p className="text-zinc-500">{error}</p>
+          <p className="text-muted-foreground">{error}</p>
           <Button variant="outline" size="sm" className="mt-4" asChild>
             <Link to="/office">返回题库</Link>
           </Button>
@@ -126,7 +126,7 @@ export default function OfficePractice() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
-      <Link to="/office" className="mb-4 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-800">
+      <Link to="/office" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> 返回题库
       </Link>
 
@@ -142,7 +142,7 @@ export default function OfficePractice() {
             {APP_LABEL[question.appType]}
           </span>
         )}
-        <span className="rounded-md border border-zinc-200 bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 whitespace-nowrap">
+        <span className="rounded-md border border-border bg-elevated px-2 py-0.5 text-xs font-medium text-subtle whitespace-nowrap">
           {QTYPE_LABEL[question.questionType]}
         </span>
         <span
@@ -153,15 +153,15 @@ export default function OfficePractice() {
         >
           {DIFFICULTY_LABEL[question.difficulty]}
         </span>
-        <span className="text-xs text-zinc-400">#{question.id}</span>
-        <span className="ml-auto text-xs text-zinc-400">{question.category}</span>
+        <span className="text-xs text-muted-foreground">#{question.id}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{question.category}</span>
       </div>
 
       {/* Question content */}
       <Card className="mb-4 p-5">
-        <p className="whitespace-pre-wrap text-base leading-relaxed text-zinc-900">{question.content}</p>
+        <p className="whitespace-pre-wrap text-base leading-relaxed text-foreground">{question.content}</p>
         {isMulti && (
-          <p className="mt-3 text-xs text-zinc-500">提示：本题有多项正确答案，请选择全部正确选项。</p>
+          <p className="mt-3 text-xs text-muted-foreground">提示：本题有多项正确答案，请选择全部正确选项。</p>
         )}
       </Card>
 
@@ -177,18 +177,19 @@ export default function OfficePractice() {
               key={idx}
               type="button"
               disabled={!!result}
+              aria-pressed={isSelected}
               onClick={() => toggleOption(optKey)}
               className={cn(
                 "flex w-full items-start gap-3 rounded-lg border p-3 text-left text-sm transition-colors",
                 result
                   ? isCorrectOpt
-                    ? "border-green-300 bg-green-50"
+                    ? "border-success/25 bg-success/10"
                     : isWrongPick
-                      ? "border-red-300 bg-red-50"
-                      : "border-zinc-200 bg-white"
+                      ? "border-danger/25 bg-danger/10"
+                      : "border-border bg-card"
                   : isSelected
-                    ? "border-zinc-900 bg-zinc-50"
-                    : "border-zinc-200 bg-white hover:border-zinc-400 hover:bg-zinc-50",
+                    ? "border-brand/40 bg-brand/5"
+                    : "border-border bg-card hover:border-input hover:bg-surface",
                 !result && "cursor-pointer",
               )}
             >
@@ -196,15 +197,15 @@ export default function OfficePractice() {
                 className={cn(
                   "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
                   isSelected
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-300 text-zinc-500",
+                    ? "border-brand/40 bg-brand/10 text-foreground"
+                    : "border-input text-muted-foreground",
                 )}
               >
                 {isTrueFalse ? (idx === 0 ? "T" : "F") : String.fromCharCode(65 + idx)}
               </span>
-              <span className="flex-1 text-zinc-800">{opt}</span>
-              {result && isCorrectOpt && <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />}
-              {result && isWrongPick && <XCircle className="h-5 w-5 shrink-0 text-red-600" />}
+              <span className="flex-1 text-foreground">{opt}</span>
+              {result && isCorrectOpt && <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />}
+              {result && isWrongPick && <XCircle className="h-5 w-5 shrink-0 text-danger" />}
             </button>
           );
         })}
@@ -212,7 +213,7 @@ export default function OfficePractice() {
 
       {/* Login prompt if not logged in */}
       {!user && (
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+        <div className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-warning/25 bg-warning/10 p-3 text-sm text-warning">
           <LogIn className="h-4 w-4" />
           <span>答题需登录后提交，</span>
           <Link to="/login" className="font-medium underline">
@@ -222,7 +223,7 @@ export default function OfficePractice() {
       )}
 
       {/* Error */}
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-danger">{error}</p>}
 
       {/* Feedback */}
       {result && (
@@ -230,16 +231,16 @@ export default function OfficePractice() {
           <div
             className={cn(
               "mb-2 flex items-center gap-2 font-semibold",
-              result.correct ? "text-green-700" : "text-red-700",
+              result.correct ? "text-success" : "text-danger",
             )}
           >
             {result.correct ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
             {result.correct ? "回答正确" : "回答错误"}
           </div>
           {!result.correct && (
-            <p className="mb-2 text-sm text-zinc-700">
+            <p className="mb-2 text-sm text-subtle">
               正确答案：
-              <span className="font-medium text-green-700">
+              <span className="font-medium text-success">
                 {result.correctAnswer
                   .split(",")
                   .map((a) => {
@@ -252,7 +253,7 @@ export default function OfficePractice() {
             </p>
           )}
           {result.explanation && (
-            <div className="rounded-md bg-zinc-50 p-3 text-sm leading-relaxed text-zinc-700">
+            <div className="rounded-md bg-surface p-3 text-sm leading-relaxed text-subtle">
               <span className="font-medium">解析：</span>
               {result.explanation}
             </div>
