@@ -45,14 +45,11 @@ export default function AdminUserList() {
 
   return (
     <div className="admin-page">
-      <div className="mb-4 flex items-center gap-2">
-        <ShieldCheck className="h-6 w-6 text-secondary-foreground" />
-        <h1 className="text-2xl font-semibold tracking-tight">用户管理</h1>
-      </div>
+      <header className="management-hero"><div className="flex items-start justify-between gap-3"><div><p className="management-kicker">Access control</p><h1 className="management-title">用户与角色</h1><p className="management-summary">在一个可扫描的权限工作区中查看账号与角色。角色变更仍使用既有授权 API。</p></div><ShieldCheck className="mt-1 h-6 w-6 text-muted-foreground" /></div><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">当前列表</p><p className="management-deck-value">{loading ? "加载中" : `${users.length} 个账号`}</p></div><div className="management-deck-item"><p className="management-deck-label">管理员</p><p className="management-deck-value">{loading ? "—" : users.filter((item) => item.role === "ADMIN").length}</p></div><div className="management-deck-item"><p className="management-deck-label">老师</p><p className="management-deck-value">{loading ? "—" : users.filter((item) => item.role === "TEACHER").length}</p></div></div></header>
 
       {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
-      <AdminTable label="用户与角色">
+      <section className="management-panel mt-6"><div className="management-toolbar"><div><h2 className="management-panel-title">账号目录</h2><p className="management-panel-description">选择一个目标角色即会触发现有的角色更新流程。</p></div></div><AdminTable label="用户与角色">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-surface text-left text-xs uppercase text-muted-foreground">
             <tr>
@@ -109,7 +106,7 @@ export default function AdminUserList() {
             )}
           </tbody>
         </table>
-      </AdminTable>
+      </AdminTable></section>
     </div>
   );
 }

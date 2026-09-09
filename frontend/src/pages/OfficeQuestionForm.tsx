@@ -179,15 +179,12 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
   const isTrueFalse = form.questionType === "TRUE_FALSE";
 
   return (
-    <div className="admin-page max-w-3xl">
-      <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/admin/office")}>
-        <ArrowLeft className="mr-1 h-4 w-4" /> 返回列表
-      </Button>
-      <h1 className="mb-4 text-2xl font-semibold tracking-tight">{mode === "create" ? "新建 Office 题目" : "编辑 Office 题目"}</h1>
+    <div className="admin-page">
+      <header className="management-hero"><Button variant="ghost" size="sm" onClick={() => navigate("/admin/office")}><ArrowLeft className="mr-1 h-4 w-4" /> 返回列表</Button><p className="management-kicker mt-4">Office authoring</p><h1 className="management-title">{mode === "create" ? "新建 Office 题目" : "编辑 Office 题目"}</h1><p className="management-summary">依次定义练习、选项与答案，再决定对学生的可见性。所有字段仍使用现有题目模型。</p><div className="management-section-nav" aria-label="Office 题目编辑分区"><a className="is-active" href="#office-definition">练习定义</a><a href="#office-options">选项与答案</a><a href="#office-readiness">发布就绪</a></div></header>
 
-      <form onSubmit={handleSubmit} className="admin-form">
+      <form onSubmit={handleSubmit} className="admin-form mt-6">
         {/* Basic info */}
-        <section className="admin-form-section space-y-4 p-5">
+        <section id="office-definition" className="admin-form-section space-y-4 p-5">
           <h2 className="text-sm font-semibold text-secondary-foreground">基本信息</h2>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -264,7 +261,7 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
         </section>
 
         {/* Options */}
-        <section className="admin-form-section space-y-3 p-5">
+        <section id="office-options" className="admin-form-section space-y-3 p-5">
           <div className="flex items-center justify-between">
             <Label className="text-sm font-semibold text-secondary-foreground">
               选项 {isTrueFalse && <span className="text-xs font-normal text-muted-foreground">（判断题固定为 正确/错误）</span>}
@@ -343,7 +340,7 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
         </section>
 
         {/* Visible */}
-        <section className="admin-form-section flex items-center justify-between gap-4 p-5">
+        <section id="office-readiness" className="admin-form-section flex items-center justify-between gap-4 p-5">
           <div>
             <Label className="text-sm font-semibold text-secondary-foreground">是否可见</Label>
             <p className="text-xs text-muted-foreground">关闭后普通用户不可见，仅管理员可见</p>

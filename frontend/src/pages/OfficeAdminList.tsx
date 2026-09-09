@@ -66,19 +66,9 @@ export default function OfficeAdminList() {
 
   return (
     <div className="admin-page">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Office 选择题管理</h1>
-          <div className="mt-2 flex flex-wrap gap-3 text-sm">
-            <Link className="text-muted-foreground hover:text-foreground" to="/admin/problems">算法题</Link>
-            <Link className="font-medium text-foreground" to="/admin/office">Office 选择题</Link>
-            <Link className="text-muted-foreground hover:text-foreground" to="/admin/office-doc">Office 排版练习</Link>
-          </div>
-        </div>
-        <Button size="sm" asChild><Link to="/admin/office/new"><Plus className="mr-1 h-4 w-4" /> 新建题目</Link></Button>
-      </div>
+      <header className="management-hero"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="management-kicker">Office authoring</p><h1 className="management-title">Office 选择题</h1><p className="management-summary">维护现有 Word、Excel 和 PPT 选择题。题目、作答和权限仍遵守已有产品规则。</p></div><Button size="sm" asChild><Link to="/admin/office/new"><Plus className="mr-1 h-4 w-4" /> 新建题目</Link></Button></div><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">当前列表</p><p className="management-deck-value">{loading ? "加载中" : `${questions.length} 道`}</p></div><div className="management-deck-item"><p className="management-deck-label">已启用</p><p className="management-deck-value">{loading ? "—" : questions.filter((item) => item.visible).length}</p></div></div><nav className="management-section-nav" aria-label="Office 管理类型"><Link to="/admin/problems">算法题</Link><Link className="is-active" to="/admin/office">Office 选择题</Link><Link to="/admin/office-doc">Office 排版练习</Link></nav></header>
       {error && <div className="mb-4 rounded border border-danger/25 bg-danger/5 p-3 text-sm text-danger">{error}</div>}
-      <AdminTable label="Office 选择题管理">
+      <section className="management-panel mt-6"><div className="management-toolbar"><div><h2 className="management-panel-title">题目目录</h2><p className="management-panel-description">题目内容、发布状态与已有作答在一张工作表中查看。</p></div></div><AdminTable label="Office 选择题管理">
         <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-surface text-left text-xs text-muted-foreground">
             <tr><th className="px-4 py-3">题目</th><th className="px-4 py-3">创建者</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">作答</th><th className="px-4 py-3">创建时间</th><th className="px-4 py-3">操作</th></tr>
@@ -104,7 +94,7 @@ export default function OfficeAdminList() {
             ))}
           </tbody>
         </table>
-      </AdminTable>
+      </AdminTable></section>
     </div>
   );
 }

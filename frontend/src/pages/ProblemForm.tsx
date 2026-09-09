@@ -120,16 +120,7 @@ export default function ProblemForm({ mode, initial }: Props) {
 
   return (
     <div className="admin-page">
-      <button
-        onClick={() => navigate("/admin/problems")}
-        className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> 返回管理
-      </button>
-
-      <h1 className="mb-4 text-xl font-bold">
-        {mode === "create" ? "新建题目" : `编辑题目：${initial?.title ?? ""}`}
-      </h1>
+      <header className="management-hero"><button onClick={() => navigate("/admin/problems")} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> 返回管理</button><p className="management-kicker mt-4">Problem authoring</p><h1 className="management-title">{mode === "create" ? "新建算法题" : `编辑：${initial?.title ?? ""}`}</h1><p className="management-summary">将题目定义、阅读预览与评测数据组织为一个创作工作区；学生可见内容和隐藏测试点保持明确分隔。</p><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">标识</p><p className="management-deck-value">{form.slug || "待填写"}</p></div><div className="management-deck-item"><p className="management-deck-label">难度</p><p className="management-deck-value">{form.difficulty}</p></div><div className="management-deck-item"><p className="management-deck-label">可见性</p><p className="management-deck-value">{form.visible ? "已启用" : "已停用"}</p></div><div className="management-deck-item"><p className="management-deck-label">测试点</p><p className="management-deck-value">{form.testCases.length} 个</p></div></div><nav className="management-section-nav" aria-label="题目编辑分区"><a className="is-active" href="#problem-definition">定义</a><a href="#problem-workspace">题面工作区</a><a href="#problem-evaluation">评测数据</a></nav></header>
 
       {error && (
         <div className="mb-4 rounded-md border border-danger/25 bg-danger/5 px-4 py-2 text-sm text-danger">
@@ -137,9 +128,9 @@ export default function ProblemForm({ mode, initial }: Props) {
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="mt-6 space-y-5">
         {/* 基本信息 */}
-        <Card>
+        <Card id="problem-definition" className="management-panel">
           <CardHeader>
             <CardTitle className="text-base">基本信息</CardTitle>
             <CardDescription>题目的标识与显示属性</CardDescription>
@@ -219,7 +210,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 题面描述 + 实时预览 */}
-        <Card>
+        <Card id="problem-workspace" className="management-panel">
           <CardHeader>
             <CardTitle className="text-base">题面描述</CardTitle>
             <CardDescription>支持 Markdown 与 LaTeX 公式（$E=mc^2$ 行内，$$...$$ 块级）</CardDescription>
@@ -247,7 +238,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 输入输出格式 */}
-        <Card>
+        <Card className="management-panel">
           <CardHeader>
             <CardTitle className="text-base">输入 / 输出格式说明</CardTitle>
             <CardDescription>向学生说明输入输出的格式（可选，支持 Markdown）</CardDescription>
@@ -275,7 +266,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 样例 */}
-        <Card>
+        <Card id="problem-evaluation" className="management-panel">
           <CardHeader>
             <CardTitle className="text-base">样例（展示给学生）</CardTitle>
             <CardDescription>学生可见的输入输出示例</CardDescription>
@@ -291,7 +282,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 测试点 */}
-        <Card>
+        <Card className="management-panel">
           <CardHeader>
             <CardTitle className="text-base">测试点（隐藏，用于评测）</CardTitle>
             <CardDescription>学生不可见，提交代码后会逐个运行判定</CardDescription>
@@ -307,13 +298,16 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 操作按钮 */}
-        <div className="flex items-center gap-2 pb-8">
+        <div className="management-sticky-actions">
+          <p className="text-xs text-muted-foreground">保存会提交现有题目、样例和测试点数据。</p>
+          <div className="flex items-center gap-2">
           <Button onClick={submit} disabled={saving} className="gap-1.5">
             <Save className="h-4 w-4" /> {saving ? "保存中..." : "保存题目"}
           </Button>
           <Button variant="ghost" onClick={() => navigate("/admin/problems")}>
             取消
           </Button>
+          </div>
         </div>
       </div>
     </div>

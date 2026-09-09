@@ -8,6 +8,9 @@ const path = require('node:path');
 const os = require('node:os');
 const origin = 'http://127.0.0.1:18443';
 const output = path.join(os.tmpdir(), 'practice-platform-admin-visual-evidence');
+const selectedWidths = process.env.VISUAL_WIDTHS ? process.env.VISUAL_WIDTHS.split(',').map(Number).filter(Number.isFinite) : [375, 768, 1280, 1440];
+const selectedPages = process.env.VISUAL_PAGES ? new Set(process.env.VISUAL_PAGES.split(',').filter(Boolean)) : null;
+const screenshotFullPage = process.env.VISUAL_VIEWPORT_ONLY !== '1';
 const createdAt = '2026-09-01T08:30:00Z';
 const user = { id: 9, username: '隔离测试管理员', role: 'ADMIN', solvedCount: 0 };
 const problem = { id: 101, slug: 'fixture-sum', title: '两数之和 · 隔离视觉测试', difficulty: 'EASY', tags: ['基础'], timeLimit: 1000, memoryLimit: 256, contentVisibility: 'PUBLIC', createdBy: 9, creatorUsername: user.username, createdAt, visible: true, submissionCount: 2,
@@ -20,22 +23,22 @@ const submission = { id: 401, exerciseId: 301, userId: 12, studentDocName: 'fixt
 const contest = { id: 7, title: '课堂练习赛 · 隔离视觉测试', description: '配置题目与参赛者，发布前核对时间。', status: 'DRAFT', phase: 'DRAFT', accessType: 'INVITE_ONLY', scoringMode: 'SCORE', ownerId: 9, ownerUsername: user.username, startAt: '2026-12-01T01:00:00Z', endAt: '2026-12-01T03:00:00Z', freezeAt: null, participant: false, createdAt, updatedAt: createdAt };
 const contestProblems = problems.slice(0, 2).map((p, i) => ({ contestProblemId: 71 + i, problemType: 'ALGORITHM', problemId: p.id, displayOrder: i + 1, label: String.fromCharCode(65 + i), title: p.title, difficulty: p.difficulty, slug: p.slug, content: p }));
 const analytics = { contestId: 7, title: contest.title, scoringMode: 'SCORE', phase: 'ENDED', generatedAt: createdAt,
-  overview: { participantCount: 2, activeParticipantCount: 1, inactiveParticipantCount: 1, totalSubmissionCount: 3, averageTotalScore: 50, maxTotalScore: 100, fullScoreParticipantCount: 0 },
+  overview: { participantCount: 2, activeParticipantCount: 1, inactiveParticipantCount: 1, totalSubmissionCount: 3, algorithmSubmissionCount: 2, choiceSubmissionCount: 1, docxSubmissionCount: 0, averageTotalScore: 50, maxTotalScore: 100, fullScoreParticipantCount: 0, firstSubmissionAt: createdAt, lastSubmissionAt: createdAt },
   problems: [{ ...contestProblems[0], submissionCount: 3, uniqueSubmitterCount: 1, participationRate: 0.5, successParticipantCount: 1, successRate: 0.5, submissionAcceptanceRate: 0.333, infrastructureFailureCount: 0 }],
-  timeline: [1, 2, 0].map((submissionCount) => ({ submissionCount })), distribution: [{ label: '0%', participantCount: 1 }, { label: '50%', participantCount: 1 }] };
+  timeline: [1, 2, 0].map((submissionCount, index) => ({ startAt: `2026-12-01T0${index + 1}:00:00Z`, endAt: `2026-12-01T0${index + 2}:00:00Z`, submissionCount })), distribution: [{ label: '0%', participantCount: 1 }, { label: '50%', participantCount: 1 }] };
 const users = [user, { id: 10, username: '隔离测试教师', role: 'TEACHER', solvedCount: 1 }, { id: 12, username: '隔离测试学生', role: 'USER', solvedCount: 2 }];
 const routes = [
   ['problems', '/admin/problems', '算法题管理', '两数之和'],
   ['problem-create', '/admin/problems/new', '新建题目'],
-  ['problem-edit', '/admin/problems/fixture-sum/edit', `编辑题目：${problem.title}`],
-  ['users', '/admin/users', '用户管理', '隔离测试学生'],
-  ['contest', '/admin/contests/7', '管理比赛', '参赛者（1）'],
+  ['problem-edit', '/admin/problems/fixture-sum/edit', `编辑：${problem.title}`],
+  ['users', '/admin/users', '用户与角色', '隔离测试学生'],
+  ['contest', '/admin/contests/7', contest.title, '参赛者（1）'],
   ['contest-create', '/admin/contests/new', '创建比赛'],
-  ['analytics', '/admin/contests/7/analytics', '比赛数据分析', '隔离测试学生'],
+  ['analytics', '/admin/contests/7/analytics', contest.title, '隔离测试学生'],
   ['office-questions', '/admin/office', 'Office 选择题管理', question.content],
   ['office-question-form', '/admin/office/201/edit', '编辑 Office 题目'],
   ['office-documents', '/admin/office-doc', 'Office 排版练习管理', exercise.title],
-  ['office-document-form', '/admin/office-doc/301/edit', '编辑排版练习'],
+  ['office-document-form', '/admin/office-doc/301/edit', '编辑排版练习', '发布就绪'],
   ['office-reviews', '/admin/office-doc/review-list', '文档提交复核', submission.studentDocName],
   ['office-review', '/admin/office-doc/review/401', '文档复核', '人工复核打分'],
   ['system-status', '/admin/system-status', '系统状态', '异步工作'],
@@ -46,7 +49,7 @@ async function main() {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const results = [];
   try {
-    for (const width of [375, 768, 1280, 1440]) {
+    for (const width of selectedWidths) {
       const context = await browser.newContext({ viewport: { width, height: 960 }, locale: 'zh-CN', reducedMotion: 'reduce', serviceWorkers: 'block' });
       await context.addInitScript(() => localStorage.setItem('oj_token', 'isolated-preview-not-a-real-token'));
       const unexpected = [], errors = [];
@@ -79,7 +82,7 @@ async function main() {
       });
       const page = await context.newPage();
       page.on('pageerror', (error) => errors.push(error.message));
-      for (const [name, route, heading, readyText] of routes) {
+      for (const [name, route, heading, readyText] of routes.filter(([name]) => !selectedPages || selectedPages.has(name))) {
         await page.goto(`${origin}/#${route}`);
         await page.getByRole('heading', { name: heading, exact: true }).waitFor();
         if (readyText) await page.getByText(readyText, { exact: true }).first().waitFor();
@@ -110,7 +113,7 @@ async function main() {
           }
         }
         await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
-        await page.screenshot({ path: path.join(output, `${name}-${width}.png`), fullPage: true });
+        await page.screenshot({ path: path.join(output, `${name}-${width}.png`), fullPage: screenshotFullPage });
         results.push({ name, width, overflow: 'PASS', focus: 'PASS', reducedMotion: 'PASS' });
       }
       assert.deepEqual(unexpected, [], 'No external request or API write');

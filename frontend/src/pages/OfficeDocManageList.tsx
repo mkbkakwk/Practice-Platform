@@ -65,22 +65,14 @@ export default function OfficeDocManageList() {
 
   return (
     <div className="admin-page">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Office 排版练习管理</h1>
-          <div className="mt-2 flex flex-wrap gap-3 text-sm">
-            <Link className="text-muted-foreground hover:text-foreground" to="/admin/problems">算法题</Link>
-            <Link className="text-muted-foreground hover:text-foreground" to="/admin/office">Office 选择题</Link>
-            <Link className="font-medium text-foreground" to="/admin/office-doc">Office 排版练习</Link>
-          </div>
-        </div>
+      <header className="management-hero"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="management-kicker">Document workflow</p><h1 className="management-title">Office 排版练习</h1><p className="management-summary">围绕文档资源、学生提交和复核组织现有练习；不改变 DOCX 工作流。</p></div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild><Link to="/admin/office-doc/review-list"><ClipboardCheck className="mr-1 h-4 w-4" />复核提交</Link></Button>
           <Button size="sm" asChild><Link to="/admin/office-doc/new"><Plus className="mr-1 h-4 w-4" />新建练习</Link></Button>
         </div>
-      </div>
+      </div><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">当前列表</p><p className="management-deck-value">{loading ? "加载中" : `${items.length} 项`}</p></div><div className="management-deck-item"><p className="management-deck-label">参考文档就绪</p><p className="management-deck-value">{loading ? "—" : items.filter((item) => item.hasTeacherDoc).length}</p></div></div><nav className="management-section-nav" aria-label="Office 管理类型"><Link to="/admin/problems">算法题</Link><Link to="/admin/office">Office 选择题</Link><Link className="is-active" to="/admin/office-doc">Office 排版练习</Link></nav></header>
       {error && <div className="mb-4 rounded border border-danger/25 bg-danger/5 p-3 text-sm text-danger">{error}</div>}
-      <AdminTable label="Office 排版练习管理">
+      <section className="management-panel mt-6"><div className="management-toolbar"><div><h2 className="management-panel-title">练习与资源目录</h2><p className="management-panel-description">可快速确认练习是否已配置教师参考文档。</p></div></div><AdminTable label="Office 排版练习管理">
         <table className="w-full min-w-[960px] text-sm">
           <thead className="bg-surface text-left text-xs text-muted-foreground"><tr><th className="px-4 py-3">名称</th><th className="px-4 py-3">创建者</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">提交</th><th className="px-4 py-3">创建时间</th><th className="px-4 py-3">操作</th></tr></thead>
           <tbody className="divide-y">
@@ -104,7 +96,7 @@ export default function OfficeDocManageList() {
             ))}
           </tbody>
         </table>
-      </AdminTable>
+      </AdminTable></section>
     </div>
   );
 }

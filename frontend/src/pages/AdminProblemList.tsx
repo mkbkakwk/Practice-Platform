@@ -71,24 +71,17 @@ export default function AdminProblemList() {
 
   return (
     <div className="admin-page">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">算法题管理</h1>
-          <div className="mt-2 flex flex-wrap gap-3 text-sm">
-            <Link className="font-medium text-foreground" to="/admin/problems">算法题</Link>
-            <Link className="text-muted-foreground hover:text-foreground" to="/admin/office">Office 选择题</Link>
-            <Link className="text-muted-foreground hover:text-foreground" to="/admin/office-doc">Office 排版练习</Link>
-          </div>
-        </div>
-        <Button onClick={() => navigate("/admin/problems/new")} className="gap-1.5">
+      <header className="management-hero">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="management-kicker">Authoring workspace</p><h1 className="management-title">算法题管理</h1><p className="management-summary">浏览、维护和发布现有算法题；题目内容与评测规则保持由现有服务端处理。</p></div><Button onClick={() => navigate("/admin/problems/new")} className="gap-1.5">
           <Plus className="h-4 w-4" /> 新建题目
-        </Button>
-      </div>
+        </Button></div>
+        <div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">当前列表</p><p className="management-deck-value">{loading ? "加载中" : `${problems.length} 道`}</p></div><div className="management-deck-item"><p className="management-deck-label">可见题目</p><p className="management-deck-value">{loading ? "—" : `${problems.filter((item) => item.visible).length} 道`}</p></div><div className="management-deck-item"><p className="management-deck-label">工作区</p><p className="management-deck-value">算法题</p></div></div>
+        <nav className="management-section-nav" aria-label="题目管理类型"><Link className="is-active" to="/admin/problems">算法题</Link><Link to="/admin/office">Office 选择题</Link><Link to="/admin/office-doc">Office 排版练习</Link></nav>
+      </header>
 
       {error && <div className="mb-4 rounded-md border border-danger/25 bg-danger/5 px-4 py-2 text-sm text-danger">{error}</div>}
 
-      <h2 className="mb-3 text-sm font-medium text-secondary-foreground">可管理题目（{problems.length}）</h2>
-      <AdminTable label="算法题管理">
+      <section className="management-panel mt-6"><div className="management-toolbar"><div><h2 className="management-panel-title">题目目录</h2><p className="management-panel-description">按题目本身而非纯记录扫描；操作仍遵守既有权限和提交保护。</p></div><span className="font-mono text-xs text-muted-foreground">{problems.length} RECORDS</span></div><AdminTable label="算法题管理">
         <table className="min-w-[1060px]">
           <thead><tr><th className="px-4 py-3">ID</th><th className="px-4 py-3">题目 / 创建信息</th><th className="px-4 py-3">难度</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">操作</th></tr></thead>
           <tbody>
@@ -132,7 +125,7 @@ export default function AdminProblemList() {
           )}
           </tbody>
         </table>
-      </AdminTable>
+      </AdminTable></section>
     </div>
   );
 }
