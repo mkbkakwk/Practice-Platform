@@ -1,0 +1,72 @@
+/* Opt-in management presentation. No new palette; student surfaces are unchanged. */
+@layer components {
+  .admin-page { @apply mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6 sm:py-8; }
+  .admin-theme .admin-page { overflow-wrap: anywhere; }
+  .admin-theme [data-slot="card"] { @apply min-w-0 gap-4 shadow-none; }
+  .admin-theme [data-slot="card-header"] { @apply gap-1; }
+  .admin-theme h1 { @apply text-foreground; }
+  .admin-theme :is(input, select, textarea) { @apply min-w-0; }
+  .admin-theme select, .admin-theme textarea,
+  .admin-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+    @apply border-input bg-surface text-foreground;
+  }
+  .admin-theme select { @apply max-w-full; }
+  .admin-theme :is(input, textarea)::placeholder { color: hsl(var(--muted-foreground)); }
+  .admin-theme :is(input[type="number"], input[type="datetime-local"]) { @apply font-mono tabular-nums; }
+  .admin-theme :is(button, a, input, select, textarea) { transition-duration: 150ms; }
+  .admin-theme [data-slot="label"] { @apply text-sm leading-5 text-secondary-foreground; }
+  .admin-form { @apply overflow-hidden rounded-xl border bg-card; }
+  .admin-form-section + .admin-form-section { @apply border-t border-border; }
+  .admin-theme [data-slot="alert-dialog-content"],
+  .admin-theme[data-slot="alert-dialog-content"] { color: hsl(var(--foreground)); animation: none !important; }
+  .admin-table-scroll { @apply max-w-full overflow-x-auto rounded-xl border bg-card; }
+  .admin-table-scroll table { @apply w-full border-collapse text-sm tabular-nums; }
+  .admin-table-scroll thead { @apply bg-surface text-left text-xs text-muted-foreground; }
+  .admin-table-scroll th { @apply whitespace-nowrap font-medium; }
+  .admin-table-scroll tbody tr { @apply border-t border-border transition-colors duration-150 hover:bg-elevated; }
+  .admin-table-scroll td { @apply align-middle; }
+  .admin-table-scroll td:last-child { @apply whitespace-nowrap; }
+  .admin-theme [data-slot="button"][data-variant="destructive"],
+  .admin-theme .admin-danger {
+    @apply border border-danger/25 bg-danger/5 text-danger;
+  }
+  .admin-theme [data-slot="button"][data-variant="destructive"]:hover:not(:disabled),
+  .admin-theme .admin-danger:hover:not(:disabled) { @apply border-danger/40 bg-danger/10; }
+  .admin-theme dd { @apply break-words tabular-nums; }
+
+  /* Structural primitives for the management workspaces. They intentionally
+     use luminance and dividers rather than a second administration palette. */
+  .management-hero { @apply border-b border-border pb-5; }
+  .management-kicker { @apply font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground; }
+  .management-title { @apply mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl; }
+  .management-summary { @apply mt-2 max-w-3xl text-sm leading-6 text-muted-foreground; }
+  .management-deck { @apply mt-5 grid gap-px overflow-hidden rounded-xl border border-border bg-border; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); }
+  .management-deck-item { @apply min-w-0 bg-card px-4 py-3; }
+  .management-deck-label { @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground; }
+  .management-deck-value { @apply mt-1 truncate font-mono text-sm font-medium tabular-nums text-foreground; }
+  .management-section-nav { @apply mt-5 flex max-w-full gap-1 overflow-x-auto border-b border-border pb-px; }
+  .management-section-nav a, .management-section-nav button { @apply shrink-0 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground; }
+  .management-section-nav .is-active { @apply border-brand text-foreground; }
+  .management-layout { @apply mt-6 grid gap-5 xl:grid-cols-12; }
+  .management-main { @apply min-w-0 xl:col-span-8; }
+  .management-rail { @apply min-w-0 space-y-4 xl:col-span-4; }
+  .management-panel { @apply min-w-0 rounded-xl border border-border bg-card; }
+  .management-panel-header { @apply flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5; }
+  .management-panel-title { @apply text-sm font-semibold text-foreground; }
+  .management-panel-description { @apply mt-1 text-xs leading-5 text-muted-foreground; }
+  .management-panel-body { @apply min-w-0 p-4 sm:p-5; }
+  .management-toolbar { @apply flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-4 py-3 sm:px-5; }
+  .management-subsection + .management-subsection { @apply border-t border-border; }
+  .management-subsection-head { @apply flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5; }
+  .management-empty { @apply px-5 py-10 text-center text-sm text-muted-foreground; }
+  .management-list-row { @apply flex flex-wrap items-center gap-3 border-t border-border px-4 py-3 text-sm first:border-t-0 sm:px-5; }
+  .management-list-row:hover { @apply bg-elevated; }
+  .management-split { @apply grid min-w-0 gap-5 xl:grid-cols-2; }
+  .management-form-grid { @apply grid gap-4 md:grid-cols-2; }
+  .management-form-wide { @apply md:col-span-2; }
+  .management-sticky-actions { @apply mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3; }
+  .management-metric-strip { @apply grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border xl:grid-cols-4; }
+  .management-metric { @apply min-w-0 bg-card px-4 py-3; }
+  .management-metric strong { @apply mt-1 block font-mono text-xl font-semibold tabular-nums text-foreground; }
+  .management-chart { @apply rounded-lg border border-border bg-surface p-4; }
+}

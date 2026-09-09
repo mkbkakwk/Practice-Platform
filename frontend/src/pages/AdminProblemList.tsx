@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Plus, Pencil, Loader2, Power, PowerOff, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminTable } from "@/components/admin/AdminTable";
+import { DIFFICULTY_CLASS } from "@/lib/verdict";
 import { api, type ProblemListItem, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -69,48 +70,44 @@ export default function AdminProblemList() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">算法题管理</h1>
-          <div className="mt-2 flex gap-3 text-sm">
-            <Link className="font-medium text-zinc-900" to="/admin/problems">算法题</Link>
-            <Link className="text-zinc-500 hover:text-zinc-900" to="/admin/office">Office 选择题</Link>
-            <Link className="text-zinc-500 hover:text-zinc-900" to="/admin/office-doc">Office 排版练习</Link>
-          </div>
-        </div>
-        <Button onClick={() => navigate("/admin/problems/new")} className="gap-1.5">
+    <div className="admin-page">
+      <header className="management-hero">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="management-kicker">Authoring workspace</p><h1 className="management-title">算法题管理</h1><p className="management-summary">浏览、维护和发布现有算法题；题目内容与评测规则保持由现有服务端处理。</p></div><Button onClick={() => navigate("/admin/problems/new")} className="gap-1.5">
           <Plus className="h-4 w-4" /> 新建题目
-        </Button>
-      </div>
+        </Button></div>
+        <div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">当前列表</p><p className="management-deck-value">{loading ? "加载中" : `${problems.length} 道`}</p></div><div className="management-deck-item"><p className="management-deck-label">可见题目</p><p className="management-deck-value">{loading ? "—" : `${problems.filter((item) => item.visible).length} 道`}</p></div><div className="management-deck-item"><p className="management-deck-label">工作区</p><p className="management-deck-value">算法题</p></div></div>
+        <nav className="management-section-nav" aria-label="题目管理类型"><Link className="is-active" to="/admin/problems">算法题</Link><Link to="/admin/office">Office 选择题</Link><Link to="/admin/office-doc">Office 排版练习</Link></nav>
+      </header>
 
-      {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="mb-4 rounded-md border border-danger/25 bg-danger/5 px-4 py-2 text-sm text-danger">{error}</div>}
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">可管理题目（{problems.length}）</CardTitle></CardHeader>
-        <CardContent className="p-0">
+      <section className="management-panel mt-6"><div className="management-toolbar"><div><h2 className="management-panel-title">题目目录</h2><p className="management-panel-description">按题目本身而非纯记录扫描；操作仍遵守既有权限和提交保护。</p></div><span className="font-mono text-xs text-muted-foreground">{problems.length} RECORDS</span></div><AdminTable label="算法题管理">
+        <table className="min-w-[1060px]">
+          <thead><tr><th className="px-4 py-3">ID</th><th className="px-4 py-3">题目 / 创建信息</th><th className="px-4 py-3">难度</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">操作</th></tr></thead>
+          <tbody>
           {loading ? (
-            <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>
+            <tr><td colSpan={5} className="p-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" /></td></tr>
           ) : problems.length === 0 ? (
-            <div className="p-8 text-center text-sm text-zinc-500">暂无可管理题目</div>
+            <tr><td colSpan={5} className="p-8 text-center text-sm text-muted-foreground">暂无可管理题目</td></tr>
           ) : (
-            <div className="divide-y divide-zinc-100">
+            <>
               {problems.map((problem) => (
-                <div key={problem.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-zinc-50">
-                  <span className="w-10 text-xs text-zinc-400">#{problem.id}</span>
-                  <div className="min-w-64 flex-1">
-                    <div className="font-medium text-zinc-900">{problem.title}</div>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
+                <tr key={problem.id}>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">#{problem.id}</td>
+                  <td className="min-w-64 max-w-lg px-4 py-3">
+                    <div className="font-medium text-foreground">{problem.title}</div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <code>{problem.slug}</code>
                       <span>创建者：{creatorLabel(problem)}</span>
                       <span>提交：{problem.submissionCount}</span>
                       <span>{formatCreatedAt(problem.createdAt)}</span>
                     </div>
-                  </div>
-                  <Badge variant="secondary">{DIFFICULTY_LABEL[problem.difficulty] ?? problem.difficulty}</Badge>
-                  <Badge className={problem.visible ? "bg-green-100 text-green-700" : "bg-zinc-100 text-zinc-600"}>
+                  </td>
+                  <td className="px-4 py-3"><Badge variant="outline" className={DIFFICULTY_CLASS[problem.difficulty]}>{DIFFICULTY_LABEL[problem.difficulty] ?? problem.difficulty}</Badge></td>
+                  <td className="px-4 py-3"><Badge variant={problem.visible ? "success" : "neutral"}>
                     {problem.visible ? "已启用" : "已停用"}
-                  </Badge>
+                  </Badge></td>
+                  <td className="px-4 py-3"><div className="flex gap-1">
                   <Button variant="outline" size="sm" onClick={() => navigate(`/admin/problems/${problem.slug}/edit`)}>
                     <Pencil className="mr-1 h-3.5 w-3.5" /> 编辑
                   </Button>
@@ -121,12 +118,14 @@ export default function AdminProblemList() {
                   <Button variant="destructive" size="sm" disabled={busy !== null} onClick={() => void hardDelete(problem)}>
                     <Trash2 className="mr-1 h-3.5 w-3.5" /> 彻底删除
                   </Button>
-                </div>
+                  </div></td>
+                </tr>
               ))}
-            </div>
+            </>
           )}
-        </CardContent>
-      </Card>
+          </tbody>
+        </table>
+      </AdminTable></section>
     </div>
   );
 }

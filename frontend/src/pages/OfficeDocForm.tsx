@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Upload, ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -100,43 +99,40 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
     }
   }
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
-      <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/admin/office-doc")}><ArrowLeft className="mr-1 h-4 w-4" />返回管理</Button>
-      <h1 className="mb-4 text-2xl font-bold">{mode === "create" && !currentId ? "新建排版练习" : "编辑排版练习"}</h1>
-      <form onSubmit={handleSave} className="space-y-5">
-        <Card className="space-y-4 p-5">
-          <div><Label className="mb-1.5 block text-xs">标题</Label><Input value={title} onChange={(event) => setTitle(event.target.value)} /></div>
-          <div><Label className="mb-1.5 block text-xs">难度</Label><div className="flex gap-2">{DIFFS.map((item) => <Button key={item.key} type="button" size="sm" variant={difficulty === item.key ? "default" : "outline"} onClick={() => setDifficulty(item.key)}>{item.label}</Button>)}</div></div>
-          <div><Label className="mb-1.5 block text-xs">排版要求（Markdown）</Label><textarea className="min-h-32 w-full rounded-md border border-zinc-200 p-3 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
-          <div className="flex items-center justify-between"><div><Label className="text-sm font-semibold">启用状态</Label><p className="text-xs text-zinc-400">停用后学生不能查看或提交，历史数据保留</p></div><button type="button" onClick={() => setVisible(!visible)} className={cn("relative h-6 w-11 rounded-full", visible ? "bg-zinc-900" : "bg-zinc-300")}><span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform", visible ? "translate-x-5" : "translate-x-0.5")} /></button></div>
-          <div><Label className="mb-1.5 block text-xs">内容可见范围</Label><select aria-label="内容可见范围" value={contentVisibility} onChange={(event) => setContentVisibility(event.target.value as "PUBLIC" | "CONTEST_ONLY")} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"><option value="PUBLIC">PUBLIC（练习区公开）</option><option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option></select></div>
-        </Card>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div className="flex items-center gap-3"><Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{currentId ? "保存信息" : "创建练习"}</Button>{saved && <span className="text-sm text-green-600">✓ 已保存</span>}</div>
-      </form>
+    <div className="admin-page">
+      <header className="management-hero"><Button variant="ghost" size="sm" onClick={() => navigate("/admin/office-doc")}><ArrowLeft className="mr-1 h-4 w-4" />返回管理</Button><p className="management-kicker mt-4">Document authoring</p><h1 className="management-title">{mode === "create" && !currentId ? "新建排版练习" : "编辑排版练习"}</h1><p className="management-summary">先定义练习，再维护 Starter 与教师 Reference 文档；两类资源独立保存且共同决定发布就绪状态。</p><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">练习记录</p><p className="management-deck-value">{currentId ? `#${currentId}` : "未创建"}</p></div><div className="management-deck-item"><p className="management-deck-label">Starter</p><p className="management-deck-value">{starterDocName ? "已就绪" : "待上传"}</p></div><div className="management-deck-item"><p className="management-deck-label">Reference</p><p className="management-deck-value">{teacherDocName ? "已就绪" : "待上传"}</p></div><div className="management-deck-item"><p className="management-deck-label">发布就绪</p><p className="management-deck-value">{currentId && starterDocName && teacherDocName ? "资源齐全" : "待完成"}</p></div></div><nav className="management-section-nav" aria-label="排版练习编辑分区"><a className="is-active" href="#doc-definition">练习定义</a>{currentId && <><a href="#doc-resources">文档资源</a><a href="#doc-readiness">发布就绪</a></>}</nav></header>
+      <div className="management-layout"><div className="management-main"><form id="doc-definition" onSubmit={handleSave} className="management-panel">
+        <div className="management-panel-header"><div><h2 className="management-panel-title">练习定义</h2><p className="management-panel-description">标题、难度、要求和面向学生的可见性。</p></div></div><div className="management-panel-body space-y-4">
+          <div><Label htmlFor="admin-title" className="mb-1.5 block text-xs">标题</Label><Input id="admin-title" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
+          <div><Label className="mb-1.5 block text-xs">难度</Label><div className="flex gap-2">{DIFFS.map((item) => <Button key={item.key} type="button" size="sm" aria-pressed={difficulty === item.key} variant={difficulty === item.key ? "default" : "outline"} onClick={() => setDifficulty(item.key)}>{item.label}</Button>)}</div></div>
+          <div><Label htmlFor="admin-description" className="mb-1.5 block text-xs">排版要求（Markdown）</Label><textarea id="admin-description" className="min-h-32 w-full rounded-md border border-border p-3 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
+          <div className="flex items-center justify-between"><div><Label className="text-sm font-semibold">启用状态</Label><p className="text-xs text-muted-foreground">停用后学生不能查看或提交，历史数据保留</p></div><button type="button" role="switch" aria-label="启用状态" aria-checked={visible} onClick={() => setVisible(!visible)} className={cn("relative h-6 w-11 shrink-0 rounded-full", visible ? "bg-brand/40" : "bg-secondary")}><span className={cn("absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-foreground transition-transform", visible ? "translate-x-5" : "translate-x-0")} /></button></div>
+          <div><Label className="mb-1.5 block text-xs">内容可见范围</Label><select aria-label="内容可见范围" value={contentVisibility} onChange={(event) => setContentVisibility(event.target.value as "PUBLIC" | "CONTEST_ONLY")} className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm"><option value="PUBLIC">PUBLIC（练习区公开）</option><option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option></select></div>
+        </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="management-sticky-actions"><p className="text-xs text-muted-foreground">创建练习后才可上传 Starter 和 Reference 文档。</p><div className="flex items-center gap-3"><Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{currentId ? "保存信息" : "创建练习"}</Button>{saved && <span className="text-sm text-success">✓ 已保存</span>}</div></div>
+      </form></div>
 
-      {currentId && <Card className="mt-5 p-5">
-        <h2 className="mb-2 text-sm font-semibold">学生待修改文件（Starter）</h2>
-        {starterDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{starterDocName}</p>}
-        <p className="mb-3 text-xs text-zinc-500">学生会下载此文件并在本地修改。它与教师参考文档独立存储。</p>
+      {currentId && <aside id="doc-resources" className="management-rail"><section className="management-panel">
+        <div className="management-panel-header"><div><h2 className="management-panel-title">学生待修改文件</h2><p className="management-panel-description">Starter：学生下载后在本地编辑。</p></div></div><div className="management-panel-body">
+        {starterDocName && <p className="mb-3 flex items-center gap-1 text-sm text-success"><CheckCircle2 className="h-4 w-4" />当前文件：{starterDocName}</p>}
+        <p className="mb-3 text-xs text-muted-foreground">学生会下载此文件并在本地修改。它与教师参考文档独立存储。</p>
         <input ref={starterFileRef} aria-label="学生待修改文件" type="file" accept=".docx" className="hidden" onChange={(event) => setStarterFile(event.target.files?.[0] ?? null)} />
-        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => starterFileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{starterFile && <span className="text-sm text-zinc-600">{starterFile.name}</span>}{starterDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadStarterDoc(currentId, starterDocName)}>下载检查</Button>}</div>
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => starterFileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{starterFile && <span className="text-sm text-secondary-foreground">{starterFile.name}</span>}{starterDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadStarterDoc(currentId, starterDocName)}>下载检查</Button>}</div>
         {starterFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadStarter()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Starter"}</Button>}
-      </Card>}
+      </div></section>
 
-      {currentId && <Card className="mt-5 p-5">
-        <h2 className="mb-2 text-sm font-semibold">教师参考文档（Reference）</h2>
-        {teacherDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{teacherDocName}</p>}
-        <p className="mb-3 text-xs text-zinc-500">上传新文件会替换当前参考文档；旧文件在确认未被其他记录使用后清理。</p>
+      <section className="management-panel"><div className="management-panel-header"><div><h2 className="management-panel-title">教师参考文档</h2><p className="management-panel-description">Reference：用于既有的文档评审流程。</p></div></div><div className="management-panel-body">
+        {teacherDocName && <p className="mb-3 flex items-center gap-1 text-sm text-success"><CheckCircle2 className="h-4 w-4" />当前文件：{teacherDocName}</p>}
+        <p className="mb-3 text-xs text-muted-foreground">上传新文件会替换当前参考文档；旧文件在确认未被其他记录使用后清理。</p>
         <input ref={fileRef} aria-label="教师参考文档" type="file" accept=".docx" className="hidden" onChange={(event) => setTeacherFile(event.target.files?.[0] ?? null)} />
-        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-zinc-600">{teacherFile.name}</span>}{teacherDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadTeacherDoc(currentId, teacherDocName)}>下载检查</Button>}</div>
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-secondary-foreground">{teacherFile.name}</span>}{teacherDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadTeacherDoc(currentId, teacherDocName)}>下载检查</Button>}</div>
         {teacherFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadTeacher()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Reference"}</Button>}
-      </Card>}
-      {currentId && <p className="mt-3 text-sm text-zinc-600">完成状态：{starterDocName && teacherDocName ? "Starter 与 Reference 已齐全，可用于公开练习或比赛。" : "尚未完成；使用前必须同时上传 Starter 与 Reference。"}</p>}
-      {currentId && <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => navigate("/admin/office-doc")}>完成</Button><Button asChild><a href={`#/office/docs/${currentId}`}>查看练习</a></Button></div>}
+      </div></section><section id="doc-readiness" className="management-panel"><div className="management-panel-header"><div><h2 className="management-panel-title">发布就绪</h2><p className="management-panel-description">Starter 和 Reference 必须同时存在才可用于公开练习或比赛。</p></div></div><div className="management-panel-body"><p className="text-sm text-secondary-foreground">{starterDocName && teacherDocName ? "Starter 与 Reference 已齐全。" : "尚未完成；使用前必须同时上传 Starter 与 Reference。"}</p><div className="mt-4 flex justify-end gap-2"><Button variant="outline" onClick={() => navigate("/admin/office-doc")}>完成</Button><Button asChild><a href={`#/office/docs/${currentId}`}>查看练习</a></Button></div></div></section></aside>}
+      </div>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, type OfficeQuestionUpsert, type OfficeAppType, type OfficeQuestionType } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, Trash2, ArrowLeft } from "lucide-react";
@@ -172,7 +171,7 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
   if (loading) {
     return (
       <div className="flex items-center justify-center px-4 py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -180,22 +179,19 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
   const isTrueFalse = form.questionType === "TRUE_FALSE";
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
-      <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/admin/office")}>
-        <ArrowLeft className="mr-1 h-4 w-4" /> 返回列表
-      </Button>
-      <h1 className="mb-4 text-2xl font-bold">{mode === "create" ? "新建 Office 题目" : "编辑 Office 题目"}</h1>
+    <div className="admin-page">
+      <header className="management-hero"><Button variant="ghost" size="sm" onClick={() => navigate("/admin/office")}><ArrowLeft className="mr-1 h-4 w-4" /> 返回列表</Button><p className="management-kicker mt-4">Office authoring</p><h1 className="management-title">{mode === "create" ? "新建 Office 题目" : "编辑 Office 题目"}</h1><p className="management-summary">依次定义练习、选项与答案，再决定对学生的可见性。所有字段仍使用现有题目模型。</p><div className="management-section-nav" aria-label="Office 题目编辑分区"><a className="is-active" href="#office-definition">练习定义</a><a href="#office-options">选项与答案</a><a href="#office-readiness">发布就绪</a></div></header>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="admin-form mt-6">
         {/* Basic info */}
-        <Card className="space-y-4 p-5">
-          <h2 className="text-sm font-semibold text-zinc-700">基本信息</h2>
+        <section id="office-definition" className="admin-form-section space-y-4 p-5">
+          <h2 className="text-sm font-semibold text-secondary-foreground">基本信息</h2>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <div>
-              <Label className="mb-1.5 block text-xs">应用</Label>
-              <select
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"
+              <Label htmlFor="question-appType" className="mb-1.5 block text-xs">应用</Label>
+              <select id="question-appType"
+                className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm"
                 value={form.appType}
                 onChange={(e) => patch({ appType: e.target.value as OfficeAppType })}
               >
@@ -207,9 +203,9 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
               </select>
             </div>
             <div>
-              <Label className="mb-1.5 block text-xs">题型</Label>
-              <select
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"
+              <Label htmlFor="question-questionType" className="mb-1.5 block text-xs">题型</Label>
+              <select id="question-questionType"
+                className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm"
                 value={form.questionType}
                 onChange={(e) => {
                   const qt = e.target.value as OfficeQuestionType;
@@ -228,9 +224,9 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
               </select>
             </div>
             <div>
-              <Label className="mb-1.5 block text-xs">难度</Label>
-              <select
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"
+              <Label htmlFor="question-difficulty" className="mb-1.5 block text-xs">难度</Label>
+              <select id="question-difficulty"
+                className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm"
                 value={form.difficulty}
                 onChange={(e) => patch({ difficulty: e.target.value as "EASY" | "MEDIUM" | "HARD" })}
               >
@@ -244,31 +240,31 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
           </div>
 
           <div>
-            <Label className="mb-1.5 block text-xs">分类（如：文字排版 / 公式函数 / 动画）</Label>
-            <Input
+            <Label htmlFor="question-category" className="mb-1.5 block text-xs">分类（如：文字排版 / 公式函数 / 动画）</Label>
+            <Input id="question-category"
               value={form.category}
               onChange={(e) => patch({ category: e.target.value })}
               placeholder="分类标签"
             />
           </div>
-        </Card>
+        </section>
 
         {/* Question content */}
-        <Card className="space-y-2 p-5">
-          <Label className="text-sm font-semibold text-zinc-700">题目内容</Label>
-          <textarea
-            className="min-h-24 w-full rounded-md border border-zinc-200 p-3 text-sm leading-relaxed"
+        <section className="admin-form-section space-y-2 p-5">
+          <Label htmlFor="question-content" className="text-sm font-semibold text-secondary-foreground">题目内容</Label>
+          <textarea id="question-content"
+            className="min-h-24 w-full rounded-md border border-border p-3 text-sm leading-relaxed"
             value={form.content}
             onChange={(e) => patch({ content: e.target.value })}
             placeholder="输入题目内容..."
           />
-        </Card>
+        </section>
 
         {/* Options */}
-        <Card className="space-y-3 p-5">
+        <section id="office-options" className="admin-form-section space-y-3 p-5">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold text-zinc-700">
-              选项 {isTrueFalse && <span className="text-xs font-normal text-zinc-400">（判断题固定为 正确/错误）</span>}
+            <Label className="text-sm font-semibold text-secondary-foreground">
+              选项 {isTrueFalse && <span className="text-xs font-normal text-muted-foreground">（判断题固定为 正确/错误）</span>}
             </Label>
             {!isTrueFalse && (
               <Button type="button" variant="outline" size="sm" onClick={addOption}>
@@ -278,11 +274,11 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
           </div>
           {isTrueFalse ? (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 rounded-md border border-zinc-200 p-2 text-sm">
+              <div className="flex items-center gap-2 rounded-md border border-border p-2 text-sm">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full border text-xs">T</span>
                 正确
               </div>
-              <div className="flex items-center gap-2 rounded-md border border-zinc-200 p-2 text-sm">
+              <div className="flex items-center gap-2 rounded-md border border-border p-2 text-sm">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full border text-xs">F</span>
                 错误
               </div>
@@ -291,10 +287,10 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
             <div className="space-y-2">
               {form.options.map((opt, idx) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium text-zinc-500">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium text-muted-foreground">
                     {String.fromCharCode(65 + idx)}
                   </span>
-                  <Input
+                  <Input aria-label={`选项 ${String.fromCharCode(65 + idx)}`}
                     value={opt}
                     onChange={(e) => changeOption(idx, e.target.value)}
                     placeholder={`选项 ${String.fromCharCode(65 + idx)}`}
@@ -303,81 +299,85 @@ export default function OfficeQuestionForm({ mode }: { mode: "create" | "edit" }
                     type="button"
                     variant="ghost"
                     size="icon-sm"
+                    aria-label={`删除选项 ${String.fromCharCode(65 + idx)}`}
                     onClick={() => removeOption(idx)}
                     disabled={form.options.length <= 2}
                   >
-                    <Trash2 className="h-4 w-4 text-zinc-400" />
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </div>
               ))}
             </div>
           )}
-        </Card>
+        </section>
 
         {/* Answer */}
-        <Card className="space-y-2 p-5">
-          <Label className="text-sm font-semibold text-zinc-700">正确答案</Label>
-          <p className="text-xs text-zinc-500">
+        <section className="admin-form-section space-y-2 p-5">
+          <Label htmlFor="question-answer" className="text-sm font-semibold text-secondary-foreground">正确答案</Label>
+          <p className="text-xs text-muted-foreground">
             {isTrueFalse
               ? "填 T（正确）或 F（错误）"
               : form.questionType === "MULTI_CHOICE"
                 ? "多选用逗号分隔选项序号(0-based)，如 0,2 表示第 1、3 项"
                 : "填选项序号(0-based)，如 0 表示第 1 项"}
           </p>
-          <Input
+          <Input id="question-answer"
             value={form.answer}
             onChange={(e) => patch({ answer: e.target.value })}
             placeholder={isTrueFalse ? "T" : form.questionType === "MULTI_CHOICE" ? "0,2" : "0"}
           />
-        </Card>
+        </section>
 
         {/* Explanation */}
-        <Card className="space-y-2 p-5">
-          <Label className="text-sm font-semibold text-zinc-700">解析（可选）</Label>
-          <textarea
-            className="min-h-16 w-full rounded-md border border-zinc-200 p-3 text-sm leading-relaxed"
+        <section className="admin-form-section space-y-2 p-5">
+          <Label htmlFor="question-explanation" className="text-sm font-semibold text-secondary-foreground">解析（可选）</Label>
+          <textarea id="question-explanation"
+            className="min-h-16 w-full rounded-md border border-border p-3 text-sm leading-relaxed"
             value={form.explanation}
             onChange={(e) => patch({ explanation: e.target.value })}
             placeholder="答题后展示给用户的解析说明..."
           />
-        </Card>
+        </section>
 
         {/* Visible */}
-        <Card className="flex items-center justify-between p-5">
+        <section id="office-readiness" className="admin-form-section flex items-center justify-between gap-4 p-5">
           <div>
-            <Label className="text-sm font-semibold text-zinc-700">是否可见</Label>
-            <p className="text-xs text-zinc-500">关闭后普通用户不可见，仅管理员可见</p>
+            <Label className="text-sm font-semibold text-secondary-foreground">是否可见</Label>
+            <p className="text-xs text-muted-foreground">关闭后普通用户不可见，仅管理员可见</p>
           </div>
           <button
             type="button"
+            role="switch"
+            aria-label="是否可见"
+            aria-checked={form.visible}
             onClick={() => patch({ visible: !form.visible })}
             className={cn(
-              "relative h-6 w-11 rounded-full transition-colors",
-              form.visible ? "bg-zinc-900" : "bg-zinc-300",
+              "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+              form.visible ? "bg-brand/40" : "bg-secondary",
             )}
           >
             <span
               className={cn(
-                "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
-                form.visible ? "translate-x-5" : "translate-x-0.5",
+                "absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-foreground transition-transform",
+                form.visible ? "translate-x-5" : "translate-x-0",
               )}
             />
           </button>
-        </Card>
+        </section>
 
-        <Card className="space-y-2 p-5">
-          <Label htmlFor="office-question-visibility" className="text-sm font-semibold text-zinc-700">内容可见范围</Label>
+        <section className="admin-form-section space-y-2 p-5">
+          <Label htmlFor="office-question-visibility" className="text-sm font-semibold text-secondary-foreground">内容可见范围</Label>
           <select id="office-question-visibility" value={form.contentVisibility}
             onChange={(event) => patch({ contentVisibility: event.target.value as FormState["contentVisibility"] })}
-            className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
+            className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm">
             <option value="PUBLIC">PUBLIC（练习区公开）</option>
             <option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option>
           </select>
-        </Card>
+        </section>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="px-5 pb-4 text-sm text-danger">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 border-t p-5">
           <Button type="button" variant="outline" onClick={() => navigate("/admin/office")}>
             取消
           </Button>
