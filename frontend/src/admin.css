@@ -1,0 +1,36 @@
+/* Opt-in management presentation. No new palette; student surfaces are unchanged. */
+@layer components {
+  .admin-page { @apply mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6 sm:py-8; }
+  .admin-theme .admin-page { overflow-wrap: anywhere; }
+  .admin-theme [data-slot="card"] { @apply min-w-0 gap-4 shadow-none; }
+  .admin-theme [data-slot="card-header"] { @apply gap-1; }
+  .admin-theme h1 { @apply text-foreground; }
+  .admin-theme :is(input, select, textarea) { @apply min-w-0; }
+  .admin-theme select, .admin-theme textarea,
+  .admin-theme input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+    @apply border-input bg-surface text-foreground;
+  }
+  .admin-theme select { @apply max-w-full; }
+  .admin-theme :is(input, textarea)::placeholder { color: hsl(var(--muted-foreground)); }
+  .admin-theme :is(input[type="number"], input[type="datetime-local"]) { @apply font-mono tabular-nums; }
+  .admin-theme :is(button, a, input, select, textarea) { transition-duration: 150ms; }
+  .admin-theme [data-slot="label"] { @apply text-sm leading-5 text-secondary-foreground; }
+  .admin-form { @apply overflow-hidden rounded-xl border bg-card; }
+  .admin-form-section + .admin-form-section { @apply border-t border-border; }
+  .admin-theme [data-slot="alert-dialog-content"],
+  .admin-theme[data-slot="alert-dialog-content"] { color: hsl(var(--foreground)); animation: none !important; }
+  .admin-table-scroll { @apply max-w-full overflow-x-auto rounded-xl border bg-card; }
+  .admin-table-scroll table { @apply w-full border-collapse text-sm tabular-nums; }
+  .admin-table-scroll thead { @apply bg-surface text-left text-xs text-muted-foreground; }
+  .admin-table-scroll th { @apply whitespace-nowrap font-medium; }
+  .admin-table-scroll tbody tr { @apply border-t border-border transition-colors duration-150 hover:bg-elevated; }
+  .admin-table-scroll td { @apply align-middle; }
+  .admin-table-scroll td:last-child { @apply whitespace-nowrap; }
+  .admin-theme [data-slot="button"][data-variant="destructive"],
+  .admin-theme .admin-danger {
+    @apply border border-danger/25 bg-danger/5 text-danger;
+  }
+  .admin-theme [data-slot="button"][data-variant="destructive"]:hover:not(:disabled),
+  .admin-theme .admin-danger:hover:not(:disabled) { @apply border-danger/40 bg-danger/10; }
+  .admin-theme dd { @apply break-words tabular-nums; }
+}

@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { api, type UserListItem, ApiError } from "@/lib/api";
-import { Card } from "@/components/ui/card";
+import { AdminTable } from "@/components/admin/AdminTable";
 import { Loader2, ShieldCheck, GraduationCap, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROLES: { key: "USER" | "TEACHER" | "ADMIN"; label: string; icon: typeof UserIcon; class: string }[] = [
-  { key: "USER", label: "学生", icon: UserIcon, class: "bg-zinc-100 text-zinc-700" },
-  { key: "TEACHER", label: "老师", icon: GraduationCap, class: "bg-blue-100 text-blue-700" },
-  { key: "ADMIN", label: "管理员", icon: ShieldCheck, class: "bg-zinc-900 text-white" },
+  { key: "USER", label: "学生", icon: UserIcon, class: "bg-elevated text-secondary-foreground" },
+  { key: "TEACHER", label: "老师", icon: GraduationCap, class: "bg-elevated text-secondary-foreground" },
+  { key: "ADMIN", label: "管理员", icon: ShieldCheck, class: "bg-secondary text-foreground" },
 ];
 
 const ROLE_BADGE: Record<string, { label: string; class: string }> = {
-  USER: { label: "学生", class: "bg-zinc-100 text-zinc-700" },
-  TEACHER: { label: "老师", class: "bg-blue-100 text-blue-700" },
-  ADMIN: { label: "管理员", class: "bg-zinc-900 text-white" },
+  USER: { label: "学生", class: "bg-elevated text-secondary-foreground" },
+  TEACHER: { label: "老师", class: "bg-elevated text-secondary-foreground" },
+  ADMIN: { label: "管理员", class: "bg-secondary text-foreground" },
 };
 
 export default function AdminUserList() {
@@ -44,17 +44,17 @@ export default function AdminUserList() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8">
+    <div className="admin-page">
       <div className="mb-4 flex items-center gap-2">
-        <ShieldCheck className="h-6 w-6 text-zinc-700" />
-        <h1 className="text-2xl font-bold">用户管理</h1>
+        <ShieldCheck className="h-6 w-6 text-secondary-foreground" />
+        <h1 className="text-2xl font-semibold tracking-tight">用户管理</h1>
       </div>
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
-      <Card className="overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
+      <AdminTable label="用户与角色">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="bg-surface text-left text-xs uppercase text-muted-foreground">
             <tr>
               <th className="w-16 px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium">用户名</th>
@@ -65,15 +65,15 @@ export default function AdminUserList() {
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-zinc-400" /></td></tr>
+              <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400">暂无用户</td></tr>
+              <tr><td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">暂无用户</td></tr>
             ) : (
               users.map((u) => (
-                <tr key={u.id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-3 text-zinc-400">{u.id}</td>
-                  <td className="px-4 py-3 font-medium text-zinc-900">{u.username}</td>
-                  <td className="px-4 py-3 text-zinc-600">{u.solvedCount}</td>
+                <tr key={u.id} className="hover:bg-surface">
+                  <td className="px-4 py-3 text-muted-foreground">{u.id}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">{u.username}</td>
+                  <td className="px-4 py-3 text-secondary-foreground">{u.solvedCount}</td>
                   <td className="px-4 py-3">
                     <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap", ROLE_BADGE[u.role].class)}>
                       {ROLE_BADGE[u.role].label}
@@ -87,12 +87,14 @@ export default function AdminUserList() {
                         return (
                           <button
                             key={r.key}
+                            aria-label={`将 ${u.username} 设为${r.label}`}
+                            aria-pressed={active}
                             type="button"
                             disabled={updatingId === u.id || active}
                             onClick={() => changeRole(u.id, r.key)}
                             className={cn(
                               "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                              active ? r.class + " border-transparent" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
+                              active ? "bg-brand/10 text-foreground border-brand/30" : "border-border text-secondary-foreground hover:bg-surface",
                             )}
                           >
                             <Icon className="h-3 w-3" />
@@ -107,7 +109,7 @@ export default function AdminUserList() {
             )}
           </tbody>
         </table>
-      </Card>
+      </AdminTable>
     </div>
   );
 }

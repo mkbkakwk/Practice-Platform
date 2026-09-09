@@ -100,42 +100,42 @@ export default function OfficeDocForm({ mode }: { mode: "create" | "edit" }) {
     }
   }
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-zinc-400" /></div>;
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="admin-page max-w-3xl">
       <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/admin/office-doc")}><ArrowLeft className="mr-1 h-4 w-4" />返回管理</Button>
-      <h1 className="mb-4 text-2xl font-bold">{mode === "create" && !currentId ? "新建排版练习" : "编辑排版练习"}</h1>
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight">{mode === "create" && !currentId ? "新建排版练习" : "编辑排版练习"}</h1>
       <form onSubmit={handleSave} className="space-y-5">
         <Card className="space-y-4 p-5">
-          <div><Label className="mb-1.5 block text-xs">标题</Label><Input value={title} onChange={(event) => setTitle(event.target.value)} /></div>
-          <div><Label className="mb-1.5 block text-xs">难度</Label><div className="flex gap-2">{DIFFS.map((item) => <Button key={item.key} type="button" size="sm" variant={difficulty === item.key ? "default" : "outline"} onClick={() => setDifficulty(item.key)}>{item.label}</Button>)}</div></div>
-          <div><Label className="mb-1.5 block text-xs">排版要求（Markdown）</Label><textarea className="min-h-32 w-full rounded-md border border-zinc-200 p-3 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
-          <div className="flex items-center justify-between"><div><Label className="text-sm font-semibold">启用状态</Label><p className="text-xs text-zinc-400">停用后学生不能查看或提交，历史数据保留</p></div><button type="button" onClick={() => setVisible(!visible)} className={cn("relative h-6 w-11 rounded-full", visible ? "bg-zinc-900" : "bg-zinc-300")}><span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform", visible ? "translate-x-5" : "translate-x-0.5")} /></button></div>
-          <div><Label className="mb-1.5 block text-xs">内容可见范围</Label><select aria-label="内容可见范围" value={contentVisibility} onChange={(event) => setContentVisibility(event.target.value as "PUBLIC" | "CONTEST_ONLY")} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm"><option value="PUBLIC">PUBLIC（练习区公开）</option><option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option></select></div>
+          <div><Label htmlFor="admin-title" className="mb-1.5 block text-xs">标题</Label><Input id="admin-title" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
+          <div><Label className="mb-1.5 block text-xs">难度</Label><div className="flex gap-2">{DIFFS.map((item) => <Button key={item.key} type="button" size="sm" aria-pressed={difficulty === item.key} variant={difficulty === item.key ? "default" : "outline"} onClick={() => setDifficulty(item.key)}>{item.label}</Button>)}</div></div>
+          <div><Label htmlFor="admin-description" className="mb-1.5 block text-xs">排版要求（Markdown）</Label><textarea id="admin-description" className="min-h-32 w-full rounded-md border border-border p-3 text-sm" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
+          <div className="flex items-center justify-between"><div><Label className="text-sm font-semibold">启用状态</Label><p className="text-xs text-muted-foreground">停用后学生不能查看或提交，历史数据保留</p></div><button type="button" role="switch" aria-label="启用状态" aria-checked={visible} onClick={() => setVisible(!visible)} className={cn("relative h-6 w-11 shrink-0 rounded-full", visible ? "bg-brand/40" : "bg-secondary")}><span className={cn("absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-foreground transition-transform", visible ? "translate-x-5" : "translate-x-0")} /></button></div>
+          <div><Label className="mb-1.5 block text-xs">内容可见范围</Label><select aria-label="内容可见范围" value={contentVisibility} onChange={(event) => setContentVisibility(event.target.value as "PUBLIC" | "CONTEST_ONLY")} className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm"><option value="PUBLIC">PUBLIC（练习区公开）</option><option value="CONTEST_ONLY">CONTEST_ONLY（比赛开始后仅参赛者可见）</option></select></div>
         </Card>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div className="flex items-center gap-3"><Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{currentId ? "保存信息" : "创建练习"}</Button>{saved && <span className="text-sm text-green-600">✓ 已保存</span>}</div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex items-center gap-3"><Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{currentId ? "保存信息" : "创建练习"}</Button>{saved && <span className="text-sm text-success">✓ 已保存</span>}</div>
       </form>
 
       {currentId && <Card className="mt-5 p-5">
         <h2 className="mb-2 text-sm font-semibold">学生待修改文件（Starter）</h2>
-        {starterDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{starterDocName}</p>}
-        <p className="mb-3 text-xs text-zinc-500">学生会下载此文件并在本地修改。它与教师参考文档独立存储。</p>
+        {starterDocName && <p className="mb-3 flex items-center gap-1 text-sm text-success"><CheckCircle2 className="h-4 w-4" />当前文件：{starterDocName}</p>}
+        <p className="mb-3 text-xs text-muted-foreground">学生会下载此文件并在本地修改。它与教师参考文档独立存储。</p>
         <input ref={starterFileRef} aria-label="学生待修改文件" type="file" accept=".docx" className="hidden" onChange={(event) => setStarterFile(event.target.files?.[0] ?? null)} />
-        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => starterFileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{starterFile && <span className="text-sm text-zinc-600">{starterFile.name}</span>}{starterDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadStarterDoc(currentId, starterDocName)}>下载检查</Button>}</div>
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => starterFileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{starterFile && <span className="text-sm text-secondary-foreground">{starterFile.name}</span>}{starterDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadStarterDoc(currentId, starterDocName)}>下载检查</Button>}</div>
         {starterFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadStarter()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Starter"}</Button>}
       </Card>}
 
       {currentId && <Card className="mt-5 p-5">
         <h2 className="mb-2 text-sm font-semibold">教师参考文档（Reference）</h2>
-        {teacherDocName && <p className="mb-3 flex items-center gap-1 text-sm text-green-700"><CheckCircle2 className="h-4 w-4" />当前文件：{teacherDocName}</p>}
-        <p className="mb-3 text-xs text-zinc-500">上传新文件会替换当前参考文档；旧文件在确认未被其他记录使用后清理。</p>
+        {teacherDocName && <p className="mb-3 flex items-center gap-1 text-sm text-success"><CheckCircle2 className="h-4 w-4" />当前文件：{teacherDocName}</p>}
+        <p className="mb-3 text-xs text-muted-foreground">上传新文件会替换当前参考文档；旧文件在确认未被其他记录使用后清理。</p>
         <input ref={fileRef} aria-label="教师参考文档" type="file" accept=".docx" className="hidden" onChange={(event) => setTeacherFile(event.target.files?.[0] ?? null)} />
-        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-zinc-600">{teacherFile.name}</span>}{teacherDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadTeacherDoc(currentId, teacherDocName)}>下载检查</Button>}</div>
+        <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="mr-1 h-4 w-4" />选择 .docx</Button>{teacherFile && <span className="text-sm text-secondary-foreground">{teacherFile.name}</span>}{teacherDocName && <Button type="button" variant="outline" size="sm" onClick={() => void api.downloadTeacherDoc(currentId, teacherDocName)}>下载检查</Button>}</div>
         {teacherFile && <Button type="button" className="mt-3" size="sm" onClick={() => void handleUploadTeacher()} disabled={uploading}>{uploading && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}{uploading ? "上传中..." : "上传 Reference"}</Button>}
       </Card>}
-      {currentId && <p className="mt-3 text-sm text-zinc-600">完成状态：{starterDocName && teacherDocName ? "Starter 与 Reference 已齐全，可用于公开练习或比赛。" : "尚未完成；使用前必须同时上传 Starter 与 Reference。"}</p>}
+      {currentId && <p className="mt-3 text-sm text-secondary-foreground">完成状态：{starterDocName && teacherDocName ? "Starter 与 Reference 已齐全，可用于公开练习或比赛。" : "尚未完成；使用前必须同时上传 Starter 与 Reference。"}</p>}
       {currentId && <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => navigate("/admin/office-doc")}>完成</Button><Button asChild><a href={`#/office/docs/${currentId}`}>查看练习</a></Button></div>}
     </div>
   );

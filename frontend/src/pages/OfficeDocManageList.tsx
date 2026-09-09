@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api, type DocExerciseListItem, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { AdminTable } from "@/components/admin/AdminTable";
 import { Loader2, Plus, Pencil, Power, PowerOff, Trash2, ClipboardCheck } from "lucide-react";
 
 const STOP_WARNING = "停用后学生无法继续查看或提交，但历史记录和成绩会保留。";
@@ -64,14 +64,14 @@ export default function OfficeDocManageList() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8">
+    <div className="admin-page">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Office 排版练习管理</h1>
-          <div className="mt-2 flex gap-3 text-sm">
-            <Link className="text-zinc-500 hover:text-zinc-900" to="/admin/problems">算法题</Link>
-            <Link className="text-zinc-500 hover:text-zinc-900" to="/admin/office">Office 选择题</Link>
-            <Link className="font-medium text-zinc-900" to="/admin/office-doc">Office 排版练习</Link>
+          <h1 className="text-2xl font-semibold tracking-tight">Office 排版练习管理</h1>
+          <div className="mt-2 flex flex-wrap gap-3 text-sm">
+            <Link className="text-muted-foreground hover:text-foreground" to="/admin/problems">算法题</Link>
+            <Link className="text-muted-foreground hover:text-foreground" to="/admin/office">Office 选择题</Link>
+            <Link className="font-medium text-foreground" to="/admin/office-doc">Office 排版练习</Link>
           </div>
         </div>
         <div className="flex gap-2">
@@ -79,22 +79,22 @@ export default function OfficeDocManageList() {
           <Button size="sm" asChild><Link to="/admin/office-doc/new"><Plus className="mr-1 h-4 w-4" />新建练习</Link></Button>
         </div>
       </div>
-      {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      <Card className="overflow-x-auto">
+      {error && <div className="mb-4 rounded border border-danger/25 bg-danger/5 p-3 text-sm text-danger">{error}</div>}
+      <AdminTable label="Office 排版练习管理">
         <table className="w-full min-w-[960px] text-sm">
-          <thead className="bg-zinc-50 text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">名称</th><th className="px-4 py-3">创建者</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">提交</th><th className="px-4 py-3">创建时间</th><th className="px-4 py-3">操作</th></tr></thead>
+          <thead className="bg-surface text-left text-xs text-muted-foreground"><tr><th className="px-4 py-3">名称</th><th className="px-4 py-3">创建者</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">提交</th><th className="px-4 py-3">创建时间</th><th className="px-4 py-3">操作</th></tr></thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-zinc-400" /></td></tr>
+              <tr><td colSpan={6} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-zinc-400">暂无可管理练习</td></tr>
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">暂无可管理练习</td></tr>
             ) : items.map((exercise) => (
-              <tr key={exercise.id} className="hover:bg-zinc-50">
-                <td className="px-4 py-3"><Link className="font-medium hover:underline" to={`/office/docs/${exercise.id}`}>{exercise.title}</Link><div className="mt-1 text-xs text-zinc-400">{exercise.hasTeacherDoc ? "已上传参考文档" : "未上传参考文档"}</div></td>
+              <tr key={exercise.id} className="hover:bg-surface">
+                <td className="px-4 py-3"><Link className="font-medium hover:underline" to={`/office/docs/${exercise.id}`}>{exercise.title}</Link><div className="mt-1 text-xs text-muted-foreground">{exercise.hasTeacherDoc ? "已上传参考文档" : "未上传参考文档"}</div></td>
                 <td className="px-4 py-3">{exercise.createdBy == null ? "系统预置" : (exercise.creatorUsername ?? `用户 #${exercise.createdBy}`)}</td>
                 <td className="px-4 py-3">{exercise.visible ? "已启用" : "已停用"}</td>
                 <td className="px-4 py-3">{exercise.submissionCount}</td>
-                <td className="px-4 py-3 text-xs text-zinc-500">{new Date(exercise.createdAt).toLocaleString("zh-CN", { hour12: false })}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(exercise.createdAt).toLocaleString("zh-CN", { hour12: false })}</td>
                 <td className="px-4 py-3"><div className="flex gap-1">
                   <Button variant="outline" size="sm" asChild><Link to={`/admin/office-doc/${exercise.id}/edit`}><Pencil className="mr-1 h-3.5 w-3.5" />编辑</Link></Button>
                   <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void toggle(exercise)}>{exercise.visible ? <PowerOff className="mr-1 h-3.5 w-3.5" /> : <Power className="mr-1 h-3.5 w-3.5" />}{exercise.visible ? "停用" : "启用"}</Button>
@@ -104,7 +104,7 @@ export default function OfficeDocManageList() {
             ))}
           </tbody>
         </table>
-      </Card>
+      </AdminTable>
     </div>
   );
 }
