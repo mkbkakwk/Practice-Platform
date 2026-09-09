@@ -37,7 +37,7 @@ const routes = [
   ['analytics', '/admin/contests/7/analytics', contest.title, '隔离测试学生'],
   ['office-questions', '/admin/office', 'Office 选择题管理', question.content],
   ['office-question-form', '/admin/office/201/edit', '编辑 Office 题目'],
-  ['office-documents', '/admin/office-doc', 'Office 排版练习管理', exercise.title],
+  ['office-documents', '/admin/office-doc', 'Office 排版练习', exercise.title],
   ['office-document-form', '/admin/office-doc/301/edit', '编辑排版练习', '发布就绪'],
   ['office-reviews', '/admin/office-doc/review-list', '文档提交复核', submission.studentDocName],
   ['office-review', '/admin/office-doc/review/401', '文档复核', '人工复核打分'],
