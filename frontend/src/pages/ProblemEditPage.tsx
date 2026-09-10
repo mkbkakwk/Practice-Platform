@@ -26,7 +26,7 @@ export default function ProblemEditPage() {
   if (loading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
       </div>
     );
   }
@@ -34,7 +34,7 @@ export default function ProblemEditPage() {
   if (error || !problem) {
     return (
       <div className="px-4 py-6">
-        <div className="rounded-md border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-danger">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error || "题目不存在"}
         </div>
       </div>

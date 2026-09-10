@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
@@ -31,11 +31,10 @@ export default function Register() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-10">
+    <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-zinc-50 px-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="space-y-2">
-          <p className="pilot-kicker">Practice-Platform</p>
-          <h1 className="text-2xl font-semibold tracking-tight">注册</h1>
+        <CardHeader>
+          <CardTitle>注册</CardTitle>
           <CardDescription>创建账号开始练习</CardDescription>
         </CardHeader>
         <CardContent>
@@ -63,18 +62,18 @@ export default function Register() {
                 required
               />
             </div>
-            {err && <p role="alert" className="rounded-md border border-danger/25 bg-danger/10 p-3 text-sm text-danger">{err}</p>}
+            {err && <p className="text-sm text-red-600">{err}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               注册
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-zinc-500">
               已有账号？{" "}
-              <Link to="/login" className="font-medium text-foreground underline">
+              <Link to="/login" className="font-medium text-zinc-900 underline">
                 登录
               </Link>
             </p>
-            <p className="text-center text-xs text-muted-foreground">
+            <p className="text-center text-xs text-zinc-400">
               教师账号由管理员在用户管理页面设置
             </p>
           </form>
