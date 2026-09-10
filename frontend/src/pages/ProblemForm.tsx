@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Trash2, Save, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -119,43 +119,52 @@ export default function ProblemForm({ mode, initial }: Props) {
   };
 
   return (
-    <div className="admin-page">
-      <header className="management-hero"><button onClick={() => navigate("/admin/problems")} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> 返回管理</button><p className="management-kicker mt-4">Problem authoring</p><h1 className="management-title">{mode === "create" ? "新建算法题" : `编辑：${initial?.title ?? ""}`}</h1><p className="management-summary">将题目定义、阅读预览与评测数据组织为一个创作工作区；学生可见内容和隐藏测试点保持明确分隔。</p><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">标识</p><p className="management-deck-value">{form.slug || "待填写"}</p></div><div className="management-deck-item"><p className="management-deck-label">难度</p><p className="management-deck-value">{form.difficulty}</p></div><div className="management-deck-item"><p className="management-deck-label">可见性</p><p className="management-deck-value">{form.visible ? "已启用" : "已停用"}</p></div><div className="management-deck-item"><p className="management-deck-label">测试点</p><p className="management-deck-value">{form.testCases.length} 个</p></div></div><nav className="management-section-nav" aria-label="题目编辑分区"><a className="is-active" href="#problem-definition">定义</a><a href="#problem-workspace">题面工作区</a><a href="#problem-evaluation">评测数据</a></nav></header>
+    <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <button
+        onClick={() => navigate("/admin/problems")}
+        className="mb-3 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"
+      >
+        <ArrowLeft className="h-4 w-4" /> 返回管理
+      </button>
+
+      <h1 className="mb-4 text-xl font-bold">
+        {mode === "create" ? "新建题目" : `编辑题目：${initial?.title ?? ""}`}
+      </h1>
 
       {error && (
-        <div className="mb-4 rounded-md border border-danger/25 bg-danger/5 px-4 py-2 text-sm text-danger">
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className="mt-6 space-y-5">
+      <div className="space-y-4">
         {/* 基本信息 */}
-        <Card id="problem-definition" className="management-panel">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">基本信息</CardTitle>
             <CardDescription>题目的标识与显示属性</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="problem-slug">Slug（URL 标识）</Label>
-              <Input id="problem-slug"
+              <Label>Slug（URL 标识）</Label>
+              <Input
                 value={form.slug}
                 onChange={(e) => update("slug", e.target.value)}
                 placeholder="a-plus-b"
                 disabled={mode === "edit"}
               />
-              <p className="text-xs text-muted-foreground">小写字母、数字、连字符，编辑后不可改</p>
+              <p className="text-xs text-zinc-500">小写字母、数字、连字符，编辑后不可改</p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="problem-title">标题</Label>
-              <Input id="problem-title" value={form.title} onChange={(e) => update("title", e.target.value)} placeholder="A + B 问题" />
+              <Label>标题</Label>
+              <Input value={form.title} onChange={(e) => update("title", e.target.value)} placeholder="A + B 问题" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="problem-difficulty">难度</Label>
-              <select id="problem-difficulty"
+              <Label>难度</Label>
+              <select
                 value={form.difficulty}
                 onChange={(e) => update("difficulty", e.target.value as ProblemUpsert["difficulty"])}
-                className="h-9 w-full rounded-md border border-border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border border-zinc-200 bg-transparent px-3 text-sm"
               >
                 <option value="EASY">简单</option>
                 <option value="MEDIUM">中等</option>
@@ -163,8 +172,8 @@ export default function ProblemForm({ mode, initial }: Props) {
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="problem-tagsStr">标签（逗号分隔）</Label>
-              <Input id="problem-tagsStr" value={tagsStr} onChange={(e) => setTagsStr(e.target.value)} placeholder="入门, 数学" />
+              <Label>标签（逗号分隔）</Label>
+              <Input value={tagsStr} onChange={(e) => setTagsStr(e.target.value)} placeholder="入门, 数学" />
               <div className="flex flex-wrap gap-1">
                 {tagsStr.split(",").map((t) => t.trim()).filter(Boolean).map((t, i) => (
                   <Badge key={i} variant="secondary" className="text-xs">{t}</Badge>
@@ -172,8 +181,8 @@ export default function ProblemForm({ mode, initial }: Props) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="problem-timeLimit">时间限制 (ms)</Label>
-              <Input id="problem-timeLimit"
+              <Label>时间限制 (ms)</Label>
+              <Input
                 type="number"
                 value={form.timeLimit}
                 onChange={(e) => update("timeLimit", Number(e.target.value))}
@@ -182,8 +191,8 @@ export default function ProblemForm({ mode, initial }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="problem-memoryLimit">内存限制 (MB)</Label>
-              <Input id="problem-memoryLimit"
+              <Label>内存限制 (MB)</Label>
+              <Input
                 type="number"
                 value={form.memoryLimit}
                 onChange={(e) => update("memoryLimit", Number(e.target.value))}
@@ -196,11 +205,11 @@ export default function ProblemForm({ mode, initial }: Props) {
               <Label htmlFor="visible" className="cursor-pointer">对普通用户可见</Label>
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="problem-contentVisibility">内容可见范围</Label>
-              <select id="problem-contentVisibility"
+              <Label>内容可见范围</Label>
+              <select
                 value={form.contentVisibility}
                 onChange={(e) => update("contentVisibility", e.target.value as ProblemUpsert["contentVisibility"])}
-                className="h-9 w-full rounded-md border border-border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border border-zinc-200 bg-transparent px-3 text-sm"
               >
                 <option value="PUBLIC">PUBLIC（练习区公开；加入比赛后仍可能提前查看）</option>
                 <option value="CONTEST_ONLY">CONTEST_ONLY（仅参赛者在比赛开始后可查看）</option>
@@ -210,7 +219,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 题面描述 + 实时预览 */}
-        <Card id="problem-workspace" className="management-panel">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">题面描述</CardTitle>
             <CardDescription>支持 Markdown 与 LaTeX 公式（$E=mc^2$ 行内，$$...$$ 块级）</CardDescription>
@@ -218,18 +227,18 @@ export default function ProblemForm({ mode, initial }: Props) {
           <CardContent>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="problem-description" className="flex items-center gap-1.5"><Eye className="h-3.5 w-3.5" /> 编辑</Label>
-                <Textarea id="problem-description"
+                <Label className="flex items-center gap-1.5"><Eye className="h-3.5 w-3.5" /> 编辑</Label>
+                <Textarea
                   value={form.description}
                   onChange={(e) => update("description", e.target.value)}
                   rows={20}
-                  className="text-sm leading-relaxed"
+                  className="font-mono text-[13px]"
                   placeholder="# 题目标题&#10;&#10;## 题目描述&#10;&#10;..."
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-muted-foreground">预览</Label>
-                <div className="min-h-[480px] min-w-0 rounded-md bg-surface p-4 overflow-auto">
+                <Label className="text-zinc-500">预览</Label>
+                <div className="min-h-[480px] rounded-md border border-zinc-200 bg-white p-4 overflow-auto">
                   <Markdown>{form.description || "*预览区*"}</Markdown>
                 </div>
               </div>
@@ -238,15 +247,15 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 输入输出格式 */}
-        <Card className="management-panel">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">输入 / 输出格式说明</CardTitle>
             <CardDescription>向学生说明输入输出的格式（可选，支持 Markdown）</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="problem-inputFmt">输入格式</Label>
-              <Textarea id="problem-inputFmt"
+              <Label>输入格式</Label>
+              <Textarea
                 value={form.inputFmt}
                 onChange={(e) => update("inputFmt", e.target.value)}
                 rows={4}
@@ -254,8 +263,8 @@ export default function ProblemForm({ mode, initial }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="problem-outputFmt">输出格式</Label>
-              <Textarea id="problem-outputFmt"
+              <Label>输出格式</Label>
+              <Textarea
                 value={form.outputFmt}
                 onChange={(e) => update("outputFmt", e.target.value)}
                 rows={4}
@@ -266,7 +275,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 样例 */}
-        <Card id="problem-evaluation" className="management-panel">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">样例（展示给学生）</CardTitle>
             <CardDescription>学生可见的输入输出示例</CardDescription>
@@ -282,7 +291,7 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 测试点 */}
-        <Card className="management-panel">
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">测试点（隐藏，用于评测）</CardTitle>
             <CardDescription>学生不可见，提交代码后会逐个运行判定</CardDescription>
@@ -298,16 +307,13 @@ export default function ProblemForm({ mode, initial }: Props) {
         </Card>
 
         {/* 操作按钮 */}
-        <div className="management-sticky-actions">
-          <p className="text-xs text-muted-foreground">保存会提交现有题目、样例和测试点数据。</p>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 pb-8">
           <Button onClick={submit} disabled={saving} className="gap-1.5">
             <Save className="h-4 w-4" /> {saving ? "保存中..." : "保存题目"}
           </Button>
           <Button variant="ghost" onClick={() => navigate("/admin/problems")}>
             取消
           </Button>
-          </div>
         </div>
       </div>
     </div>
@@ -325,19 +331,18 @@ function SampleRow({
   onChange: (field: "input" | "output", val: string) => void;
   onRemove: () => void;
 }) {
-  const fieldId = useId();
   return (
-    <div className="border-t border-border pt-4">
+    <div className="rounded-md border border-zinc-200 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">#{idx + 1}</span>
-        <Button variant="ghost" size="sm" onClick={onRemove} className="h-7 gap-1 text-danger hover:text-danger">
+        <span className="text-xs font-medium text-zinc-500">#{idx + 1}</span>
+        <Button variant="ghost" size="sm" onClick={onRemove} className="h-7 gap-1 text-red-600 hover:text-red-700">
           <Trash2 className="h-3.5 w-3.5" /> 删除
         </Button>
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-1">
-          <Label htmlFor={`${fieldId}-input`} className="text-xs text-muted-foreground">输入</Label>
-          <Textarea id={`${fieldId}-input`}
+          <Label className="text-xs text-zinc-500">输入</Label>
+          <Textarea
             value={sample.input}
             onChange={(e) => onChange("input", e.target.value)}
             rows={3}
@@ -346,8 +351,8 @@ function SampleRow({
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`${fieldId}-output`} className="text-xs text-muted-foreground">期望输出</Label>
-          <Textarea id={`${fieldId}-output`}
+          <Label className="text-xs text-zinc-500">期望输出</Label>
+          <Textarea
             value={sample.output}
             onChange={(e) => onChange("output", e.target.value)}
             rows={3}

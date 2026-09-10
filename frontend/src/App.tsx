@@ -31,8 +31,8 @@ import ContestStandings from "@/pages/ContestStandings";
 import ContestAnalytics from "@/pages/ContestAnalytics";
 import { Toaster } from "sonner";
 
-function Layout({ label, children, graphite = false, management = false }: { label?: string; children: React.ReactNode; graphite?: boolean; management?: boolean }) {
-  return <div className={management ? "graphite-theme dark admin-theme min-h-screen bg-background text-foreground" : graphite ? "graphite-theme dark min-h-screen bg-background text-foreground" : "min-h-screen bg-white text-zinc-900"}><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
+function Layout({ label, children, graphite = false }: { label?: string; children: React.ReactNode; graphite?: boolean }) {
+  return <div className={graphite ? "graphite-theme dark min-h-screen bg-background text-foreground" : "min-h-screen bg-white text-zinc-900"}><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
 }
 
 export default function App() {
@@ -55,22 +55,22 @@ export default function App() {
             <Route path="/office/docs" element={<Layout graphite label="排版练习"><OfficeDocList /></Layout>} />
             <Route path="/office/docs/:id" element={<Layout graphite label="排版练习"><OfficeDocExerciseDetail /></Layout>} />
 
-            <Route path="/admin/problems" element={<Layout management label="算法题管理"><TeacherGuard><AdminProblemList /></TeacherGuard></Layout>} />
-            <Route path="/admin/problems/new" element={<Layout management label="新建题目"><TeacherGuard><ProblemForm mode="create" /></TeacherGuard></Layout>} />
-            <Route path="/admin/problems/:slug/edit" element={<Layout management label="编辑题目"><TeacherGuard><ProblemEditPage /></TeacherGuard></Layout>} />
-            <Route path="/admin/office" element={<Layout management label="Office 题库管理"><TeacherGuard><OfficeAdminList /></TeacherGuard></Layout>} />
-            <Route path="/admin/office/new" element={<Layout management label="新建 Office 题目"><TeacherGuard><OfficeQuestionForm mode="create" /></TeacherGuard></Layout>} />
-            <Route path="/admin/office/:id/edit" element={<Layout management label="编辑 Office 题目"><TeacherGuard><OfficeQuestionForm mode="edit" /></TeacherGuard></Layout>} />
-            <Route path="/admin/office-doc" element={<Layout management label="排版练习管理"><TeacherGuard><OfficeDocManageList /></TeacherGuard></Layout>} />
-            <Route path="/admin/office-doc/new" element={<Layout management label="新建排版练习"><TeacherGuard><OfficeDocForm mode="create" /></TeacherGuard></Layout>} />
-            <Route path="/admin/office-doc/:id/edit" element={<Layout management label="编辑排版练习"><TeacherGuard><OfficeDocForm mode="edit" /></TeacherGuard></Layout>} />
-            <Route path="/admin/office-doc/review-list" element={<Layout management label="文档复核"><TeacherGuard><OfficeDocReviewList /></TeacherGuard></Layout>} />
-            <Route path="/admin/office-doc/review/:id" element={<Layout management label="文档复核"><TeacherGuard><OfficeDocReview /></TeacherGuard></Layout>} />
-            <Route path="/admin/users" element={<Layout management label="用户管理"><AdminGuard><AdminUserList /></AdminGuard></Layout>} />
-            <Route path="/admin/system-status" element={<Layout management label="系统状态"><AdminGuard><SystemStatus /></AdminGuard></Layout>} />
-            <Route path="/admin/contests/new" element={<Layout management label="创建比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
-            <Route path="/admin/contests/:id" element={<Layout management label="管理比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
-            <Route path="/admin/contests/:id/analytics" element={<Layout management label="比赛数据分析"><TeacherGuard><ContestAnalytics /></TeacherGuard></Layout>} />
+            <Route path="/admin/problems" element={<Layout label="算法题管理"><TeacherGuard><AdminProblemList /></TeacherGuard></Layout>} />
+            <Route path="/admin/problems/new" element={<Layout label="新建题目"><TeacherGuard><ProblemForm mode="create" /></TeacherGuard></Layout>} />
+            <Route path="/admin/problems/:slug/edit" element={<Layout label="编辑题目"><TeacherGuard><ProblemEditPage /></TeacherGuard></Layout>} />
+            <Route path="/admin/office" element={<Layout label="Office 题库管理"><TeacherGuard><OfficeAdminList /></TeacherGuard></Layout>} />
+            <Route path="/admin/office/new" element={<Layout label="新建 Office 题目"><TeacherGuard><OfficeQuestionForm mode="create" /></TeacherGuard></Layout>} />
+            <Route path="/admin/office/:id/edit" element={<Layout label="编辑 Office 题目"><TeacherGuard><OfficeQuestionForm mode="edit" /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc" element={<Layout label="排版练习管理"><TeacherGuard><OfficeDocManageList /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc/new" element={<Layout label="新建排版练习"><TeacherGuard><OfficeDocForm mode="create" /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc/:id/edit" element={<Layout label="编辑排版练习"><TeacherGuard><OfficeDocForm mode="edit" /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc/review-list" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReviewList /></TeacherGuard></Layout>} />
+            <Route path="/admin/office-doc/review/:id" element={<Layout label="文档复核"><TeacherGuard><OfficeDocReview /></TeacherGuard></Layout>} />
+            <Route path="/admin/users" element={<Layout label="用户管理"><AdminGuard><AdminUserList /></AdminGuard></Layout>} />
+            <Route path="/admin/system-status" element={<Layout label="系统状态"><AdminGuard><SystemStatus /></AdminGuard></Layout>} />
+            <Route path="/admin/contests/new" element={<Layout label="创建比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
+            <Route path="/admin/contests/:id" element={<Layout label="管理比赛"><TeacherGuard><ContestManage /></TeacherGuard></Layout>} />
+            <Route path="/admin/contests/:id/analytics" element={<Layout label="比赛数据分析"><TeacherGuard><ContestAnalytics /></TeacherGuard></Layout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster richColors position="top-center" />

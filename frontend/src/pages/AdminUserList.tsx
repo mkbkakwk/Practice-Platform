@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { api, type UserListItem, ApiError } from "@/lib/api";
-import { AdminTable } from "@/components/admin/AdminTable";
+import { Card } from "@/components/ui/card";
 import { Loader2, ShieldCheck, GraduationCap, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROLES: { key: "USER" | "TEACHER" | "ADMIN"; label: string; icon: typeof UserIcon; class: string }[] = [
-  { key: "USER", label: "学生", icon: UserIcon, class: "bg-elevated text-secondary-foreground" },
-  { key: "TEACHER", label: "老师", icon: GraduationCap, class: "bg-elevated text-secondary-foreground" },
-  { key: "ADMIN", label: "管理员", icon: ShieldCheck, class: "bg-secondary text-foreground" },
+  { key: "USER", label: "学生", icon: UserIcon, class: "bg-zinc-100 text-zinc-700" },
+  { key: "TEACHER", label: "老师", icon: GraduationCap, class: "bg-blue-100 text-blue-700" },
+  { key: "ADMIN", label: "管理员", icon: ShieldCheck, class: "bg-zinc-900 text-white" },
 ];
 
 const ROLE_BADGE: Record<string, { label: string; class: string }> = {
-  USER: { label: "学生", class: "bg-elevated text-secondary-foreground" },
-  TEACHER: { label: "老师", class: "bg-elevated text-secondary-foreground" },
-  ADMIN: { label: "管理员", class: "bg-secondary text-foreground" },
+  USER: { label: "学生", class: "bg-zinc-100 text-zinc-700" },
+  TEACHER: { label: "老师", class: "bg-blue-100 text-blue-700" },
+  ADMIN: { label: "管理员", class: "bg-zinc-900 text-white" },
 };
 
 export default function AdminUserList() {
@@ -44,14 +44,17 @@ export default function AdminUserList() {
   }
 
   return (
-    <div className="admin-page">
-      <header className="management-hero"><div className="flex items-start justify-between gap-3"><div><p className="management-kicker">Access control</p><h1 className="management-title">用户与角色</h1><p className="management-summary">在一个可扫描的权限工作区中查看账号与角色。角色变更仍使用既有授权 API。</p></div><ShieldCheck className="mt-1 h-6 w-6 text-muted-foreground" /></div><div className="management-deck"><div className="management-deck-item"><p className="management-deck-label">当前列表</p><p className="management-deck-value">{loading ? "加载中" : `${users.length} 个账号`}</p></div><div className="management-deck-item"><p className="management-deck-label">管理员</p><p className="management-deck-value">{loading ? "—" : users.filter((item) => item.role === "ADMIN").length}</p></div><div className="management-deck-item"><p className="management-deck-label">老师</p><p className="management-deck-value">{loading ? "—" : users.filter((item) => item.role === "TEACHER").length}</p></div></div></header>
+    <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-4 flex items-center gap-2">
+        <ShieldCheck className="h-6 w-6 text-zinc-700" />
+        <h1 className="text-2xl font-bold">用户管理</h1>
+      </div>
 
-      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
-      <section className="management-panel mt-6"><div className="management-toolbar"><div><h2 className="management-panel-title">账号目录</h2><p className="management-panel-description">选择一个目标角色即会触发现有的角色更新流程。</p></div></div><AdminTable label="用户与角色">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-surface text-left text-xs uppercase text-muted-foreground">
+      <Card className="overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
             <tr>
               <th className="w-16 px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium">用户名</th>
@@ -62,15 +65,15 @@ export default function AdminUserList() {
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></td></tr>
+              <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-zinc-400" /></td></tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">暂无用户</td></tr>
+              <tr><td colSpan={5} className="px-4 py-12 text-center text-zinc-400">暂无用户</td></tr>
             ) : (
               users.map((u) => (
-                <tr key={u.id} className="hover:bg-surface">
-                  <td className="px-4 py-3 text-muted-foreground">{u.id}</td>
-                  <td className="px-4 py-3 font-medium text-foreground">{u.username}</td>
-                  <td className="px-4 py-3 text-secondary-foreground">{u.solvedCount}</td>
+                <tr key={u.id} className="hover:bg-zinc-50">
+                  <td className="px-4 py-3 text-zinc-400">{u.id}</td>
+                  <td className="px-4 py-3 font-medium text-zinc-900">{u.username}</td>
+                  <td className="px-4 py-3 text-zinc-600">{u.solvedCount}</td>
                   <td className="px-4 py-3">
                     <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap", ROLE_BADGE[u.role].class)}>
                       {ROLE_BADGE[u.role].label}
@@ -84,14 +87,12 @@ export default function AdminUserList() {
                         return (
                           <button
                             key={r.key}
-                            aria-label={`将 ${u.username} 设为${r.label}`}
-                            aria-pressed={active}
                             type="button"
                             disabled={updatingId === u.id || active}
                             onClick={() => changeRole(u.id, r.key)}
                             className={cn(
                               "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                              active ? "bg-brand/10 text-foreground border-brand/30" : "border-border text-secondary-foreground hover:bg-surface",
+                              active ? r.class + " border-transparent" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50",
                             )}
                           >
                             <Icon className="h-3 w-3" />
@@ -106,7 +107,7 @@ export default function AdminUserList() {
             )}
           </tbody>
         </table>
-      </AdminTable></section>
+      </Card>
     </div>
   );
 }
