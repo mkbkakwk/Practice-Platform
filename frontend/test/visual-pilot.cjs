@@ -10,6 +10,8 @@ const os = require('node:os');
 
 const origin = 'http://127.0.0.1:18443';
 const output = process.env.PILOT_EVIDENCE_DIR || path.join(os.tmpdir(), 'practice-platform-visual-pilot-evidence');
+const visualTheme = process.env.VISUAL_THEME === 'light' ? 'light' : 'dark';
+const selectedWidths = process.env.VISUAL_WIDTHS ? process.env.VISUAL_WIDTHS.split(',').map(Number).filter(Number.isFinite) : [375, 768, 1280, 1440];
 const user = { id: 12, username: '视觉测试学生', role: 'USER' };
 const now = Date.now();
 const iso = (offset) => new Date(now + offset).toISOString();
@@ -41,9 +43,9 @@ async function main() {
   const browser = await chromium.launch({ channel: process.env.PILOT_BROWSER_CHANNEL || 'chrome', headless: true });
   const results = [];
   try {
-    for (const width of [375, 768, 1280, 1440]) {
+    for (const width of selectedWidths) {
       const context = await browser.newContext({ viewport: { width, height: 960 }, locale: 'zh-CN', reducedMotion: 'reduce', serviceWorkers: 'block' });
-      await context.addInitScript(() => localStorage.setItem('oj_token', 'isolated-ui-fixture-not-a-real-token'));
+      await context.addInitScript((theme) => { localStorage.setItem('practice-platform-theme', theme); localStorage.setItem('oj_token', 'isolated-ui-fixture-not-a-real-token'); }, visualTheme);
       let mode = 'normal';
       const unexpected = [];
       const errors = [];
@@ -80,7 +82,8 @@ async function main() {
       await page.goto(`${origin}/#/contests/7`);
       await page.getByRole('heading', { name: contest.title }).waitFor();
       await page.locator('.cm-editor').waitFor();
-      assert.equal(await page.locator('.graphite-theme').first().evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
+      assert.equal(await page.locator('html').getAttribute('data-theme'), visualTheme);
+      if (visualTheme === 'dark') assert.equal(await page.locator('.graphite-theme').first().evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
       assert.equal(await page.locator('.pilot-running-dot').evaluate((el) => getComputedStyle(el).animationDuration), '1e-05s');
       const contrast = await page.locator('.graphite-theme').first().evaluate((root) => {
         const probe = document.createElement('span');
@@ -149,7 +152,10 @@ async function main() {
       await snap('contest');
       await page.getByRole('combobox').click();
       await page.getByRole('listbox').waitFor();
-      assert.equal(await page.locator('[data-slot="select-content"]').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(22, 27, 36)');
+      assert.equal(
+        await page.locator('[data-slot="select-content"]').evaluate((el) => getComputedStyle(el).backgroundColor),
+        visualTheme === 'dark' ? 'rgb(22, 27, 36)' : 'rgb(255, 255, 255)',
+      );
       await page.keyboard.press('Escape');
       if (width < 1280) {
         await page.getByRole('button', { name: '打开导航菜单' }).click();

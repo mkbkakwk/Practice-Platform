@@ -256,7 +256,7 @@ export default function ProblemDetail() {
                     <SelectTrigger size="sm" aria-label="编程语言">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="graphite-theme dark">
+                    <SelectContent className="graphite-theme">
                       {languages.map((l) => (
                         <SelectItem key={l.id} value={l.id}>
                           {l.name}

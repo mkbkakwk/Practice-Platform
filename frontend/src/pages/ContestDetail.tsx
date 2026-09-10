@@ -511,7 +511,7 @@ function ContestProblemPanel({
 
     {canSubmit && problem.problemType === "ALGORITHM" && <section className="mt-6 space-y-3 border-t border-border/60 pt-4">
       {languageError && <p role="alert" className="rounded border border-danger/25 bg-danger/10 p-3 text-sm text-danger">{languageError}</p>}
-      <div className="w-full sm:w-52"><Select value={draft?.language ?? ""} disabled={languages.length === 0 || busy} onValueChange={onLanguageChange}><SelectTrigger aria-label={`${problem.label} 编程语言`}><SelectValue placeholder="选择语言" /></SelectTrigger><SelectContent className="graphite-theme dark">{languages.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
+      <div className="w-full sm:w-52"><Select value={draft?.language ?? ""} disabled={languages.length === 0 || busy} onValueChange={onLanguageChange}><SelectTrigger aria-label={`${problem.label} 编程语言`}><SelectValue placeholder="选择语言" /></SelectTrigger><SelectContent className="graphite-theme">{languages.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div>
       <CodeEditor ariaLabel={`${problem.label} 源代码`} value={code} language={draft?.language ?? ""} onChange={onCodeChange} height="360px" appearance="graphite" />
       <Button disabled={busy || languages.length === 0 || !draft?.language || !code.trim()} onClick={onSubmitAlgorithm}><Send className="mr-1 h-4 w-4" />{run?.busy === "submitting" ? "提交中..." : run?.busy === "polling" ? `正在判题${run.pollCount ? ` (${run.pollCount})` : "..."}` : "提交代码"}</Button>
     </section>}

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Code2, ListOrdered, Trophy, LogOut, UserCircle, FileCode2, Settings, Briefcase, ClipboardCheck, Users, CalendarDays, Menu, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeControl } from "@/components/ThemeControl";
 
 const deployEnvironment = import.meta.env.VITE_DEPLOY_ENV as string | undefined;
 const buildSha = import.meta.env.VITE_BUILD_SHA as string | undefined;
@@ -32,7 +33,7 @@ export function Navbar() {
   }
 
   return (
-    <header className="graphite-theme dark sticky top-0 z-40 w-full border-b bg-background/95 text-foreground">
+    <header className="graphite-theme sticky top-0 z-40 w-full border-b bg-background/95 text-foreground">
       <div className="mx-auto flex h-14 max-w-[1440px] items-center gap-2 px-4 font-sans sm:px-6 lg:px-8">
         <Link to="/" aria-label="Algorithm OJ 首页" className="mr-2 flex shrink-0 items-center gap-2 rounded-sm text-sm font-semibold tracking-tight">
           <span className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-elevated text-foreground"><Code2 className="h-4 w-4" /></span>
@@ -51,6 +52,7 @@ export function Navbar() {
           })}
         </nav>
         <div className="ml-auto hidden items-center gap-2 xl:flex">
+          <ThemeControl />
           {user ? <>
             <span className="hidden items-center gap-1.5 max-w-48 text-sm text-subtle sm:flex"><UserCircle className="h-4 w-4" /><span className="max-w-28 truncate" title={user.username}>{user.username}</span>{user.role === "ADMIN" && <span className="rounded border border-border bg-elevated px-1.5 py-0.5 text-[10px] font-semibold text-subtle">管理员</span>}{user.role === "TEACHER" && <span className="rounded border border-border bg-elevated px-1.5 py-0.5 text-[10px] font-semibold text-subtle">老师</span>}</span>
             <Button variant="ghost" size="sm" onClick={() => { logout(); navigate("/"); }}><LogOut className="mr-1 h-4 w-4" />退出</Button>
@@ -62,7 +64,7 @@ export function Navbar() {
               <Menu className="h-5 w-5" />
             </Button>
           </SheetTrigger>
-          <SheetContent className="graphite-theme dark w-[min(22rem,90vw)] border-border text-foreground" aria-describedby="mobile-navigation-description">
+          <SheetContent className="graphite-theme w-[min(22rem,90vw)] border-border text-foreground" aria-describedby="mobile-navigation-description">
             <SheetHeader>
               <SheetTitle>导航</SheetTitle>
               <SheetDescription id="mobile-navigation-description">
@@ -90,6 +92,10 @@ export function Navbar() {
               })}
             </nav>
             <SheetFooter>
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <span className="text-sm text-muted-foreground">外观主题</span>
+                <ThemeControl />
+              </div>
               {user ? (
                 <SheetClose asChild>
                   <Button variant="outline" onClick={() => { logout(); navigate("/"); }}>

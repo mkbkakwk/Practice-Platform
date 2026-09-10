@@ -486,7 +486,7 @@ function ConfirmDialog({ action, detail, onOpenChange, onConfirm, busy }: {
         ? "将重新判定该算法题的全部提交。已有成绩可能发生变化。"
         : "将重新判定本比赛全部算法提交。Office 题不会被重判，已有成绩可能发生变化。";
   }
-  return <AlertDialog open={action !== null} onOpenChange={onOpenChange}><AlertDialogContent className="graphite-theme dark admin-theme"><AlertDialogHeader><AlertDialogTitle>{title}</AlertDialogTitle><AlertDialogDescription asChild><div>{description}</div></AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>返回检查</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={onConfirm} className={destructive ? "admin-danger" : ""}>{confirmLabel}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>;
+  return <AlertDialog open={action !== null} onOpenChange={onOpenChange}><AlertDialogContent className="graphite-theme admin-theme"><AlertDialogHeader><AlertDialogTitle>{title}</AlertDialogTitle><AlertDialogDescription asChild><div>{description}</div></AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>返回检查</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={onConfirm} className={destructive ? "admin-danger" : ""}>{confirmLabel}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>;
 }
 
 function contestTypeLabel(type: ContestProblemItem["problemType"]) {

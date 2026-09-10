@@ -28,8 +28,7 @@
     --rank-bronze: 24 40% 35%;
   }
 
-  .graphite-theme,
-  .graphite-theme.dark {
+  :root[data-theme="dark"] {
     color-scheme: dark;
     --background: var(--graphite-950);
     --foreground: var(--graphite-100);
@@ -65,6 +64,42 @@
     --rank-bronze: 23.88 40.83% 52.94%;
   }
 
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --background: 220 30% 97%;
+    --foreground: 222 32% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 32% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 32% 13%;
+    --surface: 220 25% 95%;
+    --surface-elevated: 220 22% 92%;
+    --text-secondary: 219 20% 34%;
+    --muted: 220 22% 93%;
+    --muted-foreground: 218 15% 45%;
+    --secondary: 220 22% 93%;
+    --secondary-foreground: 222 28% 19%;
+    --accent: 229 72% 96%;
+    --accent-foreground: 233 54% 35%;
+    --border: 220 18% 85%;
+    --input: 220 18% 78%;
+    --brand: 233.47 72% 54%;
+    --primary: var(--brand);
+    --primary-foreground: 0 0% 100%;
+    --ring: var(--brand);
+    --success: 156 56% 27%;
+    --danger: 356 65% 39%;
+    --warning: 38 75% 31%;
+    --info: 216 62% 38%;
+    --violet: 255 55% 40%;
+    --rose: 347 59% 38%;
+    --destructive: var(--danger);
+    --destructive-foreground: 0 0% 100%;
+    --rank-gold: 40 65% 32%;
+    --rank-silver: 220 12% 40%;
+    --rank-bronze: 24 52% 32%;
+  }
+
   .graphite-theme :focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 3px;
@@ -96,6 +131,19 @@
   }
   .graphite-theme [data-slot="button"][data-variant="default"]:active:not(:disabled) {
     background-color: color-mix(in srgb, hsl(var(--brand)) 18%, hsl(var(--surface-elevated)));
+  }
+  /* In light mode, brand-weighted mixes become darker as brand coverage rises.
+     Keep the primary button's hover/active hierarchy perceptually intuitive. */
+  :root[data-theme="light"] .graphite-theme [data-slot="button"][data-variant="default"] {
+    color: hsl(var(--primary-foreground)) !important;
+    background-color: color-mix(in srgb, hsl(var(--brand)) 86%, white);
+    border-color: color-mix(in srgb, hsl(var(--brand)) 68%, hsl(var(--border)));
+  }
+  :root[data-theme="light"] .graphite-theme [data-slot="button"][data-variant="default"]:hover:not(:disabled) {
+    background-color: color-mix(in srgb, hsl(var(--brand)) 82%, white);
+  }
+  :root[data-theme="light"] .graphite-theme [data-slot="button"][data-variant="default"]:active:not(:disabled) {
+    background-color: color-mix(in srgb, hsl(var(--brand)) 92%, white);
   }
   /* Portalled navigation must inherit the same opt-in palette and quiet motion. */
   .graphite-theme[data-slot="sheet-content"] { animation: pilot-enter 180ms ease-out; transition-duration: 150ms; }

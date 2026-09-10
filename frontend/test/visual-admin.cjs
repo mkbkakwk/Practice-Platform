@@ -8,6 +8,7 @@ const path = require('node:path');
 const os = require('node:os');
 const origin = 'http://127.0.0.1:18443';
 const output = path.join(os.tmpdir(), 'practice-platform-admin-visual-evidence');
+const visualTheme = process.env.VISUAL_THEME === 'light' ? 'light' : 'dark';
 const selectedWidths = process.env.VISUAL_WIDTHS ? process.env.VISUAL_WIDTHS.split(',').map(Number).filter(Number.isFinite) : [375, 768, 1280, 1440];
 const selectedPages = process.env.VISUAL_PAGES ? new Set(process.env.VISUAL_PAGES.split(',').filter(Boolean)) : null;
 const screenshotFullPage = process.env.VISUAL_VIEWPORT_ONLY !== '1';
@@ -51,7 +52,7 @@ async function main() {
   try {
     for (const width of selectedWidths) {
       const context = await browser.newContext({ viewport: { width, height: 960 }, locale: 'zh-CN', reducedMotion: 'reduce', serviceWorkers: 'block' });
-      await context.addInitScript(() => localStorage.setItem('oj_token', 'isolated-preview-not-a-real-token'));
+      await context.addInitScript((theme) => { localStorage.setItem('practice-platform-theme', theme); localStorage.setItem('oj_token', 'isolated-preview-not-a-real-token'); }, visualTheme);
       const unexpected = [], errors = [];
       await context.route('**/*', async (route) => {
         const req = route.request(), url = new URL(req.url());
@@ -87,7 +88,8 @@ async function main() {
         await page.getByRole('heading', { name: heading, exact: true }).waitFor();
         if (readyText) await page.getByText(readyText, { exact: true }).first().waitFor();
         if (name === 'contest') await page.getByRole('button', { name: '已加入', exact: true }).waitFor();
-        assert.equal(await page.locator('.admin-theme').first().evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
+        assert.equal(await page.locator('html').getAttribute('data-theme'), visualTheme);
+        if (visualTheme === 'dark') assert.equal(await page.locator('.admin-theme').first().evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
         const dimensions = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
         assert(dimensions.document <= dimensions.viewport, `${name}/${width} overflow ${JSON.stringify(dimensions)}`);
         const focus = page.locator('.admin-page button:enabled, .admin-page a').first();
@@ -100,7 +102,7 @@ async function main() {
           const dialog = page.getByRole('alertdialog');
           await dialog.waitFor();
           assert(await dialog.getByText(/不可恢复/).isVisible());
-          assert.equal(await dialog.evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
+          if (visualTheme === 'dark') assert.equal(await dialog.evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
           await page.screenshot({ path: path.join(output, `confirmation-${width}.png`) });
           await dialog.getByRole('button', { name: '返回检查' }).click();
         }

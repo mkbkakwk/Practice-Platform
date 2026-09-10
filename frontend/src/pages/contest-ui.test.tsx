@@ -196,7 +196,7 @@ describe("contest stage UI", () => {
     vi.spyOn(api, "listContests").mockResolvedValue({ total: 1, page: 1, pageSize: 20, contests: [baseContest] });
     render(<MemoryRouter><ContestList /></MemoryRouter>);
     expect(await screen.findByText("夏季编程赛")).toBeInTheDocument();
-    expect(screen.getByText("即将开始")).toHaveClass("bg-blue-100");
+    expect(screen.getByText("即将开始")).toHaveClass("bg-info/10", "text-info");
     expect(screen.getByText(/\d+\/\d+ \d+:\d+ 开始$/)).toBeInTheDocument();
   });
 

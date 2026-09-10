@@ -8,6 +8,9 @@ const path = require('node:path');
 const os = require('node:os');
 const origin = 'http://127.0.0.1:18443';
 const output = process.env.ROLLOUT_EVIDENCE_DIR || path.join(os.tmpdir(), 'practice-platform-visual-rollout-evidence');
+const visualTheme = process.env.VISUAL_THEME === 'light' ? 'light' : 'dark';
+const selectedWidths = process.env.VISUAL_WIDTHS ? process.env.VISUAL_WIDTHS.split(',').map(Number).filter(Number.isFinite) : [375, 768, 1280, 1440];
+const selectedPages = process.env.VISUAL_PAGES ? new Set(process.env.VISUAL_PAGES.split(',').filter(Boolean)) : null;
 const createdAt = '2026-09-01T08:30:00Z';
 const user = { id: 12, username: '隔离视觉测试学生', role: 'USER' };
 const problem = { id: 101, slug: 'fixture-sum', title: '两数之和 · 隔离视觉测试', difficulty: 'EASY', tags: ['基础', '标准输入输出'], timeLimit: 1000, memoryLimit: 256, contentVisibility: 'PUBLIC', createdBy: null, creatorUsername: null, createdAt, visible: true, submissionCount: 0,
@@ -29,12 +32,13 @@ async function main() {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const results = [];
   try {
-    for (const width of [375, 768, 1280, 1440]) {
+    for (const width of selectedWidths) {
       const context = await browser.newContext({ viewport: { width, height: 960 }, locale: 'zh-CN', reducedMotion: 'reduce', serviceWorkers: 'block' });
-      await context.addInitScript(() => {
+      await context.addInitScript((theme) => {
+        localStorage.setItem('practice-platform-theme', theme);
         if (['#/login', '#/register'].includes(location.hash)) localStorage.removeItem('oj_token');
         else localStorage.setItem('oj_token', 'isolated-visual-fixture-not-a-real-token');
-      });
+      }, visualTheme);
       const unexpected = [], errors = [];
       let empty = false;
       await context.route('**/*', async (route) => {
@@ -61,7 +65,7 @@ async function main() {
       });
       const page = await context.newPage();
       page.on('pageerror', (e) => errors.push(e.message));
-      for (const [name, hash, heading] of routes) {
+      for (const [name, hash, heading] of routes.filter(([name]) => !selectedPages || selectedPages.has(name))) {
         const authPage = name === 'login' || name === 'register';
         if (authPage) await page.evaluate(() => localStorage.removeItem('oj_token'));
         await page.goto(`${origin}/#${hash}`);
@@ -80,12 +84,13 @@ async function main() {
           await page.locator('.cm-editor').waitFor();
           await page.getByRole('combobox').click();
           await page.getByRole('listbox').waitFor();
-          assert.equal(await page.locator('[data-slot="select-content"]').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(22, 27, 36)');
+          if (visualTheme === 'dark') assert.equal(await page.locator('[data-slot="select-content"]').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(22, 27, 36)');
           await page.keyboard.press('Escape');
           assert(await page.getByRole('button', { name: '运行样例' }).isDisabled(), 'No fake sample execution enabled');
         }
         const shell = page.locator('.graphite-theme').first();
-        assert.equal(await shell.evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
+        assert.equal(await page.locator('html').getAttribute('data-theme'), visualTheme);
+        if (visualTheme === 'dark') assert.equal(await shell.evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(10, 12, 16)');
         const dimensions = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
         assert(dimensions.document <= dimensions.viewport, `${name}/${width} overflow ${JSON.stringify(dimensions)}`);
         const focus = name === 'login' || name === 'register' ? page.getByLabel('用户名', { exact: true }) : page.locator('button:enabled').first();

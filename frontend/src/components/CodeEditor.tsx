@@ -3,6 +3,7 @@ import { cpp } from "@codemirror/lang-cpp";
 import { java } from "@codemirror/lang-java";
 import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
+import { useTheme } from "next-themes";
 
 interface CodeEditorProps {
   value: string;
@@ -24,6 +25,15 @@ const graphiteEditorTheme = EditorView.theme({
   "&.cm-focused": { outline: "2px solid hsl(var(--ring))", outlineOffset: "-2px" },
 }, { dark: true });
 
+const graphiteEditorThemeLight = EditorView.theme({
+  "&": { backgroundColor: "hsl(var(--surface-elevated))", color: "hsl(var(--foreground))" },
+  ".cm-content": { caretColor: "hsl(var(--brand))", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: "13px" },
+  ".cm-gutters": { backgroundColor: "hsl(var(--surface-elevated))", color: "hsl(var(--muted-foreground))", borderRight: "none" },
+  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "hsl(var(--secondary))" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "hsl(var(--brand) / .16)" },
+  "&.cm-focused": { outline: "2px solid hsl(var(--ring))", outlineOffset: "-2px" },
+}, { dark: false });
+
 export function CodeEditor({
   value,
   language,
@@ -33,13 +43,15 @@ export function CodeEditor({
   readOnly = false,
   appearance = "light",
 }: CodeEditorProps) {
+  const { resolvedTheme } = useTheme();
+  const theme = appearance === "graphite" ? (resolvedTheme === "light" ? graphiteEditorThemeLight : graphiteEditorTheme) : "light";
   return (
     <div className={appearance === "graphite" ? "overflow-hidden rounded-md" : "overflow-hidden rounded-md border"} data-testid="code-editor">
       <CodeMirror
         aria-label={ariaLabel}
         value={value}
         height={height}
-        theme={appearance === "graphite" ? graphiteEditorTheme : "light"}
+        theme={theme}
         extensions={languageExtensions(language)}
         onChange={onChange}
         readOnly={readOnly}

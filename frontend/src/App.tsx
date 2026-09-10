@@ -30,16 +30,18 @@ import ContestManage from "@/pages/ContestManage";
 import ContestStandings from "@/pages/ContestStandings";
 import ContestAnalytics from "@/pages/ContestAnalytics";
 import { Toaster } from "sonner";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 function Layout({ label, children, graphite = false, management = false }: { label?: string; children: React.ReactNode; graphite?: boolean; management?: boolean }) {
-  return <div className={management ? "graphite-theme dark admin-theme min-h-screen bg-background text-foreground" : graphite ? "graphite-theme dark min-h-screen bg-background text-foreground" : "min-h-screen bg-white text-zinc-900"}><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
+  return <div className={`${graphite || management ? "graphite-theme" : ""} ${management ? "admin-theme" : ""} min-h-screen bg-background text-foreground`}><Navbar /><ErrorBoundary label={label}>{children}</ErrorBoundary></div>;
 }
 
 export default function App() {
   return (
     <ErrorBoundary label="应用">
-      <AuthProvider>
-        <HashRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <HashRouter>
           <Routes>
             <Route path="/login" element={<Layout graphite label="登录"><Login /></Layout>} />
             <Route path="/register" element={<Layout graphite label="注册"><Register /></Layout>} />
@@ -73,9 +75,10 @@ export default function App() {
             <Route path="/admin/contests/:id/analytics" element={<Layout management label="比赛数据分析"><TeacherGuard><ContestAnalytics /></TeacherGuard></Layout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <Toaster richColors position="top-center" />
-        </HashRouter>
-      </AuthProvider>
+            <Toaster richColors position="top-center" />
+          </HashRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

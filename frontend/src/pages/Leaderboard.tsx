@@ -28,14 +28,14 @@ export default function Leaderboard() {
     <div className="px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center gap-2">
-        <Trophy className="h-6 w-6 text-yellow-500" />
+        <Trophy className="h-6 w-6 text-rank-gold" />
         <h1 className="text-2xl font-bold">排行榜</h1>
-        <span className="ml-auto text-sm text-zinc-500">按通过题数排名</span>
+        <span className="ml-auto text-sm text-muted-foreground">按通过题数排名</span>
       </div>
 
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
+          <thead className="bg-surface text-left text-xs uppercase text-muted-foreground">
             <tr>
               <th className="w-16 px-4 py-3 font-medium">排名</th>
               <th className="px-4 py-3 font-medium">用户</th>
@@ -46,22 +46,22 @@ export default function Leaderboard() {
           <tbody className="divide-y">
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-zinc-400">
+                <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-zinc-400">
+                <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">
                   暂无数据
                 </td>
               </tr>
             ) : (
               rows.map((r) => {
                 const medal =
-                  r.rank === 1 ? "text-yellow-500" : r.rank === 2 ? "text-zinc-400" : r.rank === 3 ? "text-amber-700" : "";
+                  r.rank === 1 ? "text-rank-gold" : r.rank === 2 ? "text-rank-silver" : r.rank === 3 ? "text-rank-bronze" : "";
                 return (
-                  <tr key={r.id} className="transition-colors hover:bg-zinc-50">
+                  <tr key={r.id} className="transition-colors hover:bg-surface">
                     <td className="px-4 py-3">
                       <span className="flex items-center gap-1.5">
                         {r.rank <= 3 ? (
@@ -71,15 +71,15 @@ export default function Leaderboard() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-zinc-900">{r.username}</span>
+                      <span className="font-medium text-foreground">{r.username}</span>
                       {r.role === "ADMIN" && (
-                        <span className="ml-2 rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                        <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground">
                           管理员
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-zinc-900">{r.solvedCount ?? 0}</td>
-                    <td className="hidden px-4 py-3 text-right text-xs text-zinc-400 sm:table-cell">
+                    <td className="px-4 py-3 text-right font-semibold text-foreground">{r.solvedCount ?? 0}</td>
+                    <td className="hidden px-4 py-3 text-right text-xs text-muted-foreground sm:table-cell">
                       {new Date(r.createdAt).toLocaleDateString("zh-CN")}
                     </td>
                   </tr>

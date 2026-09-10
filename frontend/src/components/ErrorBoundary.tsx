@@ -121,7 +121,7 @@ function ErrorView({
                 {stack && (
                   <div>
                     <p className="mb-1 text-xs font-medium text-red-800">错误堆栈</p>
-                    <pre className="max-h-48 overflow-auto rounded bg-white p-3 text-xs text-red-900">
+                    <pre className="max-h-48 overflow-auto rounded bg-surface p-3 text-xs text-danger">
                       {stack}
                     </pre>
                   </div>
@@ -129,7 +129,7 @@ function ErrorView({
                 {componentStack && (
                   <div>
                     <p className="mb-1 text-xs font-medium text-red-800">组件树</p>
-                    <pre className="max-h-48 overflow-auto rounded bg-white p-3 text-xs text-red-900">
+                    <pre className="max-h-48 overflow-auto rounded bg-surface p-3 text-xs text-danger">
                       {componentStack}
                     </pre>
                   </div>
