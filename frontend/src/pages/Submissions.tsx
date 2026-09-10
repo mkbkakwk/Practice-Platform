@@ -53,9 +53,9 @@ export default function Submissions() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="pilot-page">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">提交记录</h1>
+    <div className="px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">提交记录</h1>
         <div className="flex gap-2">
           {user?.role === "ADMIN" && (
             <Button size="sm" variant={!mine ? "default" : "outline"} onClick={() => setMine(false)}>
@@ -70,72 +70,70 @@ export default function Submissions() {
         </div>
       </div>
 
-      <Card className="gap-0 overflow-hidden py-0">
-        <div className="overflow-x-auto" role="region" aria-label="提交记录表格" tabIndex={0}>
-        <table className="w-full min-w-[480px] text-sm">
-          <caption className="sr-only">提交记录</caption>
-          <thead className="bg-surface text-left text-xs text-muted-foreground">
+      <Card className="overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
             <tr>
-              <th scope="col" className="w-16 px-4 py-3 font-medium">#</th>
-              <th scope="col" className="px-4 py-3 font-medium">题目</th>
-              <th scope="col" className="hidden px-4 py-3 font-medium sm:table-cell">用户</th>
-              <th scope="col" className="w-24 px-4 py-3 font-medium">语言</th>
-              <th scope="col" className="w-24 px-4 py-3 font-medium">结果</th>
-              <th scope="col" className="hidden w-32 px-4 py-3 font-medium md:table-cell">耗时</th>
-              <th scope="col" className="hidden w-40 px-4 py-3 font-medium lg:table-cell">时间</th>
+              <th className="w-16 px-4 py-3 font-medium">#</th>
+              <th className="px-4 py-3 font-medium">题目</th>
+              <th className="hidden px-4 py-3 font-medium sm:table-cell">用户</th>
+              <th className="w-24 px-4 py-3 font-medium">语言</th>
+              <th className="w-24 px-4 py-3 font-medium">结果</th>
+              <th className="hidden w-32 px-4 py-3 font-medium md:table-cell">耗时</th>
+              <th className="hidden w-40 px-4 py-3 font-medium lg:table-cell">时间</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                  <span role="status" aria-label="加载提交记录"><Loader2 aria-hidden="true" className="mx-auto h-5 w-5 animate-spin" /><span className="sr-only">加载中</span></span>
+                <td colSpan={7} className="px-4 py-12 text-center text-zinc-400">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             ) : submissions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-12 text-center text-zinc-400">
                   暂无提交记录
                 </td>
               </tr>
             ) : (
               submissions.map((s) => (
-                <tr key={s.id} className="transition-colors duration-150 hover:bg-elevated">
-                  <td className="pilot-numeric px-4 py-3 text-muted-foreground">{s.id}</td>
+                <tr key={s.id} className="transition-colors hover:bg-zinc-50">
+                  <td className="px-4 py-3 text-zinc-400">{s.id}</td>
                   <td className="px-4 py-3">
                     {s.problem ? (
                       <Link
                         to={`/problem/${s.problem.slug}`}
-                        className="font-medium text-foreground hover:underline"
+                        className="font-medium text-zinc-900 hover:underline"
                       >
                         {s.problem.title}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">已删除</span>
+                      <span className="text-zinc-400">已删除</span>
                     )}
                     {s.problem && (
-                      <span className="ml-2 text-xs text-muted-foreground">
+                      <span className="ml-2 text-xs text-zinc-400">
                         {DIFFICULTY_LABEL[s.problem.difficulty] || s.problem.difficulty}
                       </span>
                     )}
                   </td>
-                  <td className="hidden px-4 py-3 text-subtle sm:table-cell">
+                  <td className="hidden px-4 py-3 text-zinc-600 sm:table-cell">
                     {s.user?.username || "-"}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded bg-elevated px-1.5 py-0.5 text-xs text-subtle">
+                    <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">
                       {LANG_LABEL[s.language] || s.language}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <VerdictBadge verdict={s.verdict} />
                   </td>
-                  <td className="hidden pilot-numeric px-4 py-3 text-xs text-muted-foreground md:table-cell">
+                  <td className="hidden px-4 py-3 text-xs text-zinc-500 md:table-cell">
                     {s.verdict === "AC" || s.verdict === "WA" || s.verdict === "TLE" || s.verdict === "RE"
                       ? `${s.timeMs}ms`
                       : "-"}
                   </td>
-                  <td className="hidden pilot-numeric px-4 py-3 text-xs text-muted-foreground lg:table-cell">
+                  <td className="hidden px-4 py-3 text-xs text-zinc-400 lg:table-cell">
                     {new Date(s.createdAt).toLocaleString("zh-CN", { hour12: false })}
                   </td>
                 </tr>
@@ -143,7 +141,6 @@ export default function Submissions() {
             )}
           </tbody>
         </table>
-        </div>
       </Card>
 
       {totalPages > 1 && (
@@ -156,7 +153,7 @@ export default function Submissions() {
           >
             上一页
           </Button>
-          <span className={cn("text-sm text-subtle")}>
+          <span className={cn("text-sm text-zinc-600")}>
             {page} / {totalPages}
           </span>
           <Button

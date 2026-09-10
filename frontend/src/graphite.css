@@ -1,4 +1,4 @@
-/* Canonical graphite palette is opt-in. Admin and other unscoped pages stay light. */
+/* Pilot palette is opt-in. Non-pilot pages keep their existing light theme. */
 @layer base {
   :root {
     --graphite-100: 213.33 25.71% 93.14%; /* #E9EDF2 */
